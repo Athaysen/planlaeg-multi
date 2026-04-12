@@ -4,30 +4,30 @@ import React, { useState, useEffect, useCallback, useMemo, useRef } from "react"
 // DESIGN TOKENS
 // ===============================================
 const C = {
-  bg:"#f8f9fb", s1:"#ffffff", s2:"#f7f9fc", s3:"#edf1f7", s4:"#e4eaf3",
-  brd:"#dde5f0", brd2:"#c8d4e8",
+  bg:"#f0f4fa", s1:"#ffffff", s2:"#f5f8fd", s3:"#e8eef7", s4:"#dce4f0",
+  brd:"#ccd6e6", brd2:"#b0c0d8",
   acc:"#0050b3", accD:"#003d8a", accM:"rgba(0,80,179,0.08)",
   blue:"#003d8a", blueM:"rgba(0,61,138,0.08)",
-  pur:"#5b3fbc", purM:"rgba(91,63,188,0.08)",
-  amb:"#b86800", ambM:"rgba(184,104,0,0.08)",
-  red:"#cc2200", redM:"rgba(204,34,0,0.08)",
-  grn:"#00875a", grnM:"rgba(0,135,90,0.08)",
-  txt:"#0f1923", txtD:"#4a5568", txtM:"#7a8fa8",
+  pur:"#1a5fb4", purM:"rgba(26,95,180,0.08)",
+  amb:"#0050b3", ambM:"rgba(0,80,179,0.08)",
+  red:"#003d8a", redM:"rgba(0,61,138,0.08)",
+  grn:"#0050b3", grnM:"rgba(0,80,179,0.08)",
+  txt:"#0f1923", txtD:"#3a4d63", txtM:"#6b84a0",
 };
 
 // Style merge helper
 const sx = (...args) => Object.assign({}, ...args.filter(Boolean));
-const TITLE_C = {Læge:C.acc, Psykolog:C.blue, Pædagog:C.pur}; // lys tema
+const TITLE_C = {Læge:C.acc, Psykolog:C.blue, Pædagog:"#1a5fb4", Laege:C.acc, Paedagog:"#1a5fb4"};
 
 // ===============================================
 // DATA (fra Hovedark.xlsm)
 // ===============================================
 // Patientstatus
 const PAT_STATUS = {
-  aktiv:      {label:"Aktiv",      col:"#00875a", bg:"rgba(0,135,90,0.10)"},
-  venteliste: {label:"Venteliste", col:"#b86800", bg:"rgba(184,104,0,0.10)"},
-  afsluttet:  {label:"Afsluttet",  col:"#5b3fbc", bg:"rgba(91,63,188,0.10)"},
-  udmeldt:    {label:"Udmeldt",    col:"#cc2200", bg:"rgba(204,34,0,0.10)"},
+  aktiv:      {label:"Aktiv",      col:"#0050b3", bg:"rgba(0,80,179,0.10)"},
+  venteliste: {label:"Venteliste", col:"#1a5fb4", bg:"rgba(26,95,180,0.10)"},
+  afsluttet:  {label:"Afsluttet",  col:"#003d8a", bg:"rgba(0,61,138,0.10)"},
+  udmeldt:    {label:"Udmeldt",    col:"#2c3e6b", bg:"rgba(44,62,107,0.10)"},
 };
 
 const ALLE_LOK = ["Lokale 1","Lokale 2","Lokale 3","Lokale 4","Lokale 5","Lokale 6","Lokale 7","Kontor"];
@@ -1115,7 +1115,7 @@ function PatientDetaljeModal({pat,medarbejdere=[],patienter,forlob=FORLOB,onClos
                     return()=>window.removeEventListener("click",c2);
                   },[xm]);
                   return(<>
-                    <Btn v="outline" small onClick={e=>{e.stopPropagation();setXm(m=>!m);}}>Eksport ▾</Btn>
+                    <Btn v="outline" small onClick={e=>{e.stopPropagation();setXm(m=>!m);}}>Eksport v</Btn>
                     {xm&&(
                       <div style={{position:"absolute",right:0,top:"calc(100% + 4px)",background:C.s1,border:`1px solid ${C.brd}`,borderRadius:10,boxShadow:"0 8px 32px rgba(0,0,0,0.2)",zIndex:500,minWidth:220,overflow:"hidden"}}
                         onClick={e=>e.stopPropagation()}>
@@ -1647,7 +1647,7 @@ function PatientKalenderView({patienter,medarbejdere,setPatienter,forlob=FORLOB,
         <div style={{marginLeft:"auto",display:"flex",gap:8,alignItems:"center",position:"relative"}}>
           <div style={{position:"relative"}}>
             <Btn v="outline" onClick={()=>setExportMenu(m=>!m)}>
-              Eksport ▾
+              Eksport v
             </Btn>
             {exportMenu&&(
               <div style={{position:"absolute",right:0,top:"calc(100% + 6px)",background:C.s1,border:`1px solid ${C.brd}`,borderRadius:10,boxShadow:"0 8px 32px rgba(0,0,0,0.18)",zIndex:200,minWidth:240,overflow:"hidden"}}
@@ -2694,7 +2694,7 @@ function MedarbejderView({medarbejdere,setMedarbejdere,patienter,setPatienter,an
 
   const fil=medLoad.filter(m=>{
     if(søg&&!m.navn.toLowerCase().includes(søg.toLowerCase())&&!(m.mail||"").toLowerCase().includes(søg.toLowerCase()))return false;
-    if(filTitel!=="alle"&&m.titel!==filTitel)return false;
+    if(filTitel!=="alle"&&(m.titel||"").normalize("NFC")!==filTitel)return false;
     return true;
   }).sort((a,b)=>{
     const av=sortMedCol==="h"?a.h:(sortMedCol==="cnt"?a.cnt:(a[sortMedCol]||"").toString().toLowerCase());
@@ -2789,7 +2789,7 @@ function MedarbejderView({medarbejdere,setMedarbejdere,patienter,setPatienter,an
                   <div style={{display:"flex",justifyContent:"space-between",marginBottom:4}}>
                     <span style={{color:C.txtM,fontSize:11}}>Belastning</span>
                     <span style={{color:advarsel?C.amb:pct>90?C.red:pct>70?C.amb:col,fontSize:11,fontWeight:600}}>
-                    {m.h.toFixed(1)}t / {maxH.toFixed(1)}t ({pct}%){advarsel&&" ⚠"}</span>
+                    {m.h.toFixed(1)}t / {maxH.toFixed(1)}t ({pct}%){advarsel&&" (!)"}</span>
                   </div>
                   <div style={{background:C.brd,borderRadius:3,height:6}}>
                     <div style={{background:pct>90?C.red:pct>70?C.amb:col,width:`${Math.min(pct,100)}%`,height:"100%",borderRadius:3}}/>
@@ -3096,7 +3096,7 @@ function MedForm({med,onSave,onClose,certifikater=[]}){
             style={{width:"100%",padding:"7px 10px",border:"1px solid "+C.brd,borderRadius:7,background:C.s1,color:C.txt,fontSize:13,fontFamily:"inherit"}}>
             <option value="current">Min afdeling</option>
             <option value="a1">Psykiatri Nord</option>
-            <option value="a2">Boerne-psykiatri</option>
+            <option value="a2">Børne-psykiatri</option>
             <option value="a3">Ungdomspsykiatri</option>
           </select>
         </FRow>
@@ -4162,7 +4162,7 @@ function IndsatsPanelModal({indsatser=[], medarbejdere=[], setIndsatser, setMeda
       if(nye.length!==(m.kompetencer||[]).length) antal++;
       return {...m,kompetencer:nye};
     }));
-    setTildelStatus(`✓ ${kompNavne.length} indsatser tildelt alle ${titel.toLowerCase()}r (${medarbejdere.filter(m=>m.titel===titel).length} medarbejdere opdateret)`);
+    setTildelStatus(`OK ${kompNavne.length} indsatser tildelt alle ${titel.toLowerCase()}r (${medarbejdere.filter(m=>m.titel===titel).length} medarbejdere opdateret)`);
     setTimeout(()=>setTildelStatus(null),4000);
   };
 
@@ -4368,7 +4368,7 @@ const ids=Object.keys(forlob).filter(k=>(forlob[k]||[]).length>0).sort((a,b)=>Nu
         <div style={{flex:1,overflowY:"auto",display:"flex",flexDirection:"column",gap:10}}>
           <div style={{display:"flex",justifyContent:"flex-end"}}>
             <div style={{display:"flex",gap:6}}>
-              <Btn v="outline" onClick={()=>setVisIndsatsPanel(true)}>📋 Indsatsoversigt</Btn>
+              <Btn v="outline" onClick={()=>setVisIndsatsPanel(true)}>Indsatsoversigt</Btn>
               <Btn v="primary" onClick={()=>setEditIns("ny")}>+ Ny indsats</Btn>
             </div>
           </div>
@@ -4641,6 +4641,7 @@ function StrenghedToggle({value, onChange}) {
 function IndstillingerView({config,setConfig,setPatienter,setMedarbejdere,setForlob,forlob,setLokTider,lokMeta={},setLokMeta,patienter=[],lokaler=[],saveLokaler=()=>{},medarbejdere=[],setIndsatser=()=>{},indsatser=[]}){
   const [c,setC]=useState({...config,serverModel:config.serverModel||"planmed",selfhostedUrl:config.selfhostedUrl||""});
   const set=(k,v)=>setC(p=>({...p,[k]:v}));
+  const [gemtIndstillinger,setGemtIndstillinger]=useState(false);
 
   const [confirmReset,setConfirmReset]=useState(null);
   const resetAlt=()=>{
@@ -4865,7 +4866,8 @@ function IndstillingerView({config,setConfig,setPatienter,setMedarbejdere,setFor
       </div>
 
             <div style={{display:"flex",justifyContent:"flex-end",gap:8,paddingTop:4}}>
-        <Btn v="primary" onClick={()=>{setConfig(c);}}> Gem indstillinger</Btn>
+        <Btn v="primary" onClick={()=>{setConfig(c);setGemtIndstillinger(true);setTimeout(()=>setGemtIndstillinger(false),2500);}}>Gem indstillinger</Btn>
+        {gemtIndstillinger&&<span style={{color:C.acc,fontSize:13,fontWeight:600}}>Indstillinger gemt</span>}
       </div>
       </div>
       )}
@@ -5168,7 +5170,7 @@ function HjaelpTab(){
       punkter:[
         {
           titel:"Planlægningsindstillinger",
-          tekst:`Under Indstillinger → Planlægningsindstillinger konfigureres:\n\n⏱ Standardvarighed — Standardlængde på en opgave i minutter\n Åbningstider — Standard åbnings- og lukketid for hele systemet\n Arbejdsdage — Hvilke ugedage der planlægges på\n Max opgaver per dag — Maks antal opgaver pr. medarbejder pr. dag\n Planlægningsstrategi — "Tidligst muligt" eller "Spred ud"\n Forløbs-deadline — Max dage fra henvisning til afsluttet forløb (0 = ingen grænse)\n\nKlik "Gem indstillinger" for at gemme.`
+          tekst:`Under Indstillinger → Planlægningsindstillinger konfigureres:\n\n- Standardvarighed — Standardlængde på en opgave i minutter\n Åbningstider — Standard åbnings- og lukketid for hele systemet\n Arbejdsdage — Hvilke ugedage der planlægges på\n Max opgaver per dag — Maks antal opgaver pr. medarbejder pr. dag\n Planlægningsstrategi — "Tidligst muligt" eller "Spred ud"\n Forløbs-deadline — Max dage fra henvisning til afsluttet forløb (0 = ingen grænse)\n\nKlik "Gem indstillinger" for at gemme.`
         },
         {
           titel:"IT-indstillinger",
@@ -5354,7 +5356,7 @@ function HjaelpTab(){
                                     <span style={{color:C.acc,flexShrink:0}}>•</span>
                                     <span style={{color:C.txtD,fontSize:12,lineHeight:1.6}}>{linje.slice(1).trim()}</span>
                                   </div>
-                                : linje.match(/^[OKx⏱!]/)
+                                : linje.match(/^[OKx\-!]/)
                                   ? <div key={li} style={{color:C.txt,fontSize:12,fontWeight:600,marginTop:6,marginBottom:2,lineHeight:1.5}}>{linje}</div>
                                   : <div key={li} style={{color:C.txtD,fontSize:12,lineHeight:1.7,marginBottom:1}}>{linje}</div>
                           ))}
@@ -5431,7 +5433,7 @@ function ExcelImportPanel({setPatienter,setMedarbejdere,setForlob,forlob,setLokT
          "MED-0042","",
          "uge","30","4","25","1200"],
       ],
-      info:"Titel = Laege/Psykolog/Pædagog · Kompetencer og Certifikater adskilles med komma · Tomme tider = ikke-arbejdsdag · KapacitetsgrænseType = dag/uge/mdr/kvartal/halvaar/år/ialt · TimeprisKrPrTime = individuel pris (tomt = brug faggruppe-standard)",
+      info:"Titel = Læge/Psykolog/Pædagog · Kompetencer og Certifikater adskilles med komma · Tomme tider = ikke-arbejdsdag · KapacitetsgrænseType = dag/uge/mdr/kvartal/halvaar/år/ialt · TimeprisKrPrTime = individuel pris (tomt = brug faggruppe-standard)",
     },
     indsatser:{
       navn:"PlanMed_Indsatser_Skabelon",
@@ -5486,26 +5488,14 @@ function ExcelImportPanel({setPatienter,setMedarbejdere,setForlob,forlob,setLokT
     const ext=file.name.split(".").pop().toLowerCase();
     const reader=new FileReader();
 
-    reader.onload=(e)=>{
+    const parseCSVText=(text)=>{
+      const lines=text.replace(/^\uFEFF/,"").split(/\r?\n/).filter(l=>l.trim());
+      if(lines.length===0) return [];
+      const sep=lines[0].includes(";")?";":","
+      return lines.map(l=>l.split(sep).map(c=>c.replace(/^"|"$/g,"").trim()));
+    };
+    const processRows=(rows)=>{
       try{
-        let rows=[];
-        if(ext==="csv"||ext==="txt"){
-          const text=e.target.result;
-          const lines=text.replace(/^\uFEFF/,"").split(/\r?\n/).filter(l=>l.trim());
-          const sep=lines[0].includes(";")?";":","
-          rows=lines.map(l=>l.split(sep).map(c=>c.replace(/^"|"$/g,"").trim()));
-        } else if(ext==="xlsx"||ext==="xls"){
-          // Simpel XLSX parser via SheetJS hvis tilgængelig
-          try{
-            const data=new Uint8Array(e.target.result);
-            const wb=XLSX.read(data,{type:"array"});
-            const ws=wb.Sheets[wb.SheetNames[0]];
-            rows=XLSX.utils.sheet_to_json(ws,{header:1,defval:""}).filter(r=>r.some(c=>c!==""));
-          }catch{
-            setStatus({ok:false,msg:"Kan ikke læse .xlsx - upload venligst som .csv (Fil > Gem som > CSV)"});
-            return;
-          }
-        }
         if(rows.length<2){setStatus({ok:false,msg:"Filen er tom eller har kun én række"});return;}
         const cols=rows[0]; const data=rows.slice(1);
         const sk=SKABELONER[tab];
@@ -5516,8 +5506,42 @@ function ExcelImportPanel({setPatienter,setMedarbejdere,setForlob,forlob,setLokT
         setStatus({ok:false,msg:"Fejl ved indlæsning: "+err.message});
       }
     };
-    if(ext==="xlsx"||ext==="xls") reader.readAsArrayBuffer(file);
-    else reader.readAsText(file,"UTF-8");
+    reader.onload=(e)=>{
+      try{
+        let rows=[];
+        if(ext==="csv"||ext==="txt"){
+          // Læs som ArrayBuffer og prøv UTF-8 først, fallback til Latin-1
+          const buf=e.target.result;
+          const bytes=new Uint8Array(buf);
+          // Tjek om det er UTF-8 BOM eller gyldig UTF-8
+          let text;
+          try{
+            const decoder=new TextDecoder("utf-8",{fatal:true});
+            text=decoder.decode(bytes);
+          }catch{
+            // Ikke gyldig UTF-8 — brug Windows-1252 (Latin-1 superset, standard for Excel CSV på Windows)
+            const decoder=new TextDecoder("windows-1252");
+            text=decoder.decode(bytes);
+          }
+          rows=parseCSVText(text);
+        } else if(ext==="xlsx"||ext==="xls"){
+          try{
+            const data=new Uint8Array(e.target.result);
+            const wb=XLSX.read(data,{type:"array"});
+            const ws=wb.Sheets[wb.SheetNames[0]];
+            rows=XLSX.utils.sheet_to_json(ws,{header:1,defval:""}).filter(r=>r.some(c=>c!==""));
+          }catch{
+            setStatus({ok:false,msg:"Kan ikke læse .xlsx - upload venligst som .csv (Fil > Gem som > CSV)"});
+            return;
+          }
+        }
+        processRows(rows);
+      }catch(err){
+        setStatus({ok:false,msg:"Fejl ved indlæsning: "+err.message});
+      }
+    };
+    // Altid læs som ArrayBuffer så vi kan detektere encoding
+    reader.readAsArrayBuffer(file);
   };
 
   const importerData=()=>{
@@ -5569,9 +5593,13 @@ function ExcelImportPanel({setPatienter,setMedarbejdere,setForlob,forlob,setLokT
           );
           const kompStr=get(r,"Kompetencer");
           const kompetencer=kompStr?kompStr.split(/[,;]/).map(k=>k.trim()).filter(Boolean):[];
-          // Normaliser titel — accepter både "Psykolog","Laege","Læge","Paedagog","Pædagog"
+          // Normaliser titel — accepter alle varianter inkl. encoding-forskelle
           const titelRaw=(get(r,"Titel")||"").trim();
-          const titelNorm=titelRaw==="Laege"?"Læge":titelRaw==="Paedagog"?"Pædagog":titelRaw||"Psykolog";
+          const titelLow=titelRaw.toLowerCase().normalize("NFC");
+          const titelNorm=titelLow==="laege"||titelLow==="læge"||titelLow.includes("lege")||titelLow.includes("læge")?"Læge"
+            :titelLow==="paedagog"||titelLow==="pædagog"||titelLow.includes("dagog")?"Pædagog"
+            :titelLow==="psykolog"||titelLow.includes("psykolog")?"Psykolog"
+            :titelRaw||"Psykolog";
           const timer=Number(get(r,"TimerPrUge"))||23;
           return{
             id:"imp"+Date.now()+Math.random().toString(36).slice(2),
@@ -5603,9 +5631,17 @@ function ExcelImportPanel({setPatienter,setMedarbejdere,setForlob,forlob,setLokT
             },
           };
         }).filter(Boolean);
-        // alleMed removed — was unused dead code
+        // Duplikat-tjek: spring over medarbejdere der allerede eksisterer (samme navn eller mail)
+        const eksNavne=new Set(medarbejdere.map(m=>m.navn.toLowerCase().trim()));
+        const eksMail=new Set(medarbejdere.filter(m=>m.mail).map(m=>m.mail.toLowerCase().trim()));
+        const nyeUnikke=nyeMed.filter(m=>{
+          if(eksNavne.has(m.navn.toLowerCase().trim())) return false;
+          if(m.mail&&eksMail.has(m.mail.toLowerCase().trim())) return false;
+          return true;
+        });
+        const sprungetOver=nyeMed.length-nyeUnikke.length;
         setMedarbejdere(ms=>{
-          const opdateret=[...ms,...nyeMed];
+          const opdateret=[...ms,...nyeUnikke];
           // Genbyg muligeMed på alle eksisterende patienter baseret på nye medarbejdere
           setPatienter(ps=>ps.map(p=>({...p,
             opgaver:p.opgaver.map(o=>{
@@ -5623,7 +5659,7 @@ function ExcelImportPanel({setPatienter,setMedarbejdere,setForlob,forlob,setLokT
           })));
           return opdateret;
         });
-        setStatus({ok:true,msg:`OK ${nyeMed.length} medarbejdere importeret`});
+        setStatus({ok:true,msg:`OK ${nyeUnikke.length} medarbejdere importeret`+(sprungetOver>0?` (${sprungetOver} sprunget over — findes allerede)`:"")});
       } else if(tab==="indsatser"){
         // Tilføj indsatser til første forløbstype som eksempel
         const nyeInds=raw.map((r)=>{
@@ -5657,7 +5693,7 @@ function ExcelImportPanel({setPatienter,setMedarbejdere,setForlob,forlob,setLokT
         }
         setStatus({ok:true,msg:"OK "+nyeInds.length+" indsatser importeret"});
       } else if(tab==="lokaler"){
-        if(!setLokTider){setStatus({ok:false,msg:"Lokaler import fejlede - proev fra Lokaler-fanen"});return;}
+        if(!setLokTider){setStatus({ok:false,msg:"Lokaler import fejlede - prøv fra Lokaler-fanen"});return;}
         const dagMap={
           Mandag:["MandagÅben","MandagLukket"],Tirsdag:["TirsdagÅben","TirsdagLukket"],
           Onsdag:["OnsdagÅben","OnsdagLukket"],Torsdag:["TorsdagÅben","TorsdagLukket"],
@@ -5674,7 +5710,7 @@ function ExcelImportPanel({setPatienter,setMedarbejdere,setForlob,forlob,setLokT
             const dag=dagDk[dagEn]||dagEn;
             if(!nyeTider[dag]) nyeTider[dag]={};
             const aa=get(r,aK)||"", la=get(r,lK)||"";
-            nyeTider[dag][lok]={aa:aa||"00:00",l:la||"00:00"};
+            nyeTider[dag][lok]={å:aa||"00:00",l:la||"00:00"};
           });
         });
         const loknr=raw.filter(r=>get(r,"Lokale")).length;
@@ -6003,7 +6039,7 @@ function AuthFlow({stage, setStage, data, setData}){
         .price-card{background:#ffffff;border:1.5px solid #dde5f0;border-radius:20px;padding:36px;flex:1;min-width:240px;transition:transform .2s,box-shadow .2s}
         .price-card.featured{border-color:#0050b3;box-shadow:0 8px 40px rgba(0,80,179,0.13)}
         .price-card:hover{transform:translateY(-3px)}
-        .lp-nav-link{color:#4a5568;font-size:13px;font-weight:500;text-decoration:none;transition:color .15s}
+        .lp-nav-link{color:#3a4d63;font-size:13px;font-weight:500;text-decoration:none;transition:color .15s}
         .lp-nav-link:hover{color:#0050b3}
       `}</style>
 
@@ -6035,20 +6071,20 @@ function AuthFlow({stage, setStage, data, setData}){
             Planlæg smartere.<br/><span style={{color:"#0050b3"}}>Behandl hurtigere.</span>
           </h1>
           <p style={{fontSize:"clamp(14px,1.8vw,18px)",color:C.txtD,lineHeight:1.7,marginBottom:40,maxWidth:560,margin:"0 auto 40px",animation:"fadeUp .8s ease"}}>
-            PlanMed automatiserer den komplekse patientplanlægning pa hospitaler og klinikker.
+            PlanMed automatiserer den komplekse patientplanlægning på hospitaler og klinikker.
           </p>
           <div style={{display:"flex",gap:14,justifyContent:"center",flexWrap:"wrap",animation:"fadeUp .9s ease"}}>
             <button className="lp-pri" style={{fontSize:15,padding:"14px 32px"}} onClick={()=>{setMode("signup");setStage("login");}}>Start gratis i dag</button>
             <button className="lp-sec" style={{fontSize:15,padding:"14px 32px"}} onClick={()=>{setMode("login");setStage("login");}}>Log ind</button>
           </div>
-          <div style={{color:C.txtM,fontSize:12,marginTop:20}}>Ingen kreditkort kraevet - GDPR-compliant - Dansk support</div>
+          <div style={{color:C.txtM,fontSize:12,marginTop:20}}>Ingen kreditkort krævet - GDPR-compliant - Dansk support</div>
         </div>
       </section>
 
       {/* STATS */}
       <section style={{padding:"20px 5% 60px"}}>
         <div style={{maxWidth:900,margin:"0 auto",display:"flex",gap:0,border:"1px solid "+C.brd,borderRadius:16,overflow:"hidden",background:"#fff",flexWrap:"wrap"}}>
-          {[["60%","Kortere ventetid","for patienterne"],["15 min","Opstetningstid","fra nul til kørende"],["221+","Opgaver planlagt","automatisk per korsel"],["5 roller","RBAC adgangsstyring","klar til regionerne"]].map(([val,label,sub],i)=>(
+          {[["60%","Kortere ventetid","for patienterne"],["15 min","Opsætningstid","fra nul til kørende"],["221+","Opgaver planlagt","automatisk per kørsel"],["5 roller","RBAC adgangsstyring","klar til regionerne"]].map(([val,label,sub],i)=>(
             <div key={i} style={{flex:1,minWidth:160,padding:"28px 24px",textAlign:"center",borderRight:i<3?"1px solid "+C.brd:"none"}}>
               <div style={{color:"#0050b3",fontWeight:900,fontSize:28,letterSpacing:"-0.02em"}}>{val}</div>
               <div style={{color:C.txt,fontWeight:700,fontSize:13,marginTop:4}}>{label}</div>
@@ -6062,17 +6098,17 @@ function AuthFlow({stage, setStage, data, setData}){
       <section id="features" style={{padding:"60px 5%",background:"#fff"}}>
         <div style={{maxWidth:1100,margin:"0 auto"}}>
           <div style={{textAlign:"center",marginBottom:52}}>
-            <h2 style={{color:C.txt,fontWeight:900,fontSize:"clamp(26px,4vw,42px)",letterSpacing:"-0.02em",marginBottom:12}}>Alt hvad dit hospital behoever</h2>
-            <p style={{color:C.txtD,fontSize:15}}>Bygget specifikt til dansk sundhedsvaesen og EPJ-integration</p>
+            <h2 style={{color:C.txt,fontWeight:900,fontSize:"clamp(26px,4vw,42px)",letterSpacing:"-0.02em",marginBottom:12}}>Alt hvad dit hospital behøver</h2>
+            <p style={{color:C.txtD,fontSize:15}}>Bygget specifikt til dansk sundhedsvæsen og EPJ-integration</p>
           </div>
           <div style={{display:"grid",gridTemplateColumns:"repeat(auto-fill,minmax(280px,1fr))",gap:16}}>
             {[
-              ["Plan","Intelligent planlægningsmotor","Algoritmen optimerer automatisk tider, medarbejdere og lokaler ud fra komplekse regler og begraensninger."],
+              ["Plan","Intelligent planlægningsmotor","Algoritmen optimerer automatisk tider, medarbejdere og lokaler ud fra komplekse regler og begrænsninger."],
               ["EPJ","EPJ/FHIR-integration","Kobles direkte til Sundhedsplatformen og COSMIC. Patienter og kalendere synkroniseres automatisk."],
               ["SaaS","Multi-tenant SaaS","Hvert selskab og hver afdeling har sin egen isolerede datakontekst. Fuld GDPR-compliance."],
               ["RBAC","Rollebaseret adgang","5 brugerroller fra Super Admin til Viewer. Ingen ser mere end de skal."],
-              ["KPI","Realtids dashboard","Overblik over ventelister, medarbejderbelastning, deadlines og regelovertraedelser."],
-              ["API","Konfigurerbar datamodel","Tilpas patientfelter, forlobstyper og planlægningsregler per afdeling."],
+              ["KPI","Realtids dashboard","Overblik over ventelister, medarbejderbelastning, deadlines og regelovertrædelser."],
+              ["API","Konfigurerbar datamodel","Tilpas patientfelter, forløbstyper og planlægningsregler per afdeling."],
             ].map(([badge,title,desc])=>(
               <div key={title} className="feat-card">
                 <div style={{display:"inline-block",background:"rgba(0,80,179,0.08)",color:"#0050b3",borderRadius:8,padding:"4px 10px",fontSize:11,fontWeight:800,letterSpacing:".06em",marginBottom:14}}>{badge}</div>
@@ -6088,17 +6124,17 @@ function AuthFlow({stage, setStage, data, setData}){
       <section id="priser" style={{padding:"60px 5%"}}>
         <div style={{maxWidth:1000,margin:"0 auto"}}>
           <div style={{textAlign:"center",marginBottom:52}}>
-            <h2 style={{color:C.txt,fontWeight:900,fontSize:"clamp(26px,4vw,42px)",letterSpacing:"-0.02em",marginBottom:12}}>Simpel, gennemsigtig prissaetning</h2>
+            <h2 style={{color:C.txt,fontWeight:900,fontSize:"clamp(26px,4vw,42px)",letterSpacing:"-0.02em",marginBottom:12}}>Simpel, gennemsigtig prissætning</h2>
             <p style={{color:C.txtD,fontSize:15}}>Skalerer med din organisation</p>
           </div>
           <div style={{display:"flex",gap:16,justifyContent:"center",flexWrap:"wrap"}}>
             {[
-              {navn:"Starter",pris:"0",sub:"kr/md",desc:"Perfekt til pilottest",features:["1 afdeling","Op til 5 brugere","Grundlaeggende planlægning","E-mail support"],cta:"Start gratis",featured:false},
-              {navn:"Professional",pris:"4.999",sub:"kr/md per afdeling",desc:"Til klinikker og hospitalsafdelinger",features:["Ubegraensede afdelinger","Op til 50 brugere","FHIR EPJ-integration","Prioriteret support","Avancerede regler"],cta:"Provv 30 dage gratis",featured:true},
-              {navn:"Enterprise",pris:"Kontakt",sub:"os",desc:"Til regioner og store hospitaler",features:["Self-hosted option","Ubegraensede brugere","Fuld FHIR synkronisering","SLA-garanti","On-premise deployment"],cta:"Book demo",featured:false},
+              {navn:"Starter",pris:"0",sub:"kr/md",desc:"Perfekt til pilottest",features:["1 afdeling","Op til 5 brugere","Grundlæggende planlægning","E-mail support"],cta:"Start gratis",featured:false},
+              {navn:"Professional",pris:"4.999",sub:"kr/md per afdeling",desc:"Til klinikker og hospitalsafdelinger",features:["Ubegrænsede afdelinger","Op til 50 brugere","FHIR EPJ-integration","Prioriteret support","Avancerede regler"],cta:"Prøv 30 dage gratis",featured:true},
+              {navn:"Enterprise",pris:"Kontakt",sub:"os",desc:"Til regioner og store hospitaler",features:["Self-hosted option","Ubegrænsede brugere","Fuld FHIR synkronisering","SLA-garanti","On-premise deployment"],cta:"Book demo",featured:false},
             ].map(p=>(
               <div key={p.navn} className={"price-card"+(p.featured?" featured":"")}>
-                {p.featured&&<div style={{color:"#0050b3",fontSize:11,fontWeight:700,marginBottom:12,textTransform:"uppercase",letterSpacing:".08em"}}>Mest populaer</div>}
+                {p.featured&&<div style={{color:"#0050b3",fontSize:11,fontWeight:700,marginBottom:12,textTransform:"uppercase",letterSpacing:".08em"}}>Mest populær</div>}
                 <div style={{color:C.txt,fontWeight:800,fontSize:20,marginBottom:4}}>{p.navn}</div>
                 <div style={{marginBottom:6}}>
                   <span style={{color:"#0050b3",fontWeight:900,fontSize:32}}>{p.pris}</span>
@@ -6127,7 +6163,7 @@ function AuthFlow({stage, setStage, data, setData}){
       <section style={{padding:"80px 5%",textAlign:"center",background:"#fff",borderTop:"1px solid "+C.brd}}>
         <div style={{maxWidth:600,margin:"0 auto"}}>
           <h2 style={{color:C.txt,fontWeight:900,fontSize:"clamp(24px,4vw,38px)",letterSpacing:"-0.02em",marginBottom:16}}>Klar til at reducere ventetider?</h2>
-          <p style={{color:C.txtD,fontSize:15,marginBottom:32,lineHeight:1.7}}>Kom i gang pa 15 minutter. Ingen teknisk opstaetning kraevet.</p>
+          <p style={{color:C.txtD,fontSize:15,marginBottom:32,lineHeight:1.7}}>Kom i gang på 15 minutter. Ingen teknisk opsætning krævet.</p>
           <button className="lp-pri" style={{fontSize:16,padding:"16px 40px"}} onClick={()=>{setMode("signup");setStage("login");}}>
             Opret gratis konto
           </button>
@@ -6213,7 +6249,7 @@ function AuthFlow({stage, setStage, data, setData}){
                   } else {
                     try{localStorage.removeItem("pm_email");localStorage.removeItem("pm_pw");}catch(ex){}
                   }
-                }} style={{accentColor:"#00d4b4"}}/>
+                }} style={{accentColor:"#0050b3"}}/>
                 <span style={{color:C.txtD,fontSize:12}}>Husk mig</span>
               </label>
               <span style={{color:C.acc,fontSize:12,cursor:"pointer"}}>Glemt adgangskode?</span>
@@ -6228,7 +6264,7 @@ function AuthFlow({stage, setStage, data, setData}){
             </div>
           )}
 
-          {err&&<div style={{color:"#ff6b6b",fontSize:12,marginBottom:12,background:"#ff6b6b11",borderRadius:7,padding:"8px 12px"}}>! {err}</div>}
+          {err&&<div style={{color:"#003d8a",fontSize:12,marginBottom:12,background:"#003d8a11",borderRadius:7,padding:"8px 12px"}}>! {err}</div>}
 
           <button className="lp-btn-pri" style={{width:"100%",marginBottom:16}}
             disabled={loading} onClick={()=>fakeLoad(()=>{
@@ -6589,9 +6625,9 @@ function MinProfilPanel({med, medarbejdere, certifikater=[], onSave=()=>{}, onSe
                         onClick={()=>setF(p=>({...p,certifikater:harCert
                           ?(p.certifikater||[]).filter(x=>x!==cid)
                           :[...(p.certifikater||[]),cid]}))}
-                        style={{background:harCert?"#7c3aed22":"transparent",
-                          color:harCert?"#7c3aed":C.txtM,
-                          border:`1px solid ${harCert?"#7c3aed":C.brd}`,
+                        style={{background:harCert?"#0050b322":"transparent",
+                          color:harCert?"#0050b3":C.txtM,
+                          border:`1px solid ${harCert?"#0050b3":C.brd}`,
                           borderRadius:6,padding:"5px 12px",cursor:"pointer",fontFamily:"inherit",
                           fontSize:12,fontWeight:harCert?700:400}}>
                         {cert.navn||cert}
@@ -7073,7 +7109,7 @@ function OmfordelingView({patienter=[],setPatienter=()=>{},medarbejdere=[]}){
 
       {omfOps.length===0&&(
         <div style={{background:C.s2,border:`1px solid ${C.brd}`,borderRadius:12,padding:"40px",textAlign:"center"}}>
-          <div style={{fontSize:32,marginBottom:12}}>✓</div>
+          <div style={{fontSize:32,marginBottom:12}}>OK</div>
           <div style={{color:C.txt,fontWeight:700,fontSize:16,marginBottom:6}}>Ingen opgaver til omfordeling</div>
           <div style={{color:C.txtM,fontSize:13}}>Marker en opgave til omfordeling fra patientens detaljepanel</div>
         </div>
@@ -7400,7 +7436,7 @@ function AdminView({adminData,setAdminData,anmodninger=[],setAnmodninger,medarbe
               <FRow label="Hjemmeside"><Input value={selskab.website||""} onChange={v=>updS("website",v)} placeholder="www.selskab.dk"/></FRow>
             </div>
             <div style={{marginTop:10,display:"grid",gridTemplateColumns:"1fr 100px 1fr",gap:10}}>
-              <FRow label="Vejnavn"><Input value={selskab.adresseVej||""} onChange={v=>updS("adresseVej",v)} placeholder="f.eks. Noerrebrogade 44"/></FRow>
+              <FRow label="Vejnavn"><Input value={selskab.adresseVej||""} onChange={v=>updS("adresseVej",v)} placeholder="f.eks. Nørrebrogade 44"/></FRow>
               <FRow label="Postnr."><Input value={selskab.adressePostnr||""} onChange={v=>updS("adressePostnr",v)} placeholder="8000"/></FRow>
               <FRow label="By"><Input value={selskab.adresseBy||""} onChange={v=>updS("adresseBy",v)} placeholder="Aarhus C"/></FRow>
             </div>
@@ -7426,7 +7462,7 @@ function AdminView({adminData,setAdminData,anmodninger=[],setAnmodninger,medarbe
                 </div>
                 <div style={{display:"grid",gridTemplateColumns:"1fr 1fr 1fr 1fr",gap:8}}>
                   <FRow label="Navn"><Input value={l.navn} onChange={v=>updS("ledere",(selskab.ledere||[]).map(x=>x.id===l.id?{...x,navn:v}:x))} placeholder="Fulde navn"/></FRow>
-                  <FRow label="Titel"><Input value={l.titel||""} onChange={v=>updS("ledere",(selskab.ledere||[]).map(x=>x.id===l.id?{...x,titel:v}:x))} placeholder="f.eks. Direktoer"/></FRow>
+                  <FRow label="Titel"><Input value={l.titel||""} onChange={v=>updS("ledere",(selskab.ledere||[]).map(x=>x.id===l.id?{...x,titel:v}:x))} placeholder="f.eks. Direktør"/></FRow>
                   <FRow label="Email"><Input value={l.mail} onChange={v=>updS("ledere",(selskab.ledere||[]).map(x=>x.id===l.id?{...x,mail:v}:x))} placeholder="leder@selskab.dk"/></FRow>
                   <FRow label="Telefon"><Input value={l.telefon} onChange={v=>updS("ledere",(selskab.ledere||[]).map(x=>x.id===l.id?{...x,telefon:v}:x))} placeholder="f.eks. 20 30 40 50"/></FRow>
                 </div>
@@ -8066,7 +8102,7 @@ function AdminView({adminData,setAdminData,anmodninger=[],setAnmodninger,medarbe
                           </div>
                           {erForlobIndsats&&(
                             <div style={{background:C.accM,borderRadius:8,padding:"10px 14px",fontSize:12,color:C.acc,display:"flex",gap:8,alignItems:"flex-start"}}>
-                              <span style={{fontWeight:700,flexShrink:0}}>ℹ</span>
+                              <span style={{fontWeight:700,flexShrink:0}}>i</span>
                               <span>
                                 <strong>Allokeret kapacitet</strong> beregnes ved at fordele medarbejdernes ledige timer én gang på tværs af forløb.{" "}
                                 Metode: <strong>{allokeringsMetode==="prioriteret"?"Prioriteret (minimér underskud)":"Proportional (fair fordeling)"}</strong>.{" "}
@@ -8207,7 +8243,7 @@ function RulleplanNotifView({rulNotif,setRulNotif,medarbejdere=[]}){
       {afventer.length>0&&(
         <div style={{background:C.s2,border:`1px solid ${C.brd}`,borderRadius:12,overflow:"hidden"}}>
           <div style={{padding:"12px 16px",borderBottom:`1px solid ${C.brd}`,background:C.ambM+"44",display:"flex",alignItems:"center",gap:8}}>
-            <span style={{color:C.amb,fontSize:14}}>⏳</span>
+            <span style={{color:C.amb,fontSize:14}}>...</span>
             <span style={{color:C.txt,fontWeight:700,fontSize:14}}>Afventer beslutning ({afventer.length})</span>
           </div>
           {afventer.map((n,i)=>(
@@ -8250,7 +8286,7 @@ function RulleplanNotifView({rulNotif,setRulNotif,medarbejdere=[]}){
                     <div style={{display:"flex",gap:4}}>
                       <button onClick={()=>træfBeslutning(n.id,"forlæng")}
                         style={{flex:1,background:C.grnM,color:C.grn,border:`1px solid ${C.grn}44`,borderRadius:6,padding:"5px 4px",fontSize:11,fontWeight:700,cursor:"pointer",fontFamily:"inherit"}}>
-                        ↻ Forlæng
+                        ~ Forlæng
                       </button>
                       <button onClick={()=>træfBeslutning(n.id,"afslut")}
                         style={{flex:1,background:C.s1,color:C.txtM,border:`1px solid ${C.brd}`,borderRadius:6,padding:"5px 4px",fontSize:11,fontWeight:600,cursor:"pointer",fontFamily:"inherit"}}>
@@ -8315,11 +8351,11 @@ function RulleplanNotifView({rulNotif,setRulNotif,medarbejdere=[]}){
                   <span style={{color:C.txtM,fontSize:11}}>·</span>
                   <span style={{color:C.txtM,fontSize:11}}>{fmtD(n.løstDato)}</span>
                 </div>
-                <div style={{color:C.txtM,fontSize:11}}>{n.medNavn} → {n.beslutning==="forlæng"?"Forlænget ↻":"Afsluttet "}</div>
+                <div style={{color:C.txtM,fontSize:11}}>{n.medNavn} → {n.beslutning==="forlæng"?"Forlænget ~":"Afsluttet "}</div>
               </div>
               <span style={{background:n.beslutning==="forlæng"?C.grnM:C.s3,color:n.beslutning==="forlæng"?C.grn:C.txtM,
                 fontSize:11,fontWeight:700,borderRadius:5,padding:"3px 10px",whiteSpace:"nowrap"}}>
-                {n.beslutning==="forlæng"?"↻ Forlænget":" Afsluttet"}
+                {n.beslutning==="forlæng"?"~ Forlænget":" Afsluttet"}
               </span>
             </div>
           ))}
@@ -8680,6 +8716,180 @@ function AdminBrugereTab({selskab,updS}){
 }
 
 
+// ===============================================
+// PLANLOG VIEW
+// ===============================================
+function PlanLogView({patienter,planLog=[],medarbejdere=[],setPatienter,onPlan,running,progress,planFraDato,setPlanFraDato,afdScope,alleAfdelinger=[],toggleAktiv,toggleRes,lokaler=[],certifikater=[],planDebug}){
+  const [filter,setFilter]=useState("alle"); // alle | planlagt | ikke-planlagt
+  const [sortCol,setSortCol]=useState("dato");
+  const [sortDir,setSortDir]=useState("asc");
+
+  const todayStr=today();
+
+  // Saml alle opgaver med patient-info
+  const alleOpgaver=useMemo(()=>{
+    return patienter.flatMap(p=>
+      p.opgaver.map(o=>({...o,patientNavn:p.navn,patientCpr:p.cpr,patientId:p.id}))
+    );
+  },[patienter]);
+
+  // Filtrer
+  const filtered=useMemo(()=>{
+    let list=alleOpgaver;
+    if(filter==="planlagt") list=list.filter(o=>o.status==="planlagt"&&o.dato);
+    else if(filter==="ikke-planlagt") list=list.filter(o=>o.status!=="planlagt"||!o.dato);
+    // Sorter
+    list=[...list].sort((a,b)=>{
+      let va,vb;
+      if(sortCol==="dato"){va=a.dato||"";vb=b.dato||"";}
+      else if(sortCol==="patient"){va=a.patientNavn||"";vb=b.patientNavn||"";}
+      else if(sortCol==="opgave"){va=a.opgave||"";vb=b.opgave||"";}
+      else if(sortCol==="medarbejder"){va=a.medarbejder||"";vb=b.medarbejder||"";}
+      else if(sortCol==="lokale"){va=a.lokale||"";vb=b.lokale||"";}
+      else{va="";vb="";}
+      const cmp=va.localeCompare(vb);
+      return sortDir==="asc"?cmp:-cmp;
+    });
+    return list;
+  },[alleOpgaver,filter,sortCol,sortDir]);
+
+  const planlagte=alleOpgaver.filter(o=>o.status==="planlagt"&&o.dato).length;
+  const ikkePlanlagte=alleOpgaver.filter(o=>o.status!=="planlagt"||!o.dato).length;
+
+  const handleSort=(col)=>{
+    if(sortCol===col) setSortDir(d=>d==="asc"?"desc":"asc");
+    else{setSortCol(col);setSortDir("asc");}
+  };
+
+  const thStyle={padding:"8px 12px",textAlign:"left",fontSize:12,fontWeight:700,color:C.txtD,
+    cursor:"pointer",userSelect:"none",borderBottom:`2px solid ${C.brd}`,background:C.s2};
+  const tdStyle={padding:"8px 12px",fontSize:13,color:C.txt,borderBottom:`1px solid ${C.brd}`};
+  const sortIcon=(col)=>sortCol===col?(sortDir==="asc"?" ↑":" ↓"):"";
+
+  return(
+    <div style={{padding:"0 0 40px"}}>
+      {/* Header */}
+      <div style={{display:"flex",justifyContent:"space-between",alignItems:"center",marginBottom:20,flexWrap:"wrap",gap:12}}>
+        <div>
+          <div style={{fontSize:20,fontWeight:800,color:C.txt}}>Planlægning</div>
+          <div style={{fontSize:13,color:C.txtM,marginTop:2}}>
+            {planlagte} planlagt · {ikkePlanlagte} afventer
+          </div>
+        </div>
+        <div style={{display:"flex",gap:10,alignItems:"center",flexWrap:"wrap"}}>
+          <div style={{display:"flex",alignItems:"center",gap:6}}>
+            <span style={{fontSize:12,color:C.txtD,fontWeight:600}}>Fra dato:</span>
+            <input type="date" value={planFraDato||todayStr}
+              onChange={e=>setPlanFraDato(e.target.value)}
+              style={{border:`1px solid ${C.brd}`,borderRadius:8,padding:"6px 10px",fontSize:13,
+                fontFamily:"inherit",color:C.txt,background:C.s1,outline:"none"}}/>
+          </div>
+          <button onClick={onPlan} disabled={running}
+            style={{background:running?C.s3:C.acc,color:running?C.txtM:"#fff",border:"none",
+              borderRadius:10,padding:"10px 24px",fontSize:14,fontWeight:700,cursor:running?"default":"pointer",
+              fontFamily:"inherit",opacity:running?0.7:1}}>
+            {running?"Planlægger...":"Planlæg nu"}
+          </button>
+        </div>
+      </div>
+
+      {/* Progress */}
+      {running&&progress&&(
+        <div style={{marginBottom:20,background:C.s2,borderRadius:10,padding:"14px 18px",border:`1px solid ${C.brd}`}}>
+          <div style={{display:"flex",justifyContent:"space-between",marginBottom:6}}>
+            <span style={{fontSize:13,fontWeight:600,color:C.txt}}>Planlægger opgaver...</span>
+            <span style={{fontSize:12,color:C.txtM}}>{progress.done} / {progress.total}</span>
+          </div>
+          <div style={{background:C.s3,borderRadius:6,height:8,overflow:"hidden"}}>
+            <div style={{background:C.acc,height:"100%",borderRadius:6,transition:"width 0.3s",
+              width:progress.total>0?`${Math.round(progress.done/progress.total*100)}%`:"0%"}}/>
+          </div>
+        </div>
+      )}
+
+      {/* Filter tabs */}
+      <div style={{display:"flex",gap:0,marginBottom:16,borderBottom:`1px solid ${C.brd}`}}>
+        {[{id:"alle",label:`Alle (${alleOpgaver.length})`},{id:"planlagt",label:`Planlagt (${planlagte})`},{id:"ikke-planlagt",label:`Afventer (${ikkePlanlagte})`}].map(t=>(
+          <button key={t.id} onClick={()=>setFilter(t.id)}
+            style={{padding:"8px 18px",border:"none",fontFamily:"inherit",cursor:"pointer",
+              background:"none",fontWeight:filter===t.id?700:400,fontSize:13,
+              color:filter===t.id?C.acc:C.txtD,
+              borderBottom:filter===t.id?`2px solid ${C.acc}`:"2px solid transparent"}}>
+            {t.label}
+          </button>
+        ))}
+      </div>
+
+      {/* PlanLog entries */}
+      {planLog.length>0&&(
+        <div style={{marginBottom:20,background:C.s2,borderRadius:10,padding:"14px 18px",border:`1px solid ${C.brd}`}}>
+          <div style={{fontSize:14,fontWeight:700,color:C.txt,marginBottom:8}}>Seneste kørsel</div>
+          <div style={{maxHeight:200,overflowY:"auto"}}>
+            {planLog.map((entry,i)=>(
+              <div key={i} style={{padding:"4px 0",fontSize:12,color:entry.type==="error"?C.red:entry.type==="warn"?C.amb:C.txtD,
+                borderBottom:i<planLog.length-1?`1px solid ${C.brd}22`:"none"}}>
+                {entry.msg||entry.tekst||JSON.stringify(entry)}
+              </div>
+            ))}
+          </div>
+        </div>
+      )}
+
+      {/* Opgave-tabel */}
+      <div style={{background:C.s1,borderRadius:12,border:`1px solid ${C.brd}`,overflow:"hidden"}}>
+        <table style={{width:"100%",borderCollapse:"collapse"}}>
+          <thead>
+            <tr>
+              <th style={thStyle} onClick={()=>handleSort("patient")}>Patient{sortIcon("patient")}</th>
+              <th style={thStyle} onClick={()=>handleSort("opgave")}>Opgave{sortIcon("opgave")}</th>
+              <th style={thStyle} onClick={()=>handleSort("dato")}>Dato{sortIcon("dato")}</th>
+              <th style={thStyle} onClick={()=>handleSort("tid")}>Tid</th>
+              <th style={thStyle} onClick={()=>handleSort("medarbejder")}>Medarbejder{sortIcon("medarbejder")}</th>
+              <th style={thStyle} onClick={()=>handleSort("lokale")}>Lokale{sortIcon("lokale")}</th>
+              <th style={thStyle}>Status</th>
+            </tr>
+          </thead>
+          <tbody>
+            {filtered.length===0&&(
+              <tr><td colSpan={7} style={{padding:32,textAlign:"center",color:C.txtM}}>
+                {alleOpgaver.length===0?"Ingen opgaver endnu":"Ingen opgaver matcher filtret"}
+              </td></tr>
+            )}
+            {filtered.map((o,i)=>{
+              const isPlanlagt=o.status==="planlagt"&&o.dato;
+              return(
+                <tr key={o.id||i} style={{background:i%2===0?"transparent":C.s2+"44"}}>
+                  <td style={tdStyle}>{o.patientNavn||"—"}</td>
+                  <td style={tdStyle}>{o.titel||o.opgave||"—"}</td>
+                  <td style={tdStyle}>{o.dato||<span style={{color:C.txtM,fontStyle:"italic"}}>—</span>}</td>
+                  <td style={tdStyle}>{o.startKl?`${o.startKl}–${o.slutKl||""}`:""}</td>
+                  <td style={tdStyle}>{o.medarbejder||<span style={{color:C.txtM}}>—</span>}</td>
+                  <td style={tdStyle}>{o.lokale||"—"}</td>
+                  <td style={tdStyle}>
+                    <span style={{fontSize:11,fontWeight:700,padding:"2px 8px",borderRadius:6,
+                      background:isPlanlagt?C.grnM:C.ambM,
+                      color:isPlanlagt?C.grn:C.amb}}>
+                      {isPlanlagt?"Planlagt":"Afventer"}
+                    </span>
+                  </td>
+                </tr>
+              );
+            })}
+          </tbody>
+        </table>
+      </div>
+
+      {/* Debug info */}
+      {planDebug&&(
+        <div style={{marginTop:20,background:C.s2,borderRadius:10,padding:"14px 18px",border:`1px solid ${C.brd}`,fontSize:11,color:C.txtM}}>
+          <div style={{fontWeight:700,marginBottom:4}}>Debug</div>
+          <pre style={{whiteSpace:"pre-wrap",margin:0}}>{JSON.stringify({planFraDato,afdScope,patienter:patienter.length,medarbejdere:medarbejdere.length,lokaler:lokaler.length},null,2)}</pre>
+        </div>
+      )}
+    </div>
+  );
+}
+
 class ErrorBoundary extends React.Component {
   constructor(props){super(props);this.state={err:null};}
   static getDerivedStateFromError(e){return {err:e};}
@@ -8687,7 +8897,7 @@ class ErrorBoundary extends React.Component {
 }
   render(){
     if(this.state.err) return(
-      <div style={{padding:40,fontFamily:"sans-serif",color:"#cc2200"}}>
+      <div style={{padding:40,fontFamily:"sans-serif",color:"#003d8a"}}>
         <h2>Fejl i PlanMed</h2>
         <pre style={{marginTop:16,fontSize:12,whiteSpace:"pre-wrap"}}>{String(this.state.err)}</pre>
         <button onClick={()=>this.setState({err:null})} style={{marginTop:16,padding:"8px 16px",cursor:"pointer"}}>
@@ -8721,7 +8931,7 @@ function EjerView({patienter,medarbejdere,adminData,setAdminData,authData,isUnlo
     const [changelog,setChangelog]=useState([
     {ver:"0.9.2",dato:"2026-03-10",tekst:"Excel import: Lokaler-tab tilfojet. Skabeloner opdateret med nye felter."},
     {ver:"0.9.1",dato:"2026-03-05",tekst:"Klinisk Hvid redesign. Sora font. RBAC roller."},
-    {ver:"0.9.0",dato:"2026-02-20",tekst:"Forste prototype. Forløb, patienter, kalender, planlægningsmotor."},
+    {ver:"0.9.0",dato:"2026-02-20",tekst:"Første prototype. Forløb, patienter, kalender, planlægningsmotor."},
   ]);
   const [nyVer,setNyVer]=useState(""); const [nyTekst,setNyTekst]=useState(""); const [nyDato,setNyDato]=useState(today());
   const [ejerEmail,setEjerEmail]=useState(authData.email||"");
@@ -8944,7 +9154,7 @@ function EjerView({patienter,medarbejdere,adminData,setAdminData,authData,isUnlo
               <input type="date" value={nyDato} onChange={e=>setNyDato(e.target.value)}
                 style={{padding:"8px 12px",borderRadius:7,border:"1.5px solid "+C.brd,fontSize:13,fontFamily:"inherit",outline:"none",background:C.bg,color:C.txt}}/>
             </div>
-            <textarea value={nyTekst} onChange={e=>setNyTekst(e.target.value)} placeholder="Beskriv aendringen..." rows={2}
+            <textarea value={nyTekst} onChange={e=>setNyTekst(e.target.value)} placeholder="Beskriv ændringen..." rows={2}
               style={{width:"100%",padding:"8px 12px",borderRadius:7,border:"1.5px solid "+C.brd,fontSize:13,fontFamily:"inherit",outline:"none",resize:"vertical",background:C.bg,color:C.txt,marginBottom:8}}/>
             <Btn v="primary" onClick={()=>{
               if(!nyVer||!nyTekst) return;
@@ -9063,7 +9273,7 @@ function EjerView({patienter,medarbejdere,adminData,setAdminData,authData,isUnlo
         <div style={{maxWidth:480}}>
           <div style={{fontWeight:700,fontSize:15,marginBottom:16,color:C.txt}}>Ejer-konto indstillinger</div>
           <div style={{background:C.s1,border:"1px solid "+C.brd,borderRadius:12,padding:20}}>
-            <div style={{fontSize:12,color:C.txtM,marginBottom:16}}>Ændringer traeder i kraft næste gang du aabner appen</div>
+            <div style={{fontSize:12,color:C.txtM,marginBottom:16}}>Ændringer træder i kraft næste gang du åbner appen</div>
             <FRow label="Nuværende ejer-email">
               <div style={{padding:"8px 12px",background:C.bg,borderRadius:7,border:"1px solid "+C.brd,fontSize:13,color:C.txtD}}>{authData.email}</div>
             </FRow>
@@ -9077,7 +9287,7 @@ function EjerView({patienter,medarbejdere,adminData,setAdminData,authData,isUnlo
               Obs: Email og kode gemmes kun lokalt i denne prototype. I produktion krypteres og gemmes dette server-side.
             </div>
             <Btn v="primary" onClick={()=>{
-              if(nyEjerKode&&nyEjerKode.length<4){setGemtMsg("Kode skal vaere mindst 4 tegn");return;}
+              if(nyEjerKode&&nyEjerKode.length<4){setGemtMsg("Kode skal være mindst 4 tegn");return;}
               setGemtMsg("Ændringer gemt (lokal prototype)");
             }}>Gem ændringer</Btn>
             {gemtMsg&&<div style={{color:C.grn,fontSize:12,marginTop:10}}>{gemtMsg}</div>}
@@ -9091,7 +9301,7 @@ function EjerView({patienter,medarbejdere,adminData,setAdminData,authData,isUnlo
             <div style={{color:C.txtM,fontSize:13,marginBottom:16}}>
               Kør automatisk validering af alle core flows — Auth, Navigation, Patient, Medarbejder, Planlægning og Eksport.
             </div>
-            <Btn v="primary" onClick={()=>setVisTesterEjer(true)}>▶ Åbn test-panel</Btn>
+            <Btn v="primary" onClick={()=>setVisTesterEjer(true)}>Åbn test-panel</Btn>
           </div>
         </div>
       )}
@@ -9135,7 +9345,7 @@ return [];}});
   const [medarbejdere,setMedarbejdere]=useState(()=>[...BASE_MED]);
   const [forlob,setForlob]=useState(()=>{try{return structuredClone(FORLOB);}catch(e){return {};}});
   const [indsatser,setIndsatser]=useState([]);
-  const [lokTider,setLokTider]=useState({});
+  const [lokTider,setLokTider]=useState(()=>structuredClone(DEFAULT_LOK_TIDER));
   const [adminData,setAdminData]=useState({
     kapDefaults:{
       "Læge":    {grænseType:"uge",grænseTimer:30,rullendePeriodeUger:4,rullendeMaxTimer:25,ialtFra:"",ialtTil:""},
@@ -9181,7 +9391,7 @@ return [];}});
       ]
     }],
   });
-  const [lokaler,setLokaler]=useState([]);
+  const [lokaler,setLokaler]=useState(()=>[...ALLE_LOK]);
   const saveLokaler=(ny)=>{setLokaler(ny);try{localStorage.setItem("planmed_lokaler",JSON.stringify(ny));}catch(e){}};
   const [lokMeta,setLokMeta]=useState({});
   const [certifikater,setCertifikater]=useState(()=>structuredClone(INIT_CERTIFIKATER));
@@ -9244,9 +9454,17 @@ return [];}});
   // Byg afdelinger dynamisk fra adminData
   const alleAfdelinger = useMemo(()=>{
     const fromAdmin = (adminData?.selskaber?.[0]?.afdelinger || []).map(a=>({id:a.id, navn:a.navn}));
-    if(fromAdmin.length > 0) return fromAdmin;
+    // Tilføj afdelinger fra importerede patienter og medarbejdere
+    const dataAfds = new Set([
+      ...patienter.map(p=>p.afdeling||"current"),
+      ...medarbejdere.map(m=>m.afdeling||"current"),
+    ]);
+    const adminIds = new Set(fromAdmin.map(a=>a.id));
+    const extra = [...dataAfds].filter(id=>!adminIds.has(id)).map(id=>({id, navn:id==="current"?(authData?.afdeling||"Min afdeling"):id}));
+    const result = [...fromAdmin, ...extra];
+    if(result.length > 0) return result;
     return [{id:"current", navn: authData?.afdeling||"Min afdeling"}];
-  },[adminData, authData]);
+  },[adminData, authData, patienter, medarbejdere]);
   const [afdScope, setAfdScope] = useState(()=>{
     // Initialisér scope — alle afdelinger aktive som standard
     const afdIds = (adminData?.selskaber?.[0]?.afdelinger||[]).map(a=>a.id);
@@ -9263,6 +9481,19 @@ return [];}});
       return next;
     });
   },[adminData]);
+
+  // Sync afdScope med afdelinger fra importerede patienter og medarbejdere
+  useEffect(()=>{
+    const patAfds=new Set(patienter.map(p=>p.afdeling||"current"));
+    const medAfds=new Set(medarbejdere.map(m=>m.afdeling||"current"));
+    const alleAfds=new Set([...patAfds,...medAfds]);
+    setAfdScope(prev=>{
+      let changed=false;
+      const next={...prev};
+      alleAfds.forEach(id=>{if(!next[id]){next[id]={aktiv:true,med:true,lok:true,pat:true};changed=true;}});
+      return changed?next:prev;
+    });
+  },[patienter,medarbejdere]);
 
   const toggleAktiv = (id) => setAfdScope(prev=>{
     const aktive=Object.entries(prev).filter(([,v])=>v.aktiv).length;
@@ -9399,7 +9630,7 @@ return [];}},[scopedPatienter,lokTider]);
             onMouseLeave={e=>e.currentTarget.style.borderColor=C.brd}>
             <svg width="13" height="13" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2.5" strokeLinecap="round"><circle cx="11" cy="11" r="8"/><line x1="21" y1="21" x2="16.65" y2="16.65"/></svg>
             <span style={{flex:1,textAlign:"left"}}>Søg...</span>
-            <kbd style={{background:C.s3,border:`1px solid ${C.brd}`,borderRadius:4,padding:"1px 5px",fontSize:10}}>⌘K</kbd>
+            <kbd style={{background:C.s3,border:`1px solid ${C.brd}`,borderRadius:4,padding:"1px 5px",fontSize:10}}>Ctrl+K</kbd>
           </button>
         </div>
 
@@ -9702,12 +9933,12 @@ function GlobalSearch({patienter=[],medarbejdere=[],onClose,onNavigate}){
     // Patienter
     patienter.forEach(p=>{
       const match=p.navn.toLowerCase().includes(lq)||p.cpr.includes(lq)||(p.patientNr||"").toLowerCase().includes(lq);
-      if(match) hits.push({type:"patient",icon:"P",color:"#5b3fbc",label:p.navn,sub:`CPR: ${p.cpr}`,id:p.id,nav:"patienter"});
+      if(match) hits.push({type:"patient",icon:"P",color:"#003d8a",label:p.navn,sub:`CPR: ${p.cpr}`,id:p.id,nav:"patienter"});
       // Opgaver på patient
       p.opgaver.forEach(o=>{
         const otitel=(o.titel||o.navn||o.opgave||"").toLowerCase();
         if(otitel.includes(lq)){
-          hits.push({type:"opgave",icon:"O",color:"#0077cc",label:o.titel||o.navn||o.opgave,sub:`${p.navn} · ${o.dato||"Ikke planlagt"}`,id:p.id,nav:"patienter"});
+          hits.push({type:"opgave",icon:"O",color:"#0050b3",label:o.titel||o.navn||o.opgave,sub:`${p.navn} · ${o.dato||"Ikke planlagt"}`,id:p.id,nav:"patienter"});
         }
       });
     });
@@ -9715,14 +9946,14 @@ function GlobalSearch({patienter=[],medarbejdere=[],onClose,onNavigate}){
     // Medarbejdere
     medarbejdere.forEach(m=>{
       if(m.navn.toLowerCase().includes(lq)||(m.mail||"").toLowerCase().includes(lq)||(m.stilling||m.titel||"").toLowerCase().includes(lq)){
-        hits.push({type:"medarbejder",icon:"M",color:"#00875a",label:m.navn,sub:`${m.stilling||m.titel||""} · ${m.afdeling||""}`,id:m.id,nav:"medarbejdere"});
+        hits.push({type:"medarbejder",icon:"M",color:"#1a5fb4",label:m.navn,sub:`${m.stilling||m.titel||""} · ${m.afdeling||""}`,id:m.id,nav:"medarbejdere"});
       }
     });
 
     return hits.slice(0,12);
   },[q,patienter,medarbejdere]);
 
-  const typeColors={patient:"#5b3fbc",opgave:"#0077cc",medarbejder:"#00875a"};
+  const typeColors={patient:"#003d8a",opgave:"#0050b3",medarbejder:"#1a5fb4"};
 
   return(
     <div style={{position:"fixed",inset:0,background:"rgba(0,0,0,0.55)",zIndex:9000,display:"flex",alignItems:"flex-start",justifyContent:"center",paddingTop:"12vh"}}
@@ -11878,7 +12109,7 @@ function PlanMedTester({onClose}){
           </div>
           {done&&(
             <div style={{display:"flex",gap:12,alignItems:"center"}}>
-              <span style={{color:C.grn,fontWeight:700,fontSize:14}}>✓ {passed} bestået</span>
+              <span style={{color:C.grn,fontWeight:700,fontSize:14}}>OK {passed} bestået</span>
               {failed>0&&<button onClick={()=>setDetailFejl({isSummary:true,fejlListe:results.filter(r=>!r.ok)})}
                 style={{background:"none",border:"none",cursor:"pointer",padding:0,fontFamily:"inherit",
                   color:C.red,fontWeight:700,fontSize:14,textDecoration:"underline dotted"}}>
@@ -11901,7 +12132,7 @@ function PlanMedTester({onClose}){
               <div style={{color:C.txtM,fontSize:13,marginBottom:24}}>
                 Auth · Navigation · Patient · Medarbejder · Planlægning · Eksport
               </div>
-              <Btn v="primary" onClick={runTests}>▶ Start tests</Btn>
+              <Btn v="primary" onClick={runTests}>Start tests</Btn>
             </div>
           )}
 
@@ -11927,7 +12158,7 @@ function PlanMedTester({onClose}){
                       background:r.ok?"transparent":C.redM+"44",
                       cursor:r.ok?"default":"pointer"}}
                       onClick={()=>!r.ok&&setDetailFejl(r)}>
-                      <span style={{fontSize:13,flexShrink:0}}>{r.ok?"✓":"✗"}</span>
+                      <span style={{fontSize:13,flexShrink:0}}>{r.ok?"OK":"X"}</span>
                       <div style={{flex:1}}>
                         <div style={{color:r.ok?C.txtD:C.red,fontSize:12,
                           textDecoration:r.ok?"none":"underline dotted"}}>{r.test}</div>
@@ -11940,7 +12171,7 @@ function PlanMedTester({onClose}){
               ))}
               {running&&(
                 <div style={{textAlign:"center",padding:16,color:C.txtM,fontSize:13}}>
-                  ⏳ Kører tests...
+                  ... Kører tests...
                 </div>
               )}
             </div>
@@ -11968,7 +12199,7 @@ function PlanMedTester({onClose}){
             border:`1px solid ${C.red}`,boxShadow:"0 8px 32px rgba(0,0,0,0.3)"}}
             onClick={e=>e.stopPropagation()}>
             <div style={{display:"flex",alignItems:"center",gap:10,marginBottom:16}}>
-              <span style={{fontSize:18}}>✗</span>
+              <span style={{fontSize:18}}>X</span>
               <div style={{flex:1,color:C.red,fontWeight:700,fontSize:15}}>
                 {detailFejl.isSummary?`${detailFejl.fejlListe?.length} fejl i alt`:"Test fejlede"}
               </div>
