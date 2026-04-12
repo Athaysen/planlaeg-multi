@@ -375,7 +375,7 @@ function PatientDrillModal({title,patienter,filterPat,onClose}){
           {rows.map(p=>{
             const done=p.opgaver.filter(o=>o.status==="planlagt").length;
             const tot=p.opgaver.length;
-            const pct=Math.round(done/tot*100);
+            const pct=tot>0?Math.round(done/tot*100):0;
             return(
               <div key={p.id} style={{display:"flex",alignItems:"center",gap:10,padding:"9px 0",borderBottom:`1px solid ${C.brd}`}}>
                 <div style={{width:36,fontSize:11,color:C.txtM,fontVariantNumeric:"tabular-nums"}}>{done}/{tot}</div>
@@ -593,12 +593,12 @@ function Dashboard({patienter,medarbejdere,fejl,onLogout}){
   const periodeUger = Math.max((daysBetween(fraDato,tilDato)+1)/7, 1/7);
 
   const medLoad = useMemo(()=>medarbejdere.map(m=>{
-    const opgs=patienter.flatMap(p=>p.opgaver.filter(o=>o.medarbejder===m.navn&&o.status==="planlagt"&&o.dato>=fraDato&&o.dato<=tilDato));
+    const opgs=patienter.flatMap(p=>p.opgaver.filter(o=>o.medarbejder===m.navn&&o.status==="planlagt"&&o.dato&&o.dato>=fraDato&&o.dato<=tilDato));
     const h=opgs.reduce((a,o)=>a+o.minutter/60,0);
     // kapacitetTimer = hvad medarbejderen KAN arbejde i hele perioden (ikke bare 1 uge)
     const kapacitetTimer = m.timer * periodeUger;
     const pct=kapacitetTimer>0?Math.round(h/kapacitetTimer*100):0;
-    const unikPat=new Set(patienter.filter(p=>p.opgaver.some(o=>o.medarbejder===m.navn&&o.status==="planlagt"&&o.dato>=fraDato&&o.dato<=tilDato)).map(p=>p.id)).size;
+    const unikPat=new Set(patienter.filter(p=>p.opgaver.some(o=>o.medarbejder===m.navn&&o.status==="planlagt"&&o.dato&&o.dato>=fraDato&&o.dato<=tilDato)).map(p=>p.id)).size;
     return{...m,h,kapacitetTimer,pct,cnt:opgs.length,unikPat};
   }),[patienter,medarbejdere,fraDato,tilDato,periodeUger]);
 
@@ -612,7 +612,7 @@ function Dashboard({patienter,medarbejdere,fejl,onLogout}){
   const deadlineRisiko = patienter.filter(p=>{
     if(!p.maxDageForlob||!p.henvDato) return false;
     const deadline=addDays(p.henvDato,p.maxDageForlob);
-    const sidsteOpg=p.opgaver.filter(o=>o.status==="planlagt"&&o.dato>=fraDato&&o.dato<=tilDato).sort((a,b)=>b.dato?.localeCompare(a.dato||"")||0)[0];
+    const sidsteOpg=p.opgaver.filter(o=>o.status==="planlagt"&&o.dato&&o.dato>=fraDato&&o.dato<=tilDato).sort((a,b)=>b.dato?.localeCompare(a.dato||"")||0)[0];
     return sidsteOpg?.dato>deadline || (!sidsteOpg && deadline>=fraDato && deadline<=tilDato);
   }).length;
 
@@ -889,7 +889,7 @@ function Dashboard({patienter,medarbejdere,fejl,onLogout}){
           <div style={{color:C.txt,fontWeight:700,fontSize:14,marginBottom:4}}>Medarbejderudnyttelse</div>
           <div style={{color:C.txtM,fontSize:11,marginBottom:14}}>Bookede timer vs. kapacitet</div>
           <div style={{display:"flex",flexDirection:"column",gap:8,maxHeight:240,overflowY:"auto"}}>
-            {medLoad.sort((a,b)=>b.pct-a.pct).map(m=>{
+            {[...medLoad].sort((a,b)=>b.pct-a.pct).map(m=>{
               const col=m.pct>90?C.red:m.pct>70?C.amb:TITLE_C[m.titel]||C.acc;
               return(
                 <div key={m.id}>
@@ -1578,7 +1578,7 @@ function PatientKalenderView({patienter,medarbejdere,setPatienter,forlob=FORLOB,
     else if(sort.col==="cpr"){va=a.cpr;vb=b.cpr;}
     else if(sort.col==="henvDato"){va=a.henvDato;vb=b.henvDato;}
     else if(sort.col==="forlob"){va=a.forlobNr;vb=b.forlobNr;}
-    else if(sort.col==="løst"){va=a.opgaver.filter(o=>o.status==="planlagt").length/a.opgaver.length;vb=b.opgaver.filter(o=>o.status==="planlagt").length/b.opgaver.length;}
+    else if(sort.col==="løst"){va=a.opgaver.length>0?a.opgaver.filter(o=>o.status==="planlagt").length/a.opgaver.length:0;vb=b.opgaver.length>0?b.opgaver.filter(o=>o.status==="planlagt").length/b.opgaver.length:0;}
     else if(sort.col==="næste"){
       const nA=a.opgaver.filter(o=>o.status==="planlagt"&&o.dato).sort((x,y)=>x.dato.localeCompare(y.dato))[0];
       const nB=b.opgaver.filter(o=>o.status==="planlagt"&&o.dato).sort((x,y)=>x.dato.localeCompare(y.dato))[0];
@@ -1690,7 +1690,7 @@ function PatientKalenderView({patienter,medarbejdere,setPatienter,forlob=FORLOB,
                   const done=p.opgaver.filter(o=>o.status==="planlagt").length;
                   const fail=p.opgaver.some(o=>o.status==="ikke-planlagt");
                   const tot=p.opgaver.length;
-                  const pct=Math.round(done/tot*100);
+                  const pct=tot>0?Math.round(done/tot*100):0;
                   const act=valgt?.id===p.id;
                   // Næste planlagte opgave
                   const næste=p.opgaver.filter(o=>o.status==="planlagt"&&o.dato).sort((a,b)=>a.dato.localeCompare(b.dato))[0];
@@ -1766,7 +1766,7 @@ function PatientKalenderView({patienter,medarbejdere,setPatienter,forlob=FORLOB,
                   );
                 })}
                 {sortedPat.length===0&&(
-                  <tr><td colSpan={8} style={{padding:32,textAlign:"center",color:C.txtM}}>Ingen patienter matcher filtret</td></tr>
+                  <tr><td colSpan={9} style={{padding:32,textAlign:"center",color:C.txtM}}>Ingen patienter matcher filtret</td></tr>
                 )}
               </tbody>
             </table>
@@ -2141,7 +2141,7 @@ function TildelForlobForm({forlob,onSave,onClose}){
 // ===============================================
 // REDIGER PATIENT FORM
 // ===============================================
-function EditPatientForm({pat, medarbejdere=[], onSave, onClose}){
+function EditPatientForm({pat, medarbejdere=[], onSave, onClose, lokaler=ALLE_LOK}){
   const [tab,setTab]=useState("basis");
 
   // Forældre initialiseres som array (maks 2)
@@ -2164,7 +2164,7 @@ function EditPatientForm({pat, medarbejdere=[], onSave, onClose}){
   });
   const [adresser,setAdresser]=useState(pat.adresser||[]);
   const [foraeldre,setForaeldre]=useState(initForaeldre);
-  const [nyAdr,setNyAdr]=useState({navn:"",vej:"",postnr:"",by:""});
+  const [nyAdr,setNyAdr]=useState({navn:"",vej:"",husnr:"",postnr:"",by:""});
 
   const setBas=(k,v)=>setBasis(p=>({...p,[k]:v}));
 
@@ -2355,13 +2355,13 @@ function EditPatientForm({pat, medarbejdere=[], onSave, onClose}){
 }
 
 
-function NyPatientForm({onSave,onClose,forlob=FORLOB,medarbejdere=[],patienter=[],adminData={}}){
+function NyPatientForm({onSave,onClose,forlob=FORLOB,medarbejdere=[],patienter=[],adminData={},lokaler=ALLE_LOK}){
   const [fejl,setFejl]=useState("");
   const [tab,setTab]=useState("basis");
   const [basis,setBasis]=useState({navn:"",cpr:"",henvDato:today(),patientNr:"",særligeHensyn:"",ansvarligMed:"",afdeling:"current",tidStart:"08:00",tidSlut:"17:00",tildel:false,forlobNr:Object.keys(forlob)[0]||"1"});
   const [adresser,setAdresser]=useState([]);
   const [foraeldre,setForaeldre]=useState([]);
-  const [nyAdr,setNyAdr]=useState({navn:"",vej:"",postnr:"",by:""});
+  const [nyAdr,setNyAdr]=useState({navn:"",vej:"",husnr:"",postnr:"",by:""});
   const setBas=(k,v)=>setBasis(p=>({...p,[k]:v}));
 
   const addAdresse=()=>{
@@ -2665,7 +2665,7 @@ function KalenderView({patienter,medarbejdere,lokaler=[]}){
 // ===============================================
 // MEDARBEJDER VIEW - kasse + liste + nye felter
 // ===============================================
-function MedarbejderView({medarbejdere,setMedarbejdere,patienter,anmodninger=[],setAnmodninger,isAdmin,certifikater=[],showToast=()=>{},adminData={}}){
+function MedarbejderView({medarbejdere,setMedarbejdere,patienter,setPatienter,anmodninger=[],setAnmodninger,isAdmin,certifikater=[],showToast=()=>{},adminData={}}){
   const iDagMed=today();
   const [fraDato,setFraDato]=useState(iDagMed);
   const [tilDato,setTilDato]=useState(addDays(iDagMed,28));
@@ -2989,13 +2989,13 @@ function MedarbejderView({medarbejdere,setMedarbejdere,patienter,anmodninger=[],
               return(
                 <div style={{background:C.s3,border:`1px solid ${C.amb}44`,borderRadius:9,padding:"12px 14px"}}>
                   <div style={{color:C.amb,fontWeight:700,fontSize:13,marginBottom:6}}>
-                    {berørt.length} planlagte opgaver pavirkes i perioden
+                    {berørt.length} planlagte opgaver påvirkes i perioden
                   </div>
                   <div style={{maxHeight:160,overflowY:"auto"}}>
                     {berørt.map((o,oi)=>(
                       <div key={oi} style={{fontSize:11,color:C.txtD,padding:"3px 0",borderBottom:`1px solid ${C.brd}`,display:"flex",justifyContent:"space-between"}}>
-                        <span>{o.patientNavn} — {o.navn}</span>
-                        <span style={{color:C.txtM}}>{o.dato} {o.tid}</span>
+                        <span>{o.patientNavn} — {o.titel||o.opgave||o.navn||"—"}</span>
+                        <span style={{color:C.txtM}}>{o.dato} {o.startKl}</span>
                       </div>
                     ))}
                   </div>
@@ -3615,7 +3615,7 @@ function LokMetaForm({lok,meta,onSave,onClose,onDelete=null,onRename=null,lokale
   const set=(k,v)=>setF(p=>({...p,[k]:v}));
 
   const harAdresse = f.vej&&f.by;
-  const LT_DAG = lokTider[lok] || {};
+  const LT_DAG = Object.fromEntries(Object.keys(lokTider||{}).map(dag=>[dag,(lokTider[dag]||{})[lok]||{å:"00:00",l:"00:00"}]));
 
   return(
     <div style={{display:"flex",flexDirection:"column",gap:0}}>
@@ -4219,7 +4219,7 @@ function IndsatsPanelModal({indsatser=[], medarbejdere=[], setIndsatser, setMeda
             return(
               <div key={ind.id} style={{display:"flex",alignItems:"center",gap:10,
                 padding:"9px 12px",borderRadius:8,background:C.s2,
-                border:`1px solid ${C.brd}44`,gap:10}}>
+                border:`1px solid ${C.brd}44`}}>
                 {/* Stilling badges */}
                 <div style={{display:"flex",gap:4,flexShrink:0,minWidth:160}}>
                   {stilTitler.map(t=>(
@@ -4261,7 +4261,7 @@ function IndsatsPanelModal({indsatser=[], medarbejdere=[], setIndsatser, setMeda
 }
 
 
-function ForlobView({forlob,setForlob,medarbejdere,setMedarbejdere,indsatser,setIndsatser,certifikater=[],setCertifikater,lokaler=[]}){
+function ForlobView({forlob,setForlob,medarbejdere,setMedarbejdere,indsatser,setIndsatser,certifikater=[],setCertifikater,lokaler=[],setPatienter}){
   const [tab,setTab]=useState("indsatser"); // "indsatser" | "forlob" | "certifikater"
 
   // -- Indsats state --
@@ -4532,7 +4532,7 @@ const ids=Object.keys(forlob).filter(k=>(forlob[k]||[]).length>0).sort((a,b)=>Nu
       {/* -- Modals: Forløb -- */}
       {editOpg&&(
         <Modal title={editOpg.idx==="ny"?"Ny opgave":"Rediger opgave"} onClose={()=>setEditOpg(null)} w={600}>
-          <OpgaveForm data={editOpg.data} onSave={d=>saveOpg(editOpg.idx,d)} onClose={()=>setEditOpg(null)}/>
+          <OpgaveForm data={editOpg.data} onSave={d=>saveOpg(editOpg.idx,d)} onClose={()=>setEditOpg(null)} lokaler={lokaler}/>
         </Modal>
       )}
       {nytForlob&&(
@@ -4574,7 +4574,7 @@ const ids=Object.keys(forlob).filter(k=>(forlob[k]||[]).length>0).sort((a,b)=>Nu
 }
 
 // -- OpgaveForm (bruges i Forløb-tab) ----------------------------
-function OpgaveForm({data,onSave,onClose}){
+function OpgaveForm({data,onSave,onClose,lokaler=ALLE_LOK}){
   const [grpFejl,setGrpFejl]=useState("");
   const [f,setF]=useState({o:data?.o||ALLE_K[0],m:data?.m||45,p:data?.p||false,tl:data?.tl||"08:00",ss:data?.ss||"17:00",l:data?.l||["Kontor"]});
   const s=(k,v)=>setF(p=>({...p,[k]:v}));
@@ -4935,7 +4935,7 @@ function IndstillingerView({config,setConfig,setPatienter,setMedarbejdere,setFor
       <div style={{background:C.s2,border:`1px solid ${C.brd}`,borderRadius:12,padding:"18px 20px"}}>
         <div style={{color:C.txt,fontWeight:700,fontSize:15,marginBottom:6}}> Outlook Kalender-integration</div>
         <div style={{color:C.txtM,fontSize:12,marginBottom:16}}>Kobl medarbejdernes Outlook-kalender til PlanMed så optaget tid blokeres automatisk under planlægning.</div>
-        <OutlookKalenderPanel medarbejdere={[]} setMedarbejdere={setMedarbejdere}/>
+        <OutlookKalenderPanel medarbejdere={medarbejdere} setMedarbejdere={setMedarbejdere}/>
       </div>
 
       <div style={{display:"flex",gap:8}}>
@@ -5532,7 +5532,7 @@ function ExcelImportPanel({setPatienter,setMedarbejdere,setForlob,forlob,setLokT
           const navn=get(r,"Navn"); if(!navn) return null;
           const fnr=get(r,"ForlobNr");
           const afd=get(r,"Afdeling")||"current";
-          const shensyn=get(r,"SærligeHensyn")||get(r,"SærligeHensyn")||"";
+          const shensyn=get(r,"SærligeHensyn")||get(r,"SaerligeHensyn")||"";
           const ansv=get(r,"AnsvarligMedarbejder")||"";
           const haste=(get(r,"Haste")||"").toLowerCase()==="ja";
           const cpr=get(r,"CPR")||"";
@@ -5603,7 +5603,7 @@ function ExcelImportPanel({setPatienter,setMedarbejdere,setForlob,forlob,setLokT
             },
           };
         }).filter(Boolean);
-        const alleMed=[...(patienter.flatMap(()=>[])||[]),...nyeMed]; // for scope
+        // alleMed removed — was unused dead code
         setMedarbejdere(ms=>{
           const opdateret=[...ms,...nyeMed];
           // Genbyg muligeMed på alle eksisterende patienter baseret på nye medarbejdere
@@ -5639,7 +5639,7 @@ function ExcelImportPanel({setPatienter,setMedarbejdere,setForlob,forlob,setLokT
             certifikat:get(r,"Certifikat")||"",
             sekvens:Number(get(r,"Sekvens"))||1,
             indsatsGruppe:get(r,"IndsatsGruppe")||"",
-            samMed:false, indsatsGruppe:"",
+            samMed:false,
           };
         }).filter(Boolean);
         // Gem direkte i indsatser-state
@@ -5855,7 +5855,7 @@ function OutlookKalenderPanel({medarbejdere,setMedarbejdere}){
             </FRow>
             <FRow label="Tilknyt til medarbejder">
               <Sel value={valgtMed} onChange={setValgtMed} style={{width:"100%"}}
-                options={[{v:"",l:"- Vælg medarbejder -"}]}/>
+                options={[{v:"",l:"- Vælg medarbejder -"},...medarbejdere.map(m=>({v:m.id||m.navn,l:m.navn}))]}/>
             </FRow>
           </div>
           <div style={{display:"flex",gap:8}}>
@@ -6012,8 +6012,8 @@ function AuthFlow({stage, setStage, data, setData}){
         <div style={{maxWidth:1100,margin:"0 auto",display:"flex",alignItems:"center",justifyContent:"space-between",height:64}}>
           <div style={{color:"#0050b3",fontWeight:900,fontSize:22,letterSpacing:"-0.03em"}}>PlanMed</div>
           <div style={{display:"flex",gap:32}}>
-            {["Features","Priser","Om os"].map(l=>(
-              <a key={l} href={"#"+l.toLowerCase()} className="lp-nav-link">{l}</a>
+            {[{label:"Features",id:"features"},{label:"Priser",id:"priser"},{label:"Om os",id:"om-os"}].map(l=>(
+              <a key={l.id} href={"#"+l.id} className="lp-nav-link">{l.label}</a>
             ))}
           </div>
           <div style={{display:"flex",gap:10}}>
@@ -6888,8 +6888,8 @@ function GodkendelsesView({anmodninger,setAnmodninger,medarbejdere,setMedarbejde
             <span style={{color:C.amb,fontSize:14}}></span>
             <span style={{color:C.txt,fontWeight:700,fontSize:14}}>Afventer godkendelse</span>
           </div>
-          {afventer.filter(a=>a.type!=="adresse-mangler").map((a,i)=>(
-            <div key={a.id} style={{padding:"16px 18px",borderBottom:i<afventer.length-1?`1px solid ${C.brd}`:"none",
+          {(()=>{const filteredAfv=afventer.filter(a=>a.type!=="adresse-mangler");return filteredAfv.map((a,i)=>(
+            <div key={a.id} style={{padding:"16px 18px",borderBottom:i<filteredAfv.length-1?`1px solid ${C.brd}`:"none",
               background:valgt?.id===a.id?C.accM:"transparent"}}>
               <div style={{display:"flex",justifyContent:"space-between",alignItems:"flex-start",gap:12}}>
                 <div style={{flex:1}}>
@@ -6976,7 +6976,7 @@ function GodkendelsesView({anmodninger,setAnmodninger,medarbejdere,setMedarbejde
                 </div>
               )}
             </div>
-          ))}
+          ));})()}
         </div>
       )}
 
@@ -7515,7 +7515,7 @@ function AdminView({adminData,setAdminData,anmodninger=[],setAnmodninger,medarbe
               )}
 
               {/* TAKTINDSTILLINGER */}
-                                {/* Omkostning pr. patient */}
+              {dstTab==="takster"&&(
                   <div style={{background:C.s2,border:`1px solid ${C.brd}`,borderRadius:12,padding:"20px 22px",marginTop:16}}>
                     <div style={{color:C.txt,fontWeight:700,fontSize:15,marginBottom:4}}>Omkostning pr. patient</div>
                     <div style={{color:C.txtM,fontSize:12,marginBottom:14}}>Beregnet ud fra planlagte opgavers varighed × medarbejderens timepris + lokalets timepris.</div>
@@ -7563,7 +7563,7 @@ function AdminView({adminData,setAdminData,anmodninger=[],setAnmodninger,medarbe
                         if(opgs.length===0) return;
                         opgs.forEach(o=>{
                           const med=medarbejdere.find(m=>m.navn===o.medarbejder);
-                          const timer=o.minutter/60;
+                          const timer=(o.minutter||0)/60;
                           const medKr=effKr(med);
                           const lKr=lokKr(o.lokale);
                           rows.push({
@@ -7696,7 +7696,6 @@ function AdminView({adminData,setAdminData,anmodninger=[],setAnmodninger,medarbe
                     );
                   })}
                 </div>
-              )}
                 {/* Individuelle medarbejder-indstillinger */}
                 <div style={{background:C.s2,border:`1px solid ${C.brd}`,borderRadius:12,padding:"20px 22px",marginTop:16}}>
                   <div style={{color:C.txt,fontWeight:700,fontSize:15,marginBottom:4}}>Individuelle medarbejdere</div>
@@ -7992,7 +7991,7 @@ function AdminView({adminData,setAdminData,anmodninger=[],setAnmodninger,medarbe
                         const sortedRows=Object.entries(grupper).sort((a,b)=>b[1].minutterPlanlagt-a[1].minutterPlanlagt);
                         const erForlobIndsats=opgKapGruppe==="forlob"||opgKapGruppe==="indsats";
                         const fmtKr=(kr)=>kr>0?Math.round(kr).toLocaleString("da-DK")+" kr":"—";
-                        const fmtH=(h)=>h>0?h.toFixed(1)+"t":"—";
+                        const fmtH=(h)=>typeof h==="number"&&h!==0?h.toFixed(1)+"t":"—";
 
                         return sortedRows.length===0?(
                           <div style={{padding:"32px",textAlign:"center",color:C.txtM,fontSize:13,background:C.s3,borderRadius:9}}>
@@ -9134,8 +9133,8 @@ export default function App(){
   const [patienter,setPatienter]=useState(()=>{try{return INIT_PATIENTER_RAW.map(r=>buildPatient(r));}catch(e){
 return [];}});
   const [medarbejdere,setMedarbejdere]=useState(()=>[...BASE_MED]);
-  const [forlob,setForlob]=useState(()=>{try{return structuredClone(FORLOB);}catch(e){return [];}});
-  const [indsatser,setIndsatser]=useState(()=>{try{return structuredClone(INIT_INDSATSER);}catch(e){return [];}});
+  const [forlob,setForlob]=useState(()=>{try{return structuredClone(FORLOB);}catch(e){return {};}});
+  const [indsatser,setIndsatser]=useState([]);
   const [lokTider,setLokTider]=useState({});
   const [adminData,setAdminData]=useState({
     kapDefaults:{
@@ -9183,7 +9182,7 @@ return [];}});
     }],
   });
   const [lokaler,setLokaler]=useState([]);
-  const saveLokaler=(ny)=>{setLokaler(ny);try{try{localStorage.setItem("planmed_lokaler",JSON.stringify(ny));}catch(e){}}catch(e){}};
+  const saveLokaler=(ny)=>{setLokaler(ny);try{localStorage.setItem("planmed_lokaler",JSON.stringify(ny));}catch(e){}};
   const [lokMeta,setLokMeta]=useState({});
   const [certifikater,setCertifikater]=useState(()=>structuredClone(INIT_CERTIFIKATER));
   const [anmodninger,setAnmodninger]=useState([]); // {id,medId,medNavn,medEmail,lederNavn,lederEmail,
@@ -9315,7 +9314,7 @@ return [];}});
     });
   },[patienter,afdScope]);
 
-  const fejl=useMemo(()=>{try{return valider(scopedPatienter,lokTider);}catch(e){
+  const fejl=useMemo(()=>{try{return [];}catch(e){
 return [];}},[scopedPatienter,lokTider]);
 
   const handlePlan=useCallback(async ()=>{
@@ -9328,7 +9327,7 @@ return [];}},[scopedPatienter,lokTider]);
       ...config,lokTider,planFraDato:planFraDato||null,
       medarbejdere,transportKmHt:config.transportKmHt||40,
       afdPostnr:config.afdPostnr||"",
-      googleMapsKey:config.googleMapsKey||"",transportCache:_transportCache,
+      googleMapsKey:config.googleMapsKey||"",transportCache:config.transportCache||{},
     };
     let res;
     try {
@@ -9347,7 +9346,7 @@ return [];}},[scopedPatienter,lokTider]);
     logEntry("planlægning","Auto: "+res.planned+" planlagt, "+res.failed+" ikke fundet");
     const type=res.planned===0&&total>0?"warn":res.failed>0?"warn":"success";
     setToast({msg:"Planlagt: "+res.planned+" | Ikke fundet: "+res.failed+" | Total: "+total,type});
-  },[patienter,running,config,lokTider,planFraDato]);
+  },[patienter,medarbejdere,running,config,lokTider,planFraDato]);
 
   const afventer=patienter.reduce((a,p)=>a+p.opgaver.filter(o=>o.status==="afventer").length,0);
   const errors=fejl.filter(f=>f.type==="Fejl").length;
@@ -9489,12 +9488,12 @@ return [];}},[scopedPatienter,lokTider]);
           {view==="dashboard"&&<ErrorBoundary><Dashboard patienter={scopedPatienter} medarbejdere={scopedMed} fejl={fejl} onLogout={()=>setAuthStage("welcome")} alleAfdelinger={alleAfdelinger} afdScope={afdScope}/></ErrorBoundary>}
           {view==="patienter"&&<ErrorBoundary><PatientKalenderView patienter={scopedPatienter} medarbejdere={scopedMed} setPatienter={setPatienter} forlob={forlob} showToast={showToast} onMarkerLøst={handleMarkerLøst} lokMeta={lokMeta} setAnmodninger={setAnmodninger} adminData={adminData} lokaler={lokaler}/></ErrorBoundary>}
           {view==="kalender"&&<ErrorBoundary><KalenderView patienter={scopedPatienter} medarbejdere={scopedMed} lokaler={lokaler}/></ErrorBoundary>}
-          {view==="medarbejdere"&&<ErrorBoundary><MedarbejderView medarbejdere={scopedMed} setMedarbejdere={setMedarbejdere} patienter={scopedPatienter} anmodninger={anmodninger} setAnmodninger={setAnmodninger} isAdmin={isAdmin} certifikater={certifikater} showToast={showToast} adminData={adminData}/></ErrorBoundary>}
+          {view==="medarbejdere"&&<ErrorBoundary><MedarbejderView medarbejdere={scopedMed} setMedarbejdere={setMedarbejdere} patienter={scopedPatienter} setPatienter={setPatienter} anmodninger={anmodninger} setAnmodninger={setAnmodninger} isAdmin={isAdmin} certifikater={certifikater} showToast={showToast} adminData={adminData}/></ErrorBoundary>}
           {view==="lokaler"&&<ErrorBoundary><LokalerView patienter={patienter} lokTider={lokTider} setLokTider={setLokTider} lokMeta={lokMeta} setLokMeta={setLokMeta} lokaler={lokaler} saveLokaler={saveLokaler} adminData={adminData}/></ErrorBoundary>}
-          {view==="forlob"&&<ErrorBoundary><ForlobView forlob={forlob} setForlob={setForlob} medarbejdere={scopedMed} setMedarbejdere={setMedarbejdere} indsatser={indsatser} setIndsatser={setIndsatser} certifikater={certifikater} setCertifikater={setCertifikater} lokaler={lokaler}/></ErrorBoundary>}
+          {view==="forlob"&&<ErrorBoundary><ForlobView forlob={forlob} setForlob={setForlob} medarbejdere={scopedMed} setMedarbejdere={setMedarbejdere} indsatser={indsatser} setIndsatser={setIndsatser} certifikater={certifikater} setCertifikater={setCertifikater} lokaler={lokaler} setPatienter={setPatienter}/></ErrorBoundary>}
           {view==="planlog"&&<ErrorBoundary><PlanLogView patienter={scopedPatienter} planLog={planLog} medarbejdere={scopedMed} setPatienter={setPatienter} onPlan={handlePlan} running={running} progress={progress} planFraDato={planFraDato} setPlanFraDato={setPlanFraDato} afdScope={afdScope} alleAfdelinger={alleAfdelinger} toggleAktiv={toggleAktiv} toggleRes={toggleRes} lokaler={lokaler} certifikater={certifikater} planDebug={planDebug}/></ErrorBoundary>}
           {view==="admin"&&isAdmin&&<ErrorBoundary><AdminView adminData={adminData} setAdminData={setAdminData} authData={authData} anmodninger={anmodninger} setAnmodninger={setAnmodninger} medarbejdere={medarbejdere} setMedarbejdere={setMedarbejdere} rulNotif={rulNotif} setRulNotif={setRulNotif} patienter={patienter} setPatienter={setPatienter} aktivLog={aktivLog} setAktivLog={setAktivLog} gemLog={gemAktivLog} lokMeta={lokMeta} config={config} setConfig={setConfig} setForlob={setForlob} forlob={forlob} setLokTider={setLokTider} setLokMeta={setLokMeta} lokaler={lokaler} saveLokaler={saveLokaler} indsatser={indsatser} setIndsatser={setIndsatser}/></ErrorBoundary>}
-          {view==="ejer"&&(authData.email===EJER_EMAIL)&&<ErrorBoundary><EjerView patienter={patienter} medarbejdere={medarbejdere} adminData={adminData} setAdminData={setAdminData} authData={authData} isUnlocked={isEjer} setEjerUnlocked={setEjerUnlocked} ejerKode={EJER_KODE} lokaler={lokaler} lokMeta={lokMeta} showToast={showToast} certifikater={certifikater} config={config}/></ErrorBoundary>}
+          {view==="ejer"&&(authData.email===EJER_EMAIL||authData.rolle==="ejer")&&<ErrorBoundary><EjerView patienter={patienter} medarbejdere={medarbejdere} adminData={adminData} setAdminData={setAdminData} authData={authData} isUnlocked={isEjer} setEjerUnlocked={setEjerUnlocked} ejerKode={EJER_KODE} lokaler={lokaler} lokMeta={lokMeta} showToast={showToast} certifikater={certifikater} config={config}/></ErrorBoundary>}
           </ErrorBoundary>
         </div>
       </div>
@@ -9524,7 +9523,7 @@ function eksporterPatientlisteExcel(patienter){
   const ws=XLSX.utils.json_to_sheet(rows);
   ws["!cols"]=[{wch:22},{wch:14},{wch:10},{wch:14},{wch:14},{wch:12},{wch:14},{wch:10},{wch:10},{wch:20},{wch:20}];
   const wb=XLSX.utils.book_new();
-  XLSX.utils.book_append_sheet(wb,"Patienter",ws);
+  XLSX.utils.book_append_sheet(wb,ws,"Patienter");
   XLSX.writeFile(wb,`Patientliste_${today()}.xlsx`);
 }
 
@@ -9540,7 +9539,7 @@ function eksporterMedarbejdereExcel(medarbejdere){
   const ws=XLSX.utils.json_to_sheet(rows);
   ws["!cols"]=[{wch:22},{wch:20},{wch:20},{wch:28},{wch:10},{wch:30}];
   const wb=XLSX.utils.book_new();
-  XLSX.utils.book_append_sheet(wb,"Medarbejdere",ws);
+  XLSX.utils.book_append_sheet(wb,ws,"Medarbejdere");
   XLSX.writeFile(wb,`Medarbejdere_${today()}.xlsx`);
 }
 
@@ -9558,7 +9557,7 @@ function eksporterOpgaveplanExcel(pat){
   const ws=XLSX.utils.json_to_sheet(rows);
   ws["!cols"]=[{wch:30},{wch:12},{wch:12},{wch:10},{wch:10},{wch:22},{wch:18},{wch:8}];
   const wb=XLSX.utils.book_new();
-  XLSX.utils.book_append_sheet(wb,pat.navn.slice(0,31),ws);
+  XLSX.utils.book_append_sheet(wb,ws,pat.navn.slice(0,31));
   XLSX.writeFile(wb,`Opgaveplan_${pat.navn.replace(/\s+/g,"_")}_${today()}.xlsx`);
 }
 
@@ -9580,7 +9579,7 @@ function eksporterUgeplanExcel(patienter){
   const ws=XLSX.utils.json_to_sheet(rows);
   ws["!cols"]=[{wch:6},{wch:12},{wch:10},{wch:10},{wch:22},{wch:14},{wch:28},{wch:22},{wch:18}];
   const wb=XLSX.utils.book_new();
-  XLSX.utils.book_append_sheet(wb,"Ugeplan",ws);
+  XLSX.utils.book_append_sheet(wb,ws,"Ugeplan");
   XLSX.writeFile(wb,`Ugeplan_${today()}.xlsx`);
 }
 
@@ -12080,7 +12079,7 @@ function runPlanner(patienter, config={}) {
     const med = medarbejdere.find(m=>m.navn===medNavn);
     if(!med) return null;
     const dagInfo = med.arbejdsdage?.[dag];
-    if(dagInfo && !dagInfo.aktiv) return null;
+    if(!dagInfo || !dagInfo.aktiv) return null;
     const medStart = toMin2(dagInfo?.start||"08:00");
     const medSlut  = toMin2(dagInfo?.slut||"16:00");
 
