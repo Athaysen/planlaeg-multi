@@ -12883,7 +12883,6 @@ function runPlanner(patienter, config={}) {
         effKandidater = medarbejdere.filter(m=>muligeMed.some(mm=>m.titel===mm)).map(m=>m.navn);
       }
     }
-    // Kompetence-filter
     const harKompetence = navn=>{
       const m = medarbejdere.find(mm=>mm.navn===navn);
       if(!m) return false;
@@ -12904,8 +12903,9 @@ function runPlanner(patienter, config={}) {
     return effKandidater;
   };
 
-  // ── Hjælper: book en enkelt opgave ──
-  const bookOpgave = (opg, effKandidater, tidligstDato) => {
+  // ── Hjælper: book en enkelt opgave med tidligste start-minut ──
+  // tidligstMin: tidligste start på dagen (0 = fra arbejdsdag-start)
+  const bookOpgave = (opg, effKandidater, tidligstDato, tidligstMin=0) => {
     const varMin = (opg.minutter||60) + pause;
     const muligeLok = opg.muligeLok||[];
     for(let di=0; di<maxDage; di++) {
@@ -12913,7 +12913,8 @@ function runPlanner(patienter, config={}) {
       if(isWeekend2(dato)) continue;
       for(const medNavn of effKandidater) {
         for(const lokNavn of (muligeLok.length>0?muligeLok:[""])) {
-          const slot = findLedigTid(medNavn, lokNavn||null, dato, varMin);
+          // Brug findLedigTid men med tidligstMin-offset på den specificerede dato
+          const slot = findLedigTidEfter(medNavn, lokNavn||null, dato, varMin, dato===tidligstDato?tidligstMin:0);
           if(slot) {
             opg.status="planlagt";
             opg.dato=dato;
@@ -12937,19 +12938,104 @@ function runPlanner(patienter, config={}) {
     return false;
   };
 
+  // ── Hjælper: find ledig tid med tidligstMin-offset ──
+  const findLedigTidEfter = (medNavn, lokNavn, dato, varMin, tidligstMin=0) => {
+    const dag = getDag2(dato);
+    if(isWeekend2(dato)) return null;
+    const med = medarbejdere.find(m=>m.navn===medNavn);
+    if(!med) return null;
+    const dagInfo = med.arbejdsdage?.[dag];
+    if(!dagInfo || !dagInfo.aktiv) return null;
+    const medStart = toMin2(dagInfo?.start||"08:00");
+    const medSlut  = toMin2(dagInfo?.slut||"16:00");
+    let lokStart=medStart, lokSlut=medSlut;
+    if(lokNavn && lokTider[dag]?.[lokNavn]) {
+      const lt = lokTider[dag][lokNavn];
+      const ls=toMin2(lt.å||lt.åben||"08:00"), le=toMin2(lt.l||lt.lukket||"16:00");
+      if(ls===0&&le===0) return null;
+      lokStart=Math.max(medStart,ls);
+      lokSlut=Math.min(medSlut,le);
+    }
+    if(lokSlut-lokStart < varMin) return null;
+    const searchStart = Math.max(lokStart, tidligstMin);
+    if(searchStart+varMin>lokSlut) return null;
+    const medDagBooket = medBooket[medNavn]?.[dato]||[];
+    const lokDagBooket = lokBooket[lokNavn]?.[dato]||[];
+    for(let t=searchStart; t+varMin<=lokSlut; t+=step) {
+      const slutT = t+varMin;
+      if(!harOverlap(medDagBooket,t,slutT) && !harOverlap(lokDagBooket,t,slutT)) {
+        return {start:t, slut:slutT};
+      }
+    }
+    return null;
+  };
+
+  // ── Hjælper: book underopgaver (gruppe) med SAMME medarbejder back-to-back ──
+  const bookGruppe = (opgaver, kandidater, tidligstDato, tidligstMin=0) => {
+    // Prøv hver kombination af medarbejder + startdato
+    // Alle underopgaver skal passe back-to-back med samme medarbejder
+    for(let di=0; di<maxDage; di++) {
+      const dato = addDays2(tidligstDato,di);
+      if(isWeekend2(dato)) continue;
+      const startMin = dato===tidligstDato?tidligstMin:0;
+
+      for(const medNavn of kandidater) {
+        // Prøv at booke alle opgaver i rækkefølge med denne medarbejder på denne dag
+        let curMin = startMin;
+        let slots = []; // {opg, lokNavn, slot}
+        let ok = true;
+
+        for(const opg of opgaver) {
+          const varMin = (opg.minutter||60) + pause;
+          const muligeLok = opg.muligeLok||[];
+          let fundet = false;
+          for(const lokNavn of (muligeLok.length>0?muligeLok:[""])) {
+            const slot = findLedigTidEfter(medNavn, lokNavn||null, dato, varMin, curMin);
+            if(slot) {
+              slots.push({opg, lokNavn:lokNavn||null, slot});
+              curMin = slot.slut; // Næste underopgave starter lige efter
+              fundet = true;
+              break;
+            }
+          }
+          if(!fundet) { ok=false; break; }
+        }
+
+        if(ok && slots.length===opgaver.length) {
+          // Alle underopgaver passer — book dem alle
+          for(const {opg, lokNavn, slot} of slots) {
+            opg.status="planlagt";
+            opg.dato=dato;
+            opg.startKl=fromMin2(slot.start);
+            opg.slutKl=fromMin2(slot.slut-pause);
+            opg.medarbejder=medNavn;
+            opg.lokale=lokNavn;
+            if(!medBooket[medNavn]) medBooket[medNavn]={};
+            if(!medBooket[medNavn][dato]) medBooket[medNavn][dato]=[];
+            medBooket[medNavn][dato].push({start:slot.start,slut:slot.slut});
+            if(lokNavn) {
+              if(!lokBooket[lokNavn]) lokBooket[lokNavn]={};
+              if(!lokBooket[lokNavn][dato]) lokBooket[lokNavn][dato]=[];
+              lokBooket[lokNavn][dato].push({start:slot.start,slut:slot.slut});
+            }
+          }
+          return true;
+        }
+      }
+    }
+    return false;
+  };
+
   sorterede.forEach(pat => {
-    // Dedupliker: track allerede planlagte opgave-id'er
     const planlagteIds = new Set(pat.opgaver.filter(o=>o.status==="planlagt").map(o=>o.id));
 
-    // Sortér efter sekvens
     const ventende = pat.opgaver
       .filter(o=>!o.låst && o.status!=="planlagt" && !planlagteIds.has(o.id))
       .sort((a,b)=>(a.sekvens||0)-(b.sekvens||0));
 
-    // Gruppér opgaver efter indsatsGruppe (Forberedelse→Patient→Efterbehandling)
-    // Opgaver i samme gruppe planlægges med samme medarbejder
-    const grupper = new Map(); // grpId -> [opg, opg, ...]
-    const enkelOpg = [];       // opgaver uden gruppe
+    // Gruppér underopgaver efter indsatsGruppe
+    const grupper = new Map();
+    const enkelOpg = [];
     ventende.forEach(opg => {
       if(opg.indsatsGruppe) {
         if(!grupper.has(opg.indsatsGruppe)) grupper.set(opg.indsatsGruppe,[]);
@@ -12959,7 +13045,7 @@ function runPlanner(patienter, config={}) {
       }
     });
 
-    // Saml i rækkefølge: grupper og enkelt-opgaver, sorteret efter laveste sekvens
+    // Saml jobs i sekvens-rækkefølge
     const alleJobs = [];
     grupper.forEach((opgaver, grpId) => {
       opgaver.sort((a,b)=>(a.sekvens||0)-(b.sekvens||0));
@@ -12970,65 +13056,49 @@ function runPlanner(patienter, config={}) {
     });
     alleJobs.sort((a,b)=>a.minSekvens-b.minSekvens);
 
-    // Track tidligste dato for næste opgave (sekvens-kæde)
-    let tidligstNæste = [startDato, pat.henvDato||startDato].reduce((a,b)=>a>b?a:b);
+    // Track: næste opgave kan tidligst starte efter forrige er afsluttet
+    let tidligstDato = [startDato, pat.henvDato||startDato].reduce((a,b)=>a>b?a:b);
+    let tidligstMin = 0; // minuttal på tidligstDato (0 = fra arbejdsdag-start)
 
     alleJobs.forEach(job => {
       if(job.type==="gruppe") {
-        // Alle opgaver i gruppen: find en fælles medarbejder
-        // Byg kandidater der kan løse ALLE opgaver i gruppen
+        // Underopgaver: find fælles kandidater og book back-to-back med 1 medarbejder
         const perOpgKandidater = job.opgaver.map(o=>bygKandidater(o));
-        // Fælles kandidater = snit af alle
         let fælles = perOpgKandidater[0]||[];
         for(let i=1;i<perOpgKandidater.length;i++){
           const sæt=new Set(perOpgKandidater[i]);
           fælles=fælles.filter(k=>sæt.has(k));
         }
-        // Fallback: hvis ingen fælles, brug kandidater fra første opgave
         if(fælles.length===0 && perOpgKandidater.length>0) fælles=perOpgKandidater[0];
 
-        let gruppeOk=true;
-        let gruppeMed=null; // Lås medarbejder for hele gruppen
-        let gruppeDato=tidligstNæste;
-
-        for(const opg of job.opgaver) {
-          // Brug fælles kandidater; hvis gruppeMed er sat, foretræk den
-          const kandidater = gruppeMed ? [gruppeMed,...fælles.filter(k=>k!==gruppeMed)] : fælles;
-          const ok = bookOpgave(opg, kandidater, gruppeDato);
-          if(ok) {
-            planned++;
-            planlagteIds.add(opg.id);
-            if(!gruppeMed) gruppeMed=opg.medarbejder;
-            // Næste opgave i gruppen: tidligst samme dag (kan ligge efter),
-            // men for sekvens-kæden: tidligst dagen efter
-            gruppeDato=opg.dato;
-          } else {
+        const ok = bookGruppe(job.opgaver, fælles, tidligstDato, tidligstMin);
+        if(ok) {
+          job.opgaver.forEach(o=>{ planned++; planlagteIds.add(o.id); });
+          // Næste opgave starter efter sidste underopgaves sluttid
+          const sidsteOpg = job.opgaver[job.opgaver.length-1];
+          if(sidsteOpg.dato && sidsteOpg.slutKl) {
+            tidligstDato = sidsteOpg.dato;
+            tidligstMin = toMin2(sidsteOpg.slutKl) + pause;
+          }
+        } else {
+          job.opgaver.forEach(o=>{
             failed++;
-            gruppeOk=false;
-            planLog.push({patId:pat.id,patNavn:pat.navn,opgave:opg.opgave,
-              fejl:`Ingen ledig tid fundet (${kandidater.join(",")||"ingen medarbejdere"})`});
-          }
-        }
-        // Opdater tidligstNæste: næste job starter tidligst dagen efter sidste planlagte
-        if(gruppeOk && job.opgaver.length>0) {
-          const sidsteDato=job.opgaver[job.opgaver.length-1].dato;
-          if(sidsteDato) {
-            const næsteDag=addDays2(sidsteDato, minGapDays>0?minGapDays:1);
-            if(næsteDag>tidligstNæste) tidligstNæste=næsteDag;
-          }
+            planLog.push({patId:pat.id,patNavn:pat.navn,opgave:o.opgave,
+              fejl:`Ingen ledig tid for samlet underopgave (${fælles.join(",")||"ingen medarbejdere"})`});
+          });
         }
       } else {
         // Enkelt opgave
         const opg=job.opgaver[0];
         const kandidater=bygKandidater(opg);
-        const ok=bookOpgave(opg, kandidater, tidligstNæste);
+        const ok=bookOpgave(opg, kandidater, tidligstDato, tidligstMin);
         if(ok) {
           planned++;
           planlagteIds.add(opg.id);
-          // Næste opgave starter tidligst dagen efter (eller minGapDays)
-          if(opg.dato) {
-            const næsteDag=addDays2(opg.dato, minGapDays>0?minGapDays:1);
-            if(næsteDag>tidligstNæste) tidligstNæste=næsteDag;
+          // Næste opgave kan starte efter denne er afsluttet
+          if(opg.dato && opg.slutKl) {
+            tidligstDato = opg.dato;
+            tidligstMin = toMin2(opg.slutKl) + pause;
           }
         } else {
           failed++;
