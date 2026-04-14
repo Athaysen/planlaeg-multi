@@ -6165,6 +6165,23 @@ function ExcelImportPanel({setPatienter,setMedarbejdere,setForlob,forlob,setLokT
             return[...opdaterede,...nye];
           });
         }
+        // Tildel importerede opgavenavne som kompetencer til medarbejdere med matchende titel
+        if(setMedarbejdere&&nyeInds.length>0){
+          const TITLER_NORM={"Psykolog":"Psykolog","Læge":"Læge","Pædagog":"Pædagog","Laege":"Læge","Paedagog":"Pædagog"};
+          setMedarbejdere(prev=>prev.map(m=>{
+            // Find alle opgaver denne medarbejders titel kan løse
+            const nyeKomp=nyeInds
+              .filter(ind=>{
+                const titler=(ind.muligeMed||[]).map(t=>TITLER_NORM[t]||t);
+                return titler.length===0||titler.includes(m.titel);
+              })
+              .map(ind=>ind.opgave)
+              .filter(Boolean);
+            if(nyeKomp.length===0) return m;
+            const samlet=[...new Set([...(m.kompetencer||[]),...nyeKomp])];
+            return samlet.length===(m.kompetencer||[]).length?m:{...m,kompetencer:samlet};
+          }));
+        }
         setStatus({ok:true,msg:"OK "+nyeInds.length+" opgaver importeret"});
       } else if(tab==="lokaler"){
         if(!setLokTider){setStatus({ok:false,msg:"Lokaler import fejlede - prøv fra Lokaler-fanen"});return;}
