@@ -9259,8 +9259,9 @@ function AdminBrugereTab({selskab,updS}){
 
 
 // ── Ressource-analyse (separat fra planlægning) ──
-function analyserRessourcer(patienter, config={}) {
-  const {medarbejdere=[],lokTider={},lokaler=[]}=config;
+function analyserRessourcer(patienter=[], config={}) {
+  const {medarbejdere=[],lokTider={},lokaler:lokArr}=config;
+  const lokaler=Array.isArray(lokArr)?lokArr:[];
   const toMin=(hm)=>{if(!hm)return 0;const[h,m]=(hm||"0:0").split(":").map(Number);return h*60+(m||0);};
   const TITLER=["Psykolog","Læge","Pædagog"];
   const normT=t=>t==="Laege"?"Læge":t==="Paedagog"?"Pædagog":t;
@@ -9513,8 +9514,8 @@ function PlanLogView({patienter,planLog=[],medarbejdere=[],setPatienter,onPlan,r
       </>)}
 
       {/* ══════ RESSOURCE-ANALYSE TAB ══════ */}
-      {planTab==="ressourcer"&&(()=>{
-        const ana = analyserRessourcer(patienter, {...config, lokTider, medarbejdere, lokaler});
+      {planTab==="ressourcer"&&(()=>{ try {
+        const ana = analyserRessourcer(patienter, {...config, lokTider, medarbejdere, lokaler:lokaler||[]});
         return(
           <div style={{display:"flex",flexDirection:"column",gap:16}}>
             {/* Medarbejdere */}
@@ -9568,6 +9569,7 @@ function PlanLogView({patienter,planLog=[],medarbejdere=[],setPatienter,onPlan,r
             </div>
           </div>
         );
+      } catch(e) { return <div style={{padding:20,color:C.red}}>Fejl i ressource-analyse: {String(e)}</div>; }
       })()}
 
       {/* ══════ PLANLÆG INDSTILLINGER TAB ══════ */}
