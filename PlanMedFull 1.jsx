@@ -13240,8 +13240,17 @@ function runPlanner(patienter, config={}) {
         failed++;
         const deadlineMsg = deadline ? ` (deadline: ${deadline})` : "";
         planLog.push({type:"error",patId:pat.id,patNavn:pat.navn,opgave:opg.opgave,
-          msg:`[${pat.navn}] #${opg.sekvens} ${opg.opgave} — FEJL: ingen ledig tid${deadlineMsg} [søgte fra: ${tidligstDato} ${fromMin2(tidligstMin)}]`,
+          msg:`[${pat.navn}] #${opg.sekvens} ${opg.opgave} — FEJL: ingen ledig tid${deadlineMsg} [søgte fra: ${effTidligstDato} ${fromMin2(effTidligstMin)}]`,
           fejl:`Sekvens #${opg.sekvens}: Ingen ledig tid fundet${deadlineMsg} (${kandidater.length} kandidater)`});
+        // Stop kæden: efterfølgende opgaver afhænger af denne
+        const rest = ventende.slice(ventende.indexOf(opg)+1);
+        rest.forEach(r=>{
+          failed++;
+          planLog.push({type:"error",patId:pat.id,patNavn:pat.navn,opgave:r.opgave,
+            msg:`[${pat.navn}] #${r.sekvens} ${r.opgave} — SPRUNGET OVER (afventer #${opg.sekvens})`,
+            fejl:`Afventer forrige opgave`});
+        });
+        break;
       }
     }
   });
