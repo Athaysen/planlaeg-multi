@@ -13212,9 +13212,18 @@ function runPlanner(patienter, config={}) {
         if(opg.indsatsGruppe && !gruppeMed[opg.indsatsGruppe]) {
           gruppeMed[opg.indsatsGruppe] = opg.medarbejder;
         }
-        // KRITISK: næste opgave starter tidligst efter denne er afsluttet
-        tidligstDato = opg.dato;
-        tidligstMin = toMin2(opg.slutKl) + pause;
+        // Næste opgave: anvend minGapDays for patientopgaver, ellers lige efter
+        // minGapDays gælder mellem opgaver der involverer patient (besøg)
+        // Underopgaver i samme gruppe (indsatsGruppe) ligger tæt — gap gælder mellem grupper
+        const næsteErSammeGruppe = opg.indsatsGruppe && ventende[ventende.indexOf(opg)+1]?.indsatsGruppe === opg.indsatsGruppe;
+        if(opg.patInv && minGapDays>0 && !næsteErSammeGruppe) {
+          // Spring minGapDays frem efter et patientbesøg
+          tidligstDato = addDays2(opg.dato, minGapDays);
+          tidligstMin = 0;
+        } else {
+          tidligstDato = opg.dato;
+          tidligstMin = toMin2(opg.slutKl) + pause;
+        }
         planLog.push({type:"info",msg:`[${pat.navn}] #${opg.sekvens} ${opg.opgave} → ${opg.dato} ${opg.startKl}-${opg.slutKl} (${opg.medarbejder}) [næste fra: ${tidligstDato} ${fromMin2(tidligstMin)}]`});
       } else {
         failed++;
