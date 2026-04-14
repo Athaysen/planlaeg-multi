@@ -13176,12 +13176,16 @@ function runPlanner(patienter, config={}) {
           tidligstDato = opg.dato;
           tidligstMin = toMin2(opg.slutKl) + pause;
         }
+        planLog.push({type:"info",msg:`[${pat.navn}] #${opg.sekvens} ${opg.opgave} → ${opg.dato} ${opg.startKl}-${opg.slutKl} (${opg.medarbejder})`});
       } else {
         failed++;
         const deadlineMsg = deadline ? ` (deadline: ${deadline})` : "";
-        planLog.push({patId:pat.id,patNavn:pat.navn,opgave:opg.opgave,
-          fejl:`Ingen ledig tid fundet${deadlineMsg} (${kandidater.join(",")||"ingen medarbejdere"})`});
-        // Fortsæt til næste opgave — spring ikke resten over
+        planLog.push({type:"error",patId:pat.id,patNavn:pat.navn,opgave:opg.opgave,
+          msg:`[${pat.navn}] #${opg.sekvens} ${opg.opgave} — FEJL: ingen ledig tid${deadlineMsg}`,
+          fejl:`Sekvens #${opg.sekvens}: Ingen ledig tid fundet${deadlineMsg} (${kandidater.length} kandidater)`});
+        // Fejlet opgave: avancér tidligstDato så efterfølgende opgaver
+        // ikke planlægges INDEN denne uplanlagte opgave
+        // (de vil ligge efter i tid, selvom denne ikke kunne planlagges)
       }
     }
   });
