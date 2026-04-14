@@ -13046,11 +13046,20 @@ function runPlanner(patienter, config={}) {
         const status=kanBookes(navn,dato,patId,opg.patInv);
         const kendte=kendteSæt.has(navn)?0:1;
         const prio=status==="blokeret"?2:status==="bloed"?1:0;
-        return{navn,status,score:prio*10+kendte};
+        // Load-balancing: foretræk mindst-belastede medarbejder denne uge
+        const uk=getUgeKey(dato);
+        const ugeBelastning=(medVisitsPerUge[navn]||{})[uk]||0;
+        // Dagbelastning: antal bookinger denne dag
+        const dagBelastning=(medBooket[navn]?.[dato]||[]).length;
+        // Score: status > kendte > ugeBelastning > dagBelastning
+        return{navn,status,score:prio*1000+kendte*100+ugeBelastning*10+dagBelastning};
       }).filter(s=>s.status!=="blokeret").sort((a,b)=>a.score-b.score);
 
       for(const {navn:medNavn} of scored) {
-        for(const lokNavn of (muligeLok.length>0?muligeLok:[""])) {
+        // Sortér lokaler efter mindst-belastede denne dag
+        const sortLok = (muligeLok.length>0?[...muligeLok]:[""])
+          .sort((a,b)=>((lokBooket[a]?.[dato]||[]).length)-((lokBooket[b]?.[dato]||[]).length));
+        for(const lokNavn of sortLok) {
           const slot = findLedigTidEfter(medNavn, lokNavn||null, dato, varMin, dagMin, opgSenest);
           if(slot) {
             opg.status="planlagt";
