@@ -10133,7 +10133,7 @@ return [];}},[scopedPatienter,lokTider]);
     await new Promise(r=>setTimeout(r,80));
     const planConfig={
       ...config,lokTider,planFraDato:planFraDato||null,
-      medarbejdere,transportKmHt:config.transportKmHt||40,
+      medarbejdere,lokaler,transportKmHt:config.transportKmHt||40,
       afdPostnr:config.afdPostnr||"",
       googleMapsKey:config.googleMapsKey||"",transportCache:config.transportCache||{},
     };
@@ -13053,6 +13053,7 @@ function runPlanner(patienter, config={}) {
   const dagNavne2=["Mandag","Tirsdag","Onsdag","Torsdag","Fredag"];
   const alleLokNavneAnalyse = new Set();
   Object.values(lokTider).forEach(dagLok=>Object.keys(dagLok).forEach(l=>alleLokNavneAnalyse.add(l)));
+  if(config.lokaler) config.lokaler.forEach(l=>alleLokNavneAnalyse.add(l));
   // Gruppér lokaler efter basisnavn
   const lokGrupper = {}; // {basisnavn: [lokale1, lokale2, ...]}
   alleLokNavneAnalyse.forEach(lok=>{
@@ -13176,13 +13177,29 @@ function runPlanner(patienter, config={}) {
 
   // ── Hjælper: ekspandér lokalenavn til alle varianter ──
   // "Kontor" → ["Kontor", "Kontor (2)", "Kontor (3)", ...] osv.
+  // Bygger fra BÅDE lokTider OG config.lokaler (saveLokaler-listen)
   const alleLokNavne = new Set();
   Object.values(lokTider).forEach(dagLok=>Object.keys(dagLok).forEach(l=>alleLokNavne.add(l)));
+  // Tilføj lokaler fra lokaler-listen (som måske ikke har tider endnu)
+  if(config.lokaler) config.lokaler.forEach(l=>alleLokNavne.add(l));
+
+  // Sikr at varianter arver åbningstider fra basisnavnet
+  alleLokNavne.forEach(lok=>{
+    const basis = lok.replace(/\s*\(\d+\)$/,"");
+    if(basis!==lok) {
+      // Kopiér tider fra basis hvis varianten ikke har egne
+      Object.keys(lokTider).forEach(dag=>{
+        if(lokTider[dag][basis] && !lokTider[dag][lok]) {
+          lokTider[dag][lok] = {...lokTider[dag][basis]};
+        }
+      });
+    }
+  });
+
   const ekspanderLokaler = (lokListe) => {
     const resultat = [];
     (lokListe||[]).forEach(lok=>{
       resultat.push(lok);
-      // Find alle varianter: "Lokale 1 (2)", "Lokale 1 (3)" osv.
       alleLokNavne.forEach(l=>{
         if(l!==lok && l.startsWith(lok+" (")) resultat.push(l);
       });
