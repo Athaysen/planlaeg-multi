@@ -12994,14 +12994,16 @@ function runPlanner(patienter, config={}) {
   const bookOpgave = (opg, effKandidater, tidligstDato, tidligstMin=0, patId=null, deadline=null) => {
     const varMin = (opg.minutter||60) + pause;
     const muligeLok = opg.muligeLok||[];
-    // Sortér kandidater: kendte medarbejdere først, derefter "ok" før "bloed"
+    const opgSenest = opg.senest ? toMin2(opg.senest) : 0;
     const kendteSæt = patId && patMedSet[patId] ? patMedSet[patId] : new Set();
     for(let di=0; di<maxDage; di++) {
       const dato = addDays2(tidligstDato,di);
       if(isWeekend2(dato)) continue;
       if(deadline && dato>deadline) return false;
 
-      // Sortér kandidater for denne dag: ok > blød > blokeret
+      // tidligstMin gælder kun for tidligstDato; andre dage starter fra opgavens tidligst
+      const dagMin = dato===tidligstDato ? tidligstMin : (opg.tidligst ? toMin2(opg.tidligst) : 0);
+
       const scored = effKandidater.map(navn=>{
         const status=kanBookes(navn,dato,patId,opg.patInv);
         const kendte=kendteSæt.has(navn)?0:1;
@@ -13011,7 +13013,7 @@ function runPlanner(patienter, config={}) {
 
       for(const {navn:medNavn} of scored) {
         for(const lokNavn of (muligeLok.length>0?muligeLok:[""])) {
-          const slot = findLedigTidEfter(medNavn, lokNavn||null, dato, varMin, dato===tidligstDato?tidligstMin:0);
+          const slot = findLedigTidEfter(medNavn, lokNavn||null, dato, varMin, dagMin, opgSenest);
           if(slot) {
             opg.status="planlagt";
             opg.dato=dato;
@@ -13036,8 +13038,8 @@ function runPlanner(patienter, config={}) {
     return false;
   };
 
-  // ── Hjælper: find ledig tid med tidligstMin-offset ──
-  const findLedigTidEfter = (medNavn, lokNavn, dato, varMin, tidligstMin=0) => {
+  // ── Hjælper: find ledig tid med tidligstMin-offset og senest-grænse ──
+  const findLedigTidEfter = (medNavn, lokNavn, dato, varMin, tidligstMin=0, senestMin=0) => {
     const dag = getDag2(dato);
     if(isWeekend2(dato)) return null;
     const med = medarbejdere.find(m=>m.navn===medNavn);
@@ -13054,6 +13056,8 @@ function runPlanner(patienter, config={}) {
       lokStart=Math.max(medStart,ls);
       lokSlut=Math.min(medSlut,le);
     }
+    // Respektér opgavens senest-grænse
+    if(senestMin>0) lokSlut=Math.min(lokSlut,senestMin);
     if(lokSlut-lokStart < varMin) return null;
     const searchStart = Math.max(lokStart, tidligstMin);
     if(searchStart+varMin>lokSlut) return null;
@@ -13164,28 +13168,27 @@ function runPlanner(patienter, config={}) {
         kandidater = [låstMed, ...kandidater.filter(k=>k!==låstMed)];
       }
 
-      const ok = bookOpgave(opg, kandidater, tidligstDato, tidligstMin, pat.id, deadline);
+      // Respektér opgavens eget tidsvindue (tidligst/senest)
+      const opgTidligst = opg.tidligst ? toMin2(opg.tidligst) : 0;
+      const effTidligstMin = Math.max(tidligstMin, opgTidligst);
+
+      const ok = bookOpgave(opg, kandidater, tidligstDato, effTidligstMin, pat.id, deadline);
       if(ok) {
         planned++;
         planlagteIds.add(opg.id);
         if(opg.indsatsGruppe && !gruppeMed[opg.indsatsGruppe]) {
           gruppeMed[opg.indsatsGruppe] = opg.medarbejder;
         }
-        // Næste opgave starter tidligst efter denne er afsluttet
-        if(opg.dato && opg.slutKl) {
-          tidligstDato = opg.dato;
-          tidligstMin = toMin2(opg.slutKl) + pause;
-        }
-        planLog.push({type:"info",msg:`[${pat.navn}] #${opg.sekvens} ${opg.opgave} → ${opg.dato} ${opg.startKl}-${opg.slutKl} (${opg.medarbejder})`});
+        // KRITISK: næste opgave starter tidligst efter denne er afsluttet
+        tidligstDato = opg.dato;
+        tidligstMin = toMin2(opg.slutKl) + pause;
+        planLog.push({type:"info",msg:`[${pat.navn}] #${opg.sekvens} ${opg.opgave} → ${opg.dato} ${opg.startKl}-${opg.slutKl} (${opg.medarbejder}) [næste fra: ${tidligstDato} ${fromMin2(tidligstMin)}]`});
       } else {
         failed++;
         const deadlineMsg = deadline ? ` (deadline: ${deadline})` : "";
         planLog.push({type:"error",patId:pat.id,patNavn:pat.navn,opgave:opg.opgave,
-          msg:`[${pat.navn}] #${opg.sekvens} ${opg.opgave} — FEJL: ingen ledig tid${deadlineMsg}`,
+          msg:`[${pat.navn}] #${opg.sekvens} ${opg.opgave} — FEJL: ingen ledig tid${deadlineMsg} [søgte fra: ${tidligstDato} ${fromMin2(tidligstMin)}]`,
           fejl:`Sekvens #${opg.sekvens}: Ingen ledig tid fundet${deadlineMsg} (${kandidater.length} kandidater)`});
-        // Fejlet opgave: avancér tidligstDato så efterfølgende opgaver
-        // ikke planlægges INDEN denne uplanlagte opgave
-        // (de vil ligge efter i tid, selvom denne ikke kunne planlagges)
       }
     }
   });
