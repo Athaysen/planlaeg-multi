@@ -9330,8 +9330,7 @@ function analyserRessourcer(patienter, config={}) {
 // PLANLOG VIEW
 // ===============================================
 function PlanLogView({patienter,planLog=[],medarbejdere=[],setPatienter,onPlan,running,progress,planFraDato,setPlanFraDato,afdScope,alleAfdelinger=[],toggleAktiv,toggleRes,lokaler=[],certifikater=[],planDebug,config={},setConfig=()=>{},setMedarbejdere=()=>{},setForlob=()=>{},forlob={},setLokTider=()=>{},lokMeta={},setLokMeta=()=>{},saveLokaler=()=>{},setIndsatser=()=>{},indsatser=[]}){
-  const [planTab,setPlanTab]=useState("planlaegning"); // "planlaegning" | "indstillinger"
-  const [resAnalyse,setResAnalyse]=useState(null);
+  const [planTab,setPlanTab]=useState("planlaegning");
   const [filter,setFilter]=useState("alle");
   const [sortCol,setSortCol]=useState("dato");
   const [sortDir,setSortDir]=useState("asc");
@@ -9379,7 +9378,7 @@ function PlanLogView({patienter,planLog=[],medarbejdere=[],setPatienter,onPlan,r
     <div style={{padding:"0 0 40px"}}>
       {/* Top tabs */}
       <div style={{display:"flex",gap:0,borderBottom:`1px solid ${C.brd}`,marginBottom:16}}>
-        {[{id:"planlaegning",label:"Planlægning"},{id:"indstillinger",label:"Planlæg indstillinger"}].map(t=>(
+        {[{id:"planlaegning",label:"Planlægning"},{id:"ressourcer",label:"Ressource-analyse"},{id:"indstillinger",label:"Planlæg indstillinger"}].map(t=>(
           <button key={t.id} onClick={()=>setPlanTab(t.id)}
             style={{padding:"10px 24px",border:"none",fontFamily:"inherit",cursor:"pointer",
               background:"none",fontWeight:planTab===t.id?700:400,fontSize:14,
@@ -9408,18 +9407,6 @@ function PlanLogView({patienter,planLog=[],medarbejdere=[],setPatienter,onPlan,r
               style={{border:`1px solid ${C.brd}`,borderRadius:8,padding:"6px 10px",fontSize:13,
                 fontFamily:"inherit",color:C.txt,background:C.s1,outline:"none"}}/>
           </div>
-          <button onClick={()=>{
-            // Kør kun ressource-analyse uden planlægning
-            const ana = analyserRessourcer(patienter, {
-              ...config, lokTider, medarbejdere, lokaler,
-            });
-            setResAnalyse(ana);
-          }}
-            style={{background:C.s2,color:C.blue,border:`1px solid ${C.blue}`,
-              borderRadius:10,padding:"10px 18px",fontSize:13,fontWeight:600,cursor:"pointer",
-              fontFamily:"inherit"}}>
-            Ressource-analyse
-          </button>
           <button onClick={onPlan} disabled={running}
             style={{background:running?C.s3:C.acc,color:running?C.txtM:"#fff",border:"none",
               borderRadius:10,padding:"10px 24px",fontSize:14,fontWeight:700,cursor:running?"default":"pointer",
@@ -9429,54 +9416,6 @@ function PlanLogView({patienter,planLog=[],medarbejdere=[],setPatienter,onPlan,r
         </div>
       </div>
 
-      {/* Ressource-analyse panel */}
-      {resAnalyse&&(
-        <div style={{marginBottom:20,background:C.s2,borderRadius:10,padding:"14px 18px",border:`1px solid ${C.blue}`}}>
-          <div style={{display:"flex",justifyContent:"space-between",alignItems:"center",marginBottom:10}}>
-            <div style={{fontSize:14,fontWeight:700,color:C.txt}}>Ressource-analyse</div>
-            <button onClick={()=>setResAnalyse(null)} style={{background:"none",border:"none",color:C.txtM,cursor:"pointer",fontSize:16}}>x</button>
-          </div>
-          <div style={{fontSize:13,fontWeight:700,color:C.txt,marginBottom:6}}>Medarbejdere</div>
-          {resAnalyse.medarbejdere.map(r=>(
-            <div key={r.titel} style={{display:"flex",alignItems:"center",gap:8,marginBottom:4}}>
-              <span style={{fontSize:12,color:C.txt,width:80}}>{r.titel}</span>
-              <span style={{fontSize:11,color:C.txtM,width:60}}>{r.antal} pers.</span>
-              <div style={{flex:1,background:C.s3,borderRadius:3,height:8,overflow:"hidden"}}>
-                <div style={{background:r.ratio>1.5?C.red:r.ratio>1?C.amb:C.grn,height:"100%",borderRadius:3,
-                  width:`${Math.min(r.ratio*50,100)}%`}}/>
-              </div>
-              <span style={{fontSize:11,color:r.ratio>1.5?C.red:r.ratio>1?C.amb:C.grn,fontWeight:700,width:80,textAlign:"right"}}>
-                {Math.round(r.kapacitet/60)}t kap. / {Math.round(r.efterspørgsel/60)}t behov
-              </span>
-              <span style={{fontSize:11,color:r.ratio>1.5?C.red:r.ratio>1?C.amb:C.grn,fontWeight:700,width:40}}>
-                {r.ratio}x
-              </span>
-              {r.flaskehals&&<span style={{fontSize:10,background:C.redM,color:C.red,padding:"1px 6px",borderRadius:4,fontWeight:700}}>FLASKEHALS</span>}
-            </div>
-          ))}
-          <div style={{fontSize:13,fontWeight:700,color:C.txt,marginTop:10,marginBottom:6}}>Lokaler</div>
-          {resAnalyse.lokaler.filter(r=>r.efterspørgsel>0).map(r=>(
-            <div key={r.navn} style={{display:"flex",alignItems:"center",gap:8,marginBottom:4}}>
-              <span style={{fontSize:12,color:C.txt,width:100}}>{r.navn} ({r.antal})</span>
-              <div style={{flex:1,background:C.s3,borderRadius:3,height:8,overflow:"hidden"}}>
-                <div style={{background:r.ratio>1.5?C.red:r.ratio>1?C.amb:C.grn,height:"100%",borderRadius:3,
-                  width:`${Math.min(r.ratio*50,100)}%`}}/>
-              </div>
-              <span style={{fontSize:11,color:r.ratio>1.5?C.red:r.ratio>1?C.amb:C.grn,fontWeight:700,width:80,textAlign:"right"}}>
-                {Math.round(r.kapacitet/60)}t / {Math.round(r.efterspørgsel/60)}t
-              </span>
-              <span style={{fontSize:11,color:r.ratio>1.5?C.red:r.ratio>1?C.amb:C.grn,fontWeight:700,width:40}}>
-                {r.ratio}x
-              </span>
-              {r.flaskehals&&<span style={{fontSize:10,background:C.redM,color:C.red,padding:"1px 6px",borderRadius:4,fontWeight:700}}>FLASKEHALS</span>}
-            </div>
-          ))}
-          <div style={{marginTop:10,padding:"8px 12px",background:C.s3,borderRadius:8,fontSize:12,color:C.txtD}}>
-            <strong style={{color:C.txt}}>Primær flaskehals:</strong> {resAnalyse.primærFlaskehals}
-            {resAnalyse.anbefaling&&<div style={{marginTop:4,color:C.amb}}>{resAnalyse.anbefaling}</div>}
-          </div>
-        </div>
-      )}
 
       {/* Progress */}
       {running&&progress&&(
@@ -9572,6 +9511,64 @@ function PlanLogView({patienter,planLog=[],medarbejdere=[],setPatienter,onPlan,r
         </div>
       )}
       </>)}
+
+      {/* ══════ RESSOURCE-ANALYSE TAB ══════ */}
+      {planTab==="ressourcer"&&(()=>{
+        const ana = analyserRessourcer(patienter, {...config, lokTider, medarbejdere, lokaler});
+        return(
+          <div style={{display:"flex",flexDirection:"column",gap:16}}>
+            {/* Medarbejdere */}
+            <div style={{background:C.s2,border:`1px solid ${C.brd}`,borderRadius:12,padding:"18px 20px"}}>
+              <div style={{fontSize:15,fontWeight:700,color:C.txt,marginBottom:14}}>Medarbejder-kapacitet</div>
+              {ana.medarbejdere.map(r=>(
+                <div key={r.titel} style={{display:"flex",alignItems:"center",gap:10,marginBottom:10,padding:"8px 12px",background:C.s3,borderRadius:8}}>
+                  <span style={{fontSize:13,fontWeight:600,color:C.txt,width:90}}>{r.titel}</span>
+                  <span style={{fontSize:12,color:C.txtM,width:55}}>{r.antal} pers.</span>
+                  <div style={{flex:1,background:C.brd,borderRadius:4,height:10,overflow:"hidden"}}>
+                    <div style={{background:r.ratio>1.5?C.red:r.ratio>1?C.amb:C.grn,height:"100%",borderRadius:4,
+                      width:`${Math.min(r.ratio*50,100)}%`,transition:"width .3s"}}/>
+                  </div>
+                  <span style={{fontSize:12,color:C.txtD,width:100,textAlign:"right"}}>{Math.round(r.kapacitet/60)}t kap.</span>
+                  <span style={{fontSize:12,color:C.txtD,width:100,textAlign:"right"}}>{Math.round(r.efterspørgsel/60)}t behov</span>
+                  <span style={{fontSize:13,fontWeight:700,width:50,textAlign:"right",
+                    color:r.ratio>1.5?C.red:r.ratio>1?C.amb:C.grn}}>{r.ratio}x</span>
+                  {r.flaskehals&&<span style={{fontSize:10,background:C.redM,color:C.red,padding:"2px 8px",borderRadius:6,fontWeight:700}}>FLASKEHALS</span>}
+                </div>
+              ))}
+            </div>
+
+            {/* Lokaler */}
+            <div style={{background:C.s2,border:`1px solid ${C.brd}`,borderRadius:12,padding:"18px 20px"}}>
+              <div style={{fontSize:15,fontWeight:700,color:C.txt,marginBottom:14}}>Lokale-kapacitet</div>
+              {ana.lokaler.map(r=>(
+                <div key={r.navn} style={{display:"flex",alignItems:"center",gap:10,marginBottom:8,padding:"8px 12px",background:C.s3,borderRadius:8}}>
+                  <span style={{fontSize:13,fontWeight:600,color:C.txt,width:120}}>{r.navn}</span>
+                  <span style={{fontSize:12,color:C.txtM,width:50}}>{r.antal} stk.</span>
+                  <div style={{flex:1,background:C.brd,borderRadius:4,height:10,overflow:"hidden"}}>
+                    <div style={{background:r.ratio>1.5?C.red:r.ratio>1?C.amb:C.grn,height:"100%",borderRadius:4,
+                      width:`${Math.min(r.ratio*50,100)}%`,transition:"width .3s"}}/>
+                  </div>
+                  <span style={{fontSize:12,color:C.txtD,width:100,textAlign:"right"}}>{Math.round(r.kapacitet/60)}t kap.</span>
+                  <span style={{fontSize:12,color:C.txtD,width:100,textAlign:"right"}}>{Math.round(r.efterspørgsel/60)}t behov</span>
+                  <span style={{fontSize:13,fontWeight:700,width:50,textAlign:"right",
+                    color:r.ratio>1.5?C.red:r.ratio>1?C.amb:C.grn}}>{r.ratio}x</span>
+                  {r.flaskehals&&<span style={{fontSize:10,background:C.redM,color:C.red,padding:"2px 8px",borderRadius:6,fontWeight:700}}>FLASKEHALS</span>}
+                </div>
+              ))}
+            </div>
+
+            {/* Opsummering */}
+            <div style={{background:C.s2,border:`1px solid ${C.brd}`,borderRadius:12,padding:"18px 20px"}}>
+              <div style={{fontSize:15,fontWeight:700,color:C.txt,marginBottom:10}}>Opsummering</div>
+              <div style={{fontSize:13,color:C.txt,marginBottom:6}}><strong>Primær flaskehals:</strong> {ana.primærFlaskehals}</div>
+              {ana.anbefaling&&<div style={{fontSize:13,color:C.amb,background:C.ambM,padding:"10px 14px",borderRadius:8,border:`1px solid ${C.amb}44`}}>{ana.anbefaling}</div>}
+              <div style={{marginTop:12,fontSize:12,color:C.txtM}}>
+                Ratio over 1.0 = efterspørgslen overstiger kapaciteten. Over 1.5 = kritisk.
+              </div>
+            </div>
+          </div>
+        );
+      })()}
 
       {/* ══════ PLANLÆG INDSTILLINGER TAB ══════ */}
       {planTab==="indstillinger"&&(
@@ -13337,6 +13334,11 @@ function runPlanner(patienter, config={}) {
     });
     return resultat.length>0 ? resultat : lokListe;
   };
+
+  // Log antal tilgængelige lokaler per basisnavn
+  const _lokGrpLog = {};
+  alleLokNavne.forEach(l=>{const b=l.replace(/\s*\(\d+\)$/,"");_lokGrpLog[b]=(_lokGrpLog[b]||0)+1;});
+  planLog.push({type:"info",msg:`── LOKALER TILGÆNGELIGE: ${alleLokNavne.size} total (${Object.entries(_lokGrpLog).map(([k,v])=>`${k}:${v}`).join(", ")}) ──`});
 
   // ── Hjælper: book en enkelt opgave med tidligste start-minut ──
   const bookOpgave = (opg, effKandidater, tidligstDato, tidligstMin=0, patId=null, deadline=null) => {
