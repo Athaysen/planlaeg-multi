@@ -12980,14 +12980,79 @@ function runPlanner(patienter, config={}) {
     return null;
   };
 
-  // Sorter patienter baseret på prioritering-indstilling
+  // ══════════════════════════════════════════════════════════════
+  // FLASKEHALSANALYSE — find den knappe ressource
+  // ══════════════════════════════════════════════════════════════
+  const TITLER_ANALYSE = ["Psykolog","Læge","Pædagog"];
+  const normTitel = t=>t==="Laege"?"Læge":t==="Paedagog"?"Pædagog":t;
+
+  // 1. Beregn kapacitet per titel: antal medarbejdere × timer/uge × søgehorisont
+  const kapPerTitel = {};
+  const medPerTitel = {};
+  TITLER_ANALYSE.forEach(t=>{
+    const meds = medarbejdere.filter(m=>m.titel===t);
+    medPerTitel[t] = meds.length;
+    // Gennemsnitlig tilgængelig tid per uge per medarbejder
+    const timerPerUge = meds.reduce((a,m)=>{
+      const dage = Object.values(m.arbejdsdage||{}).filter(d=>d.aktiv);
+      const minPerUge = dage.reduce((s,d)=>s+toMin2(d.slut||"16:00")-toMin2(d.start||"08:30"),0);
+      return a + minPerUge;
+    },0);
+    kapPerTitel[t] = timerPerUge; // min/uge samlet for alle med denne titel
+  });
+
+  // 2. Beregn efterspørgsel per titel: sum af minutter for alle ventende opgaver
+  const efterspørgselPerTitel = {};
+  TITLER_ANALYSE.forEach(t=>{ efterspørgselPerTitel[t]=0; });
+  klonPat.forEach(p=>p.opgaver.forEach(o=>{
+    if(o.status==="planlagt"||o.låst) return;
+    // Bestem hvilken titel opgaven kræver
+    const mm = o.muligeMed||[];
+    const titelMatch = mm.find(m=>TITLER_ANALYSE.includes(normTitel(m)));
+    if(titelMatch) {
+      const t = normTitel(titelMatch);
+      efterspørgselPerTitel[t] = (efterspørgselPerTitel[t]||0) + (o.minutter||60);
+    } else {
+      // Prøv at udlede fra opgavenavn
+      const found = TITLER_ANALYSE.find(t=>o.opgave?.includes(t));
+      if(found) efterspørgselPerTitel[found] = (efterspørgselPerTitel[found]||0) + (o.minutter||60);
+    }
+  }));
+
+  // 3. Beregn belastningsratio per titel (højere = mere presset)
+  const belastning = {};
+  let flaskehals = null;
+  let maxRatio = 0;
+  TITLER_ANALYSE.forEach(t=>{
+    const kap = kapPerTitel[t]||1;
+    const eft = efterspørgselPerTitel[t]||0;
+    const ratio = eft/kap;
+    belastning[t] = {kapacitet:kap, efterspørgsel:eft, ratio:Math.round(ratio*100)/100, medarbejdere:medPerTitel[t]};
+    if(ratio>maxRatio) { maxRatio=ratio; flaskehals=t; }
+  });
+
+  // 4. Log flaskehalsanalyse
+  planLog.push({type:"info",msg:`── RESSOURCE-ANALYSE ──`});
+  TITLER_ANALYSE.forEach(t=>{
+    const b=belastning[t];
+    const bar = t===flaskehals?" *** FLASKEHALS ***":"";
+    planLog.push({type:t===flaskehals?"warn":"info",
+      msg:`${t}: ${b.medarbejdere} medarbejdere, ${Math.round(b.kapacitet/60)}t/uge kapacitet, ${Math.round(b.efterspørgsel/60)}t efterspørgsel (ratio: ${b.ratio})${bar}`});
+  });
+  planLog.push({type:"info",msg:`── Planlægger med fokus på ${flaskehals||"alle"}-ressourcen ──`});
+
+  // Sorter patienter: prioritér dem der bruger flaskehalsen mest (de er sværest at planlægge)
   const sorterede = [...klonPat].sort((a,b)=>{
     if(prioritering==="haste") {
-      // Hastemarkerede først, derefter tidligst henvist
       if(a.haste&&!b.haste) return -1;
       if(!a.haste&&b.haste) return 1;
     }
-    // Altid sorter efter henvisningsdato (ældste først)
+    // Patienter med flaskehals-opgaver planlægges først
+    if(flaskehals) {
+      const aFlask = a.opgaver.filter(o=>o.status!=="planlagt"&&!o.låst&&o.opgave?.includes(flaskehals)).length;
+      const bFlask = b.opgaver.filter(o=>o.status!=="planlagt"&&!o.låst&&o.opgave?.includes(flaskehals)).length;
+      if(aFlask!==bFlask) return bFlask-aFlask; // Flest flaskehals-opgaver først
+    }
     return (a.henvDato||"").localeCompare(b.henvDato||"");
   });
 
@@ -13263,6 +13328,48 @@ function runPlanner(patienter, config={}) {
       }
     }
   });
+
+  // ══════════════════════════════════════════════════════════════
+  // OPSUMMERING — udnyttelsesstatistik efter planlægning
+  // ══════════════════════════════════════════════════════════════
+  planLog.push({type:"info",msg:`── RESULTAT ──`});
+  planLog.push({type:failed>0?"warn":"info",msg:`Planlagt: ${planned} | Fejlet: ${failed} | Total: ${planned+failed}`});
+
+  // Medarbejder-udnyttelse
+  const medStats = {};
+  medarbejdere.forEach(m=>{ medStats[m.navn]={titel:m.titel,minBooket:0,dage:new Set()}; });
+  klonPat.forEach(p=>p.opgaver.forEach(o=>{
+    if(o.status==="planlagt"&&o.medarbejder&&medStats[o.medarbejder]){
+      medStats[o.medarbejder].minBooket+=(o.minutter||0);
+      medStats[o.medarbejder].dage.add(o.dato);
+    }
+  }));
+  planLog.push({type:"info",msg:`── MEDARBEJDER-UDNYTTELSE ──`});
+  Object.entries(medStats).sort((a,b)=>b[1].minBooket-a[1].minBooket).forEach(([navn,s])=>{
+    const timer=Math.round(s.minBooket/60*10)/10;
+    const pct=s.minBooket>0?Math.round(s.minBooket/((medarbejdere.find(m=>m.navn===navn)?.timer||23)*60*Math.ceil(maxDage/7))*100):0;
+    planLog.push({type:"info",msg:`  ${navn} (${s.titel}): ${timer}t booket over ${s.dage.size} dage`});
+  });
+
+  // Lokale-udnyttelse
+  const lokStats = {};
+  klonPat.forEach(p=>p.opgaver.forEach(o=>{
+    if(o.status==="planlagt"&&o.lokale){
+      if(!lokStats[o.lokale]) lokStats[o.lokale]={minBooket:0,dage:new Set()};
+      lokStats[o.lokale].minBooket+=(o.minutter||0);
+      lokStats[o.lokale].dage.add(o.dato);
+    }
+  }));
+  planLog.push({type:"info",msg:`── LOKALE-UDNYTTELSE ──`});
+  Object.entries(lokStats).sort((a,b)=>b[1].minBooket-a[1].minBooket).forEach(([lok,s])=>{
+    planLog.push({type:"info",msg:`  ${lok}: ${Math.round(s.minBooket/60*10)/10}t booket over ${s.dage.size} dage`});
+  });
+
+  // Patienter der ikke er fuldt planlagt
+  const ikkeFuldt = klonPat.filter(p=>p.opgaver.some(o=>o.status!=="planlagt"&&!o.låst));
+  if(ikkeFuldt.length>0){
+    planLog.push({type:"warn",msg:`── ${ikkeFuldt.length} PATIENTER IKKE FULDT PLANLAGT ──`});
+  }
 
   // Synkroniser klonede patienter tilbage til original ordre
   const result = klonPat.map(kp => {
