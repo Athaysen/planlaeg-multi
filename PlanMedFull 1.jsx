@@ -4776,29 +4776,56 @@ function ForlobView({forlob,setForlob,medarbejdere,setMedarbejdere,indsatser,set
   // Filtrer forløb der har mindst ét element ud
 const ids=Object.keys(forlob).filter(k=>(forlob[k]||[]).length>0).sort((a,b)=>Number(a)-Number(b));
 
+  // ── Synkroniser forløbsændringer til patienter ──
+  // Når et forløb ændres, opdaterer vi sekvens og opgavenavne
+  // for alle patienter der har det forløb tildelt
+  const syncForlobTilPatienter = (forlobNr, nyeOpgaver) => {
+    setPatienter(ps=>ps.map(p=>{
+      if(String(p.forlobNr)!==String(forlobNr)) return p;
+      // Matcher patientens opgaver til forløbets opgaver via index/sekvens
+      const opdateret = p.opgaver.map(opg=>{
+        // Find matchende forløbs-opgave baseret på opgavenavn
+        const matchIdx = nyeOpgaver.findIndex(fo=>fo.o===opg.opgave);
+        if(matchIdx>=0) {
+          return {...opg, sekvens: nyeOpgaver[matchIdx].s};
+        }
+        return opg;
+      });
+      return {...p, opgaver:opdateret};
+    }));
+  };
+
   const saveOpg=(idx,data)=>{
+    let nyeOpgaver;
     setForlob(prev=>{
-      const opgaver=[...(prev[selId]||[])];
-      if(idx==="ny") opgaver.push({...data,s:opgaver.length+1});
-      else opgaver[idx]={...data,s:idx+1};
-      return {...prev,[selId]:opgaver};
+      nyeOpgaver=[...(prev[selId]||[])];
+      if(idx==="ny") nyeOpgaver.push({...data,s:nyeOpgaver.length+1});
+      else nyeOpgaver[idx]={...data,s:idx+1};
+      return {...prev,[selId]:nyeOpgaver};
     });
     setEditOpg(null);
+    // Sync sekvens til patienter
+    setTimeout(()=>{if(nyeOpgaver) syncForlobTilPatienter(selId, nyeOpgaver);},0);
   };
   const deleteOpg=(idx)=>{
+    let nyeOpgaver;
     setForlob(prev=>{
-      const opgaver=(prev[selId]||[]).filter((_,i)=>i!==idx).map((o,i)=>({...o,s:i+1}));
-      return {...prev,[selId]:opgaver};
+      nyeOpgaver=(prev[selId]||[]).filter((_,i)=>i!==idx).map((o,i)=>({...o,s:i+1}));
+      return {...prev,[selId]:nyeOpgaver};
     });
+    setTimeout(()=>{if(nyeOpgaver) syncForlobTilPatienter(selId, nyeOpgaver);},0);
   };
   const moveOpg=(idx,dir)=>{
+    let nyeOpgaver;
     setForlob(prev=>{
-      const opgaver=[...(prev[selId]||[])];
+      nyeOpgaver=[...(prev[selId]||[])];
       const ni=idx+dir;
-      if(ni<0||ni>=opgaver.length) return prev;
-      [opgaver[idx],opgaver[ni]]=[opgaver[ni],opgaver[idx]];
-      return {...prev,[selId]:opgaver.map((o,i)=>({...o,s:i+1}))};
+      if(ni<0||ni>=nyeOpgaver.length) return prev;
+      [nyeOpgaver[idx],nyeOpgaver[ni]]=[nyeOpgaver[ni],nyeOpgaver[idx]];
+      nyeOpgaver=nyeOpgaver.map((o,i)=>({...o,s:i+1}));
+      return {...prev,[selId]:nyeOpgaver};
     });
+    setTimeout(()=>{if(nyeOpgaver) syncForlobTilPatienter(selId, nyeOpgaver);},0);
   };
   const opretForlob=()=>{
     const nk=String(Math.max(0,...Object.keys(forlob).map(Number))+1);
