@@ -6247,9 +6247,27 @@ function ExcelImportPanel({setPatienter,setMedarbejdere,setForlob,forlob,setLokT
         // Opdater lokaler-liste
         const nyeLokNavne=raw.map(r=>get(r,"Lokale")).filter(Boolean);
         if(saveLokaler){
-          // Byg ny komplet lokaler-liste
-          const nyListe=[...new Set([...(lokaler||[]),...nyeLokNavne])];
-          saveLokaler(nyListe);
+          // Tilføj lokaler — duplikerede navne får suffix (2), (3) osv.
+          const eksisterende=new Set(lokaler||[]);
+          const tilføjet=[];
+          nyeLokNavne.forEach(navn=>{
+            let endeligtNavn=navn;
+            let nr=1;
+            while(eksisterende.has(endeligtNavn)){
+              nr++;
+              endeligtNavn=`${navn} (${nr})`;
+            }
+            eksisterende.add(endeligtNavn);
+            tilføjet.push(endeligtNavn);
+            // Kopiér åbningstider og meta til det nye navn hvis det er omdøbt
+            if(endeligtNavn!==navn){
+              Object.entries(nyeTider).forEach(([dag,loks])=>{
+                if(loks[navn]) nyeTider[dag][endeligtNavn]={...loks[navn]};
+              });
+              if(nyMeta[navn]) nyMeta[endeligtNavn]={...nyMeta[navn],lokaleId:nyMeta[navn].lokaleId?nyMeta[navn].lokaleId+"-"+nr:""};
+            }
+          });
+          saveLokaler([...eksisterende]);
         }
         setStatus({ok:true,msg:"OK "+loknr+" lokaler importeret/opdateret"});
       }
