@@ -12866,121 +12866,177 @@ function runPlanner(patienter, config={}) {
     return (a.henvDato||"").localeCompare(b.henvDato||"");
   });
 
-  sorterede.forEach(pat => {
-    pat.opgaver
-      .filter(o=>!o.låst && o.status!=="planlagt")
-      .sort((a,b)=>a.sekvens-b.sekvens)
-      .forEach(opg => {
-        const varMin = (opg.minutter||60) + pause;
-        const muligeMed = opg.muligeMed||[];
-        const muligeLok = opg.muligeLok||[];
+  // ── Hjælper: byg kandidatliste for en opgave ──
+  const bygKandidater = (opg) => {
+    const muligeMed = opg.muligeMed||[];
+    const TITLER = ["Psykolog","Læge","Pædagog","Laege","Paedagog"];
+    const harTitelRef = muligeMed.some(mm=>TITLER.includes(mm));
+    let effKandidater;
+    if(muligeMed.length===0) {
+      effKandidater = medarbejdere.map(m=>m.navn);
+    } else if(harTitelRef) {
+      const normT=t=>t==="Laege"?"Læge":t==="Paedagog"?"Pædagog":t;
+      effKandidater = medarbejdere.filter(m=>muligeMed.map(normT).includes(m.titel)).map(m=>m.navn);
+    } else {
+      effKandidater = muligeMed.filter(navn=>medarbejdere.some(m=>m.navn===navn));
+      if(effKandidater.length===0) {
+        effKandidater = medarbejdere.filter(m=>muligeMed.some(mm=>m.titel===mm)).map(m=>m.navn);
+      }
+    }
+    // Kompetence-filter
+    const harKompetence = navn=>{
+      const m = medarbejdere.find(mm=>mm.navn===navn);
+      if(!m) return false;
+      const komp = m.kompetencer||[];
+      if(komp.length===0) return true;
+      if(komp.includes(opg.opgave)) return true;
+      return komp.some(k=>
+        opg.opgave.toLowerCase().includes(k.toLowerCase()) ||
+        k.toLowerCase().includes(opg.opgave.toLowerCase())
+      );
+    };
+    const opgaveErRegistreretSomKomp = effKandidater.some(navn=>{
+      const m=medarbejdere.find(mm=>mm.navn===navn);
+      if(!m||(m.kompetencer||[]).length===0) return false;
+      return harKompetence(navn);
+    });
+    if(opgaveErRegistreretSomKomp) effKandidater = effKandidater.filter(harKompetence);
+    return effKandidater;
+  };
 
-        // Byg kandidatliste: navne-match + titel-match + tom fallback
-        const TITLER = ["Psykolog","Læge","Pædagog","Laege","Paedagog"];
-        const harTitelRef = muligeMed.some(mm=>TITLER.includes(mm));
-        
-        // Hvis muligeMed er tom — brug alle (ingen krav specificeret)
-        // Hvis muligeMed har indhold — respektér det strengt
-        
-        // Byg kandidatliste
-        let effKandidater;
-        if(muligeMed.length===0) {
-          // Ingen krav → alle medarbejdere
-          effKandidater = medarbejdere.map(m=>m.navn);
-        } else if(harTitelRef) {
-          // muligeMed = titler (Psykolog, Læge, Pædagog)
-          const normT=t=>t==="Laege"?"Læge":t==="Paedagog"?"Pædagog":t;
-          effKandidater = medarbejdere
-            .filter(m=>muligeMed.map(normT).includes(m.titel))
-            .map(m=>m.navn);
-        } else {
-          // muligeMed = specifikke navne
-          effKandidater = muligeMed.filter(navn=>medarbejdere.some(m=>m.navn===navn));
-          // Fallback: titel-match hvis ingen navne matcher
-          if(effKandidater.length===0) {
-            effKandidater = medarbejdere
-              .filter(m=>muligeMed.some(mm=>m.titel===mm))
-              .map(m=>m.navn);
-          }
-        }
-
-        // ── KOMPETENCE-TJEK ───────────────────────────────────────────────
-        // Kun medarbejdere der har opgavens navn som kompetence bookes.
-        // Undtagelse A: Medarbejder uden kompetencer = ingen begrænsning
-        // Undtagelse B: Ingen kandidat har kompetencen = brug alle (generisk faggruppe er nok)
-        const harKompetence = navn=>{
-          const m = medarbejdere.find(mm=>mm.navn===navn);
-          if(!m) return false;
-          const komp = m.kompetencer||[];
-          if(komp.length===0) return true; // Ingen kompetencer sat = kan alt
-          // Direkte match på opgavens navn
-          if(komp.includes(opg.opgave)) return true;
-          // Delvis match: "KAT" matcher "KAT individuel", "EMDR" matcher "EMDR session"
-          return komp.some(k=>
-            opg.opgave.toLowerCase().includes(k.toLowerCase()) ||
-            k.toLowerCase().includes(opg.opgave.toLowerCase())
-          );
-        };
-        // Kompetence-tjek: aktiveres KUN hvis opgaven eksplicit er i nogen kandidats kompetence-liste
-        // Ellers: titel-match er tilstrækkeligt (generisk opgave som "Forberedelse Psykolog")
-        const opgaveErRegistreretSomKomp = effKandidater.some(navn=>{
-          const m=medarbejdere.find(mm=>mm.navn===navn);
-          if(!m||(m.kompetencer||[]).length===0) return false;
-          return harKompetence(navn);
-        });
-        if(opgaveErRegistreretSomKomp) {
-          // Nogen har kompetencen → brug kun dem
-          effKandidater = effKandidater.filter(harKompetence);
-        }
-        // Ellers: ingen har registreret kompetencen → brug alle titel-matchede (ingen begrænsning)
-
-        // Prøv at finde et tidspunkt
-        let fundet=false;
-        // Planlæg tidligst fra: max(startDato, pat.henvDato, opg.tidligst)
-        const henvMin = pat.henvDato||startDato;
-        const fraDato = [startDato, henvMin].reduce((a,b)=>a>b?a:b);
-
-        outer:
-        for(let di=0; di<maxDage; di++) {
-          const dato = addDays2(fraDato,di);
-          if(isWeekend2(dato)) continue;
-
-          for(const medNavn of effKandidater) {
-            for(const lokNavn of (muligeLok.length>0?muligeLok:[""])) {
-              const slot = findLedigTid(medNavn, lokNavn||null, dato, varMin);
-              if(slot) {
-                // Book det
-                opg.status="planlagt";
-                opg.dato=dato;
-                opg.startKl=fromMin2(slot.start);
-                opg.slutKl=fromMin2(slot.slut-pause);
-                opg.medarbejder=medNavn;
-                opg.lokale=lokNavn||null;
-
-                if(!medBooket[medNavn]) medBooket[medNavn]={};
-                if(!medBooket[medNavn][dato]) medBooket[medNavn][dato]=[];
-                medBooket[medNavn][dato].push({start:slot.start,slut:slot.slut});
-
-                if(lokNavn) {
-                  if(!lokBooket[lokNavn]) lokBooket[lokNavn]={};
-                  if(!lokBooket[lokNavn][dato]) lokBooket[lokNavn][dato]=[];
-                  lokBooket[lokNavn][dato].push({start:slot.start,slut:slot.slut});
-                }
-
-                planned++;
-                fundet=true;
-                break outer;
-              }
+  // ── Hjælper: book en enkelt opgave ──
+  const bookOpgave = (opg, effKandidater, tidligstDato) => {
+    const varMin = (opg.minutter||60) + pause;
+    const muligeLok = opg.muligeLok||[];
+    for(let di=0; di<maxDage; di++) {
+      const dato = addDays2(tidligstDato,di);
+      if(isWeekend2(dato)) continue;
+      for(const medNavn of effKandidater) {
+        for(const lokNavn of (muligeLok.length>0?muligeLok:[""])) {
+          const slot = findLedigTid(medNavn, lokNavn||null, dato, varMin);
+          if(slot) {
+            opg.status="planlagt";
+            opg.dato=dato;
+            opg.startKl=fromMin2(slot.start);
+            opg.slutKl=fromMin2(slot.slut-pause);
+            opg.medarbejder=medNavn;
+            opg.lokale=lokNavn||null;
+            if(!medBooket[medNavn]) medBooket[medNavn]={};
+            if(!medBooket[medNavn][dato]) medBooket[medNavn][dato]=[];
+            medBooket[medNavn][dato].push({start:slot.start,slut:slot.slut});
+            if(lokNavn) {
+              if(!lokBooket[lokNavn]) lokBooket[lokNavn]={};
+              if(!lokBooket[lokNavn][dato]) lokBooket[lokNavn][dato]=[];
+              lokBooket[lokNavn][dato].push({start:slot.start,slut:slot.slut});
             }
+            return true;
           }
         }
+      }
+    }
+    return false;
+  };
 
-        if(!fundet) {
+  sorterede.forEach(pat => {
+    // Dedupliker: track allerede planlagte opgave-id'er
+    const planlagteIds = new Set(pat.opgaver.filter(o=>o.status==="planlagt").map(o=>o.id));
+
+    // Sortér efter sekvens
+    const ventende = pat.opgaver
+      .filter(o=>!o.låst && o.status!=="planlagt" && !planlagteIds.has(o.id))
+      .sort((a,b)=>(a.sekvens||0)-(b.sekvens||0));
+
+    // Gruppér opgaver efter indsatsGruppe (Forberedelse→Patient→Efterbehandling)
+    // Opgaver i samme gruppe planlægges med samme medarbejder
+    const grupper = new Map(); // grpId -> [opg, opg, ...]
+    const enkelOpg = [];       // opgaver uden gruppe
+    ventende.forEach(opg => {
+      if(opg.indsatsGruppe) {
+        if(!grupper.has(opg.indsatsGruppe)) grupper.set(opg.indsatsGruppe,[]);
+        grupper.get(opg.indsatsGruppe).push(opg);
+      } else {
+        enkelOpg.push(opg);
+      }
+    });
+
+    // Saml i rækkefølge: grupper og enkelt-opgaver, sorteret efter laveste sekvens
+    const alleJobs = [];
+    grupper.forEach((opgaver, grpId) => {
+      opgaver.sort((a,b)=>(a.sekvens||0)-(b.sekvens||0));
+      alleJobs.push({type:"gruppe", grpId, opgaver, minSekvens:opgaver[0]?.sekvens||0});
+    });
+    enkelOpg.forEach(opg => {
+      alleJobs.push({type:"enkel", opgaver:[opg], minSekvens:opg.sekvens||0});
+    });
+    alleJobs.sort((a,b)=>a.minSekvens-b.minSekvens);
+
+    // Track tidligste dato for næste opgave (sekvens-kæde)
+    let tidligstNæste = [startDato, pat.henvDato||startDato].reduce((a,b)=>a>b?a:b);
+
+    alleJobs.forEach(job => {
+      if(job.type==="gruppe") {
+        // Alle opgaver i gruppen: find en fælles medarbejder
+        // Byg kandidater der kan løse ALLE opgaver i gruppen
+        const perOpgKandidater = job.opgaver.map(o=>bygKandidater(o));
+        // Fælles kandidater = snit af alle
+        let fælles = perOpgKandidater[0]||[];
+        for(let i=1;i<perOpgKandidater.length;i++){
+          const sæt=new Set(perOpgKandidater[i]);
+          fælles=fælles.filter(k=>sæt.has(k));
+        }
+        // Fallback: hvis ingen fælles, brug kandidater fra første opgave
+        if(fælles.length===0 && perOpgKandidater.length>0) fælles=perOpgKandidater[0];
+
+        let gruppeOk=true;
+        let gruppeMed=null; // Lås medarbejder for hele gruppen
+        let gruppeDato=tidligstNæste;
+
+        for(const opg of job.opgaver) {
+          // Brug fælles kandidater; hvis gruppeMed er sat, foretræk den
+          const kandidater = gruppeMed ? [gruppeMed,...fælles.filter(k=>k!==gruppeMed)] : fælles;
+          const ok = bookOpgave(opg, kandidater, gruppeDato);
+          if(ok) {
+            planned++;
+            planlagteIds.add(opg.id);
+            if(!gruppeMed) gruppeMed=opg.medarbejder;
+            // Næste opgave i gruppen: tidligst samme dag (kan ligge efter),
+            // men for sekvens-kæden: tidligst dagen efter
+            gruppeDato=opg.dato;
+          } else {
+            failed++;
+            gruppeOk=false;
+            planLog.push({patId:pat.id,patNavn:pat.navn,opgave:opg.opgave,
+              fejl:`Ingen ledig tid fundet (${kandidater.join(",")||"ingen medarbejdere"})`});
+          }
+        }
+        // Opdater tidligstNæste: næste job starter tidligst dagen efter sidste planlagte
+        if(gruppeOk && job.opgaver.length>0) {
+          const sidsteDato=job.opgaver[job.opgaver.length-1].dato;
+          if(sidsteDato) {
+            const næsteDag=addDays2(sidsteDato, minGapDays>0?minGapDays:1);
+            if(næsteDag>tidligstNæste) tidligstNæste=næsteDag;
+          }
+        }
+      } else {
+        // Enkelt opgave
+        const opg=job.opgaver[0];
+        const kandidater=bygKandidater(opg);
+        const ok=bookOpgave(opg, kandidater, tidligstNæste);
+        if(ok) {
+          planned++;
+          planlagteIds.add(opg.id);
+          // Næste opgave starter tidligst dagen efter (eller minGapDays)
+          if(opg.dato) {
+            const næsteDag=addDays2(opg.dato, minGapDays>0?minGapDays:1);
+            if(næsteDag>tidligstNæste) tidligstNæste=næsteDag;
+          }
+        } else {
           failed++;
           planLog.push({patId:pat.id,patNavn:pat.navn,opgave:opg.opgave,
-            fejl:`Ingen ledig tid fundet (${effKandidater.join(",")||"ingen medarbejdere"})`});
+            fejl:`Ingen ledig tid fundet (${kandidater.join(",")||"ingen medarbejdere"})`});
         }
-      });
+      }
+    });
   });
 
   // Synkroniser klonede patienter tilbage til original ordre
