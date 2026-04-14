@@ -9258,11 +9258,80 @@ function AdminBrugereTab({selskab,updS}){
 }
 
 
+// ── Ressource-analyse (separat fra planlægning) ──
+function analyserRessourcer(patienter, config={}) {
+  const {medarbejdere=[],lokTider={},lokaler=[]}=config;
+  const toMin=(hm)=>{if(!hm)return 0;const[h,m]=(hm||"0:0").split(":").map(Number);return h*60+(m||0);};
+  const TITLER=["Psykolog","Læge","Pædagog"];
+  const normT=t=>t==="Laege"?"Læge":t==="Paedagog"?"Pædagog":t;
+  const dage=["Mandag","Tirsdag","Onsdag","Torsdag","Fredag"];
+
+  // Medarbejder-analyse
+  const medRes=TITLER.map(t=>{
+    const meds=medarbejdere.filter(m=>m.titel===t);
+    const kap=meds.reduce((a,m)=>{
+      const d=Object.values(m.arbejdsdage||{}).filter(d=>d.aktiv);
+      return a+d.reduce((s,d)=>s+toMin(d.slut||"16:00")-toMin(d.start||"08:30"),0);
+    },0);
+    let eft=0;
+    patienter.forEach(p=>p.opgaver.forEach(o=>{
+      if(o.status==="planlagt"&&o.låst) return;
+      const mm=o.muligeMed||[];
+      const match=mm.find(m=>TITLER.includes(normT(m)));
+      if(match&&normT(match)===t) eft+=(o.minutter||60);
+      else if(!match&&o.opgave?.includes(t)) eft+=(o.minutter||60);
+    }));
+    const ratio=Math.round(eft/(kap||1)*100)/100;
+    return{titel:t,antal:meds.length,kapacitet:kap,efterspørgsel:eft,ratio,flaskehals:false};
+  });
+  const maxMedRatio=Math.max(...medRes.map(r=>r.ratio));
+  medRes.forEach(r=>{if(r.ratio===maxMedRatio&&r.ratio>0)r.flaskehals=true;});
+
+  // Lokale-analyse: gruppér varianter
+  const alleLok=new Set();
+  Object.values(lokTider).forEach(dl=>Object.keys(dl).forEach(l=>alleLok.add(l)));
+  lokaler.forEach(l=>alleLok.add(l));
+  const grp={};
+  alleLok.forEach(l=>{const b=l.replace(/\s*\(\d+\)$/,"");if(!grp[b])grp[b]=[];grp[b].push(l);});
+
+  const lokRes=Object.entries(grp).map(([basis,loks])=>{
+    let basisMin=0;
+    dage.forEach(dag=>{
+      const lt=lokTider[dag]?.[basis];
+      if(lt){const å=toMin(lt.å||"00:00"),l=toMin(lt.l||"00:00");if(l>å)basisMin+=l-å;}
+    });
+    const kap=basisMin*loks.length;
+    let eft=0;
+    patienter.forEach(p=>p.opgaver.forEach(o=>{
+      if(o.status==="planlagt"&&o.låst) return;
+      const baser=[...new Set((o.muligeLok||[]).map(l=>l.replace(/\s*\(\d+\)$/,"")))];
+      if(baser.includes(basis)) eft+=(o.minutter||60)/(baser.length||1);
+    }));
+    const ratio=Math.round(eft/(kap||1)*100)/100;
+    return{navn:basis,antal:loks.length,kapacitet:kap,efterspørgsel:eft,ratio,flaskehals:false};
+  }).filter(r=>r.efterspørgsel>0).sort((a,b)=>b.ratio-a.ratio);
+  const maxLokRatio=Math.max(...lokRes.map(r=>r.ratio),0);
+  lokRes.forEach(r=>{if(r.ratio===maxLokRatio&&r.ratio>0)r.flaskehals=true;});
+
+  const primær=maxLokRatio>maxMedRatio
+    ?`${lokRes.find(r=>r.flaskehals)?.navn||"?"} (lokale, ratio: ${maxLokRatio})`
+    :`${medRes.find(r=>r.flaskehals)?.titel||"?"} (medarbejder, ratio: ${maxMedRatio})`;
+
+  let anbefaling=null;
+  const flask=medRes.find(r=>r.flaskehals);
+  if(flask&&flask.ratio>1.5) anbefaling=`Overvej at ansætte flere ${flask.titel.toLowerCase()}er — efterspørgslen er ${Math.round(flask.ratio*100-100)}% over kapaciteten`;
+  const lokFlask=lokRes.find(r=>r.flaskehals);
+  if(lokFlask&&lokFlask.ratio>1.5&&(!flask||lokFlask.ratio>flask.ratio)) anbefaling=`${lokFlask.navn} er overbelastet — overvej at tilføje flere eller udvide åbningstider`;
+
+  return{medarbejdere:medRes,lokaler:lokRes,primærFlaskehals:primær,anbefaling};
+}
+
 // ===============================================
 // PLANLOG VIEW
 // ===============================================
 function PlanLogView({patienter,planLog=[],medarbejdere=[],setPatienter,onPlan,running,progress,planFraDato,setPlanFraDato,afdScope,alleAfdelinger=[],toggleAktiv,toggleRes,lokaler=[],certifikater=[],planDebug,config={},setConfig=()=>{},setMedarbejdere=()=>{},setForlob=()=>{},forlob={},setLokTider=()=>{},lokMeta={},setLokMeta=()=>{},saveLokaler=()=>{},setIndsatser=()=>{},indsatser=[]}){
   const [planTab,setPlanTab]=useState("planlaegning"); // "planlaegning" | "indstillinger"
+  const [resAnalyse,setResAnalyse]=useState(null);
   const [filter,setFilter]=useState("alle");
   const [sortCol,setSortCol]=useState("dato");
   const [sortDir,setSortDir]=useState("asc");
@@ -9339,6 +9408,18 @@ function PlanLogView({patienter,planLog=[],medarbejdere=[],setPatienter,onPlan,r
               style={{border:`1px solid ${C.brd}`,borderRadius:8,padding:"6px 10px",fontSize:13,
                 fontFamily:"inherit",color:C.txt,background:C.s1,outline:"none"}}/>
           </div>
+          <button onClick={()=>{
+            // Kør kun ressource-analyse uden planlægning
+            const ana = analyserRessourcer(patienter, {
+              ...config, lokTider, medarbejdere, lokaler,
+            });
+            setResAnalyse(ana);
+          }}
+            style={{background:C.s2,color:C.blue,border:`1px solid ${C.blue}`,
+              borderRadius:10,padding:"10px 18px",fontSize:13,fontWeight:600,cursor:"pointer",
+              fontFamily:"inherit"}}>
+            Ressource-analyse
+          </button>
           <button onClick={onPlan} disabled={running}
             style={{background:running?C.s3:C.acc,color:running?C.txtM:"#fff",border:"none",
               borderRadius:10,padding:"10px 24px",fontSize:14,fontWeight:700,cursor:running?"default":"pointer",
@@ -9347,6 +9428,55 @@ function PlanLogView({patienter,planLog=[],medarbejdere=[],setPatienter,onPlan,r
           </button>
         </div>
       </div>
+
+      {/* Ressource-analyse panel */}
+      {resAnalyse&&(
+        <div style={{marginBottom:20,background:C.s2,borderRadius:10,padding:"14px 18px",border:`1px solid ${C.blue}`}}>
+          <div style={{display:"flex",justifyContent:"space-between",alignItems:"center",marginBottom:10}}>
+            <div style={{fontSize:14,fontWeight:700,color:C.txt}}>Ressource-analyse</div>
+            <button onClick={()=>setResAnalyse(null)} style={{background:"none",border:"none",color:C.txtM,cursor:"pointer",fontSize:16}}>x</button>
+          </div>
+          <div style={{fontSize:13,fontWeight:700,color:C.txt,marginBottom:6}}>Medarbejdere</div>
+          {resAnalyse.medarbejdere.map(r=>(
+            <div key={r.titel} style={{display:"flex",alignItems:"center",gap:8,marginBottom:4}}>
+              <span style={{fontSize:12,color:C.txt,width:80}}>{r.titel}</span>
+              <span style={{fontSize:11,color:C.txtM,width:60}}>{r.antal} pers.</span>
+              <div style={{flex:1,background:C.s3,borderRadius:3,height:8,overflow:"hidden"}}>
+                <div style={{background:r.ratio>1.5?C.red:r.ratio>1?C.amb:C.grn,height:"100%",borderRadius:3,
+                  width:`${Math.min(r.ratio*50,100)}%`}}/>
+              </div>
+              <span style={{fontSize:11,color:r.ratio>1.5?C.red:r.ratio>1?C.amb:C.grn,fontWeight:700,width:80,textAlign:"right"}}>
+                {Math.round(r.kapacitet/60)}t kap. / {Math.round(r.efterspørgsel/60)}t behov
+              </span>
+              <span style={{fontSize:11,color:r.ratio>1.5?C.red:r.ratio>1?C.amb:C.grn,fontWeight:700,width:40}}>
+                {r.ratio}x
+              </span>
+              {r.flaskehals&&<span style={{fontSize:10,background:C.redM,color:C.red,padding:"1px 6px",borderRadius:4,fontWeight:700}}>FLASKEHALS</span>}
+            </div>
+          ))}
+          <div style={{fontSize:13,fontWeight:700,color:C.txt,marginTop:10,marginBottom:6}}>Lokaler</div>
+          {resAnalyse.lokaler.filter(r=>r.efterspørgsel>0).map(r=>(
+            <div key={r.navn} style={{display:"flex",alignItems:"center",gap:8,marginBottom:4}}>
+              <span style={{fontSize:12,color:C.txt,width:100}}>{r.navn} ({r.antal})</span>
+              <div style={{flex:1,background:C.s3,borderRadius:3,height:8,overflow:"hidden"}}>
+                <div style={{background:r.ratio>1.5?C.red:r.ratio>1?C.amb:C.grn,height:"100%",borderRadius:3,
+                  width:`${Math.min(r.ratio*50,100)}%`}}/>
+              </div>
+              <span style={{fontSize:11,color:r.ratio>1.5?C.red:r.ratio>1?C.amb:C.grn,fontWeight:700,width:80,textAlign:"right"}}>
+                {Math.round(r.kapacitet/60)}t / {Math.round(r.efterspørgsel/60)}t
+              </span>
+              <span style={{fontSize:11,color:r.ratio>1.5?C.red:r.ratio>1?C.amb:C.grn,fontWeight:700,width:40}}>
+                {r.ratio}x
+              </span>
+              {r.flaskehals&&<span style={{fontSize:10,background:C.redM,color:C.red,padding:"1px 6px",borderRadius:4,fontWeight:700}}>FLASKEHALS</span>}
+            </div>
+          ))}
+          <div style={{marginTop:10,padding:"8px 12px",background:C.s3,borderRadius:8,fontSize:12,color:C.txtD}}>
+            <strong style={{color:C.txt}}>Primær flaskehals:</strong> {resAnalyse.primærFlaskehals}
+            {resAnalyse.anbefaling&&<div style={{marginTop:4,color:C.amb}}>{resAnalyse.anbefaling}</div>}
+          </div>
+        </div>
+      )}
 
       {/* Progress */}
       {running&&progress&&(
@@ -13063,16 +13193,17 @@ function runPlanner(patienter, config={}) {
   });
   const lokKap = {};
   Object.entries(lokGrupper).forEach(([basis,loks])=>{
-    let minPerUge=0;
-    loks.forEach(lok=>{
-      dagNavne2.forEach(dag=>{
-        const lt=lokTider[dag]?.[lok];
-        if(lt) {
-          const å=toMin2(lt.å||lt.åben||"00:00"), l=toMin2(lt.l||lt.lukket||"00:00");
-          if(l>å) minPerUge+=l-å;
-        }
+    // Beregn kapacitet for basisnavnet og gang med antal i gruppen
+    let basisMinPerUge=0;
+    dagNavne2.forEach(dag=>{
+      const lt=lokTider[dag]?.[basis];
+      if(lt) {
+        const å=toMin2(lt.å||lt.åben||"00:00"), l=toMin2(lt.l||lt.lukket||"00:00");
+        if(l>å) basisMinPerUge+=l-å;
+      }
       });
-    });
+    // Kapacitet = basisnavnets tid × antal lokaler i gruppen
+    const minPerUge = basisMinPerUge * loks.length;
     lokKap[basis]=minPerUge;
   });
 
