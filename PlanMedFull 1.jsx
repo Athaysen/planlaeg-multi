@@ -10105,7 +10105,12 @@ return [];}},[scopedPatienter,lokTider]);
   const handlePlan=useCallback(async ()=>{
     if(running)return;
     setRunning(true);
-    const total=patienter.reduce((a,p)=>a+p.opgaver.filter(o=>!o.låst&&o.status!=="planlagt").length,0);
+    // Nulstil alle ikke-låste opgaver før planlægning
+    const nulstillet=patienter.map(p=>({
+      ...p,
+      opgaver:p.opgaver.map(o=>o.låst?o:{...o,status:"afventer",dato:null,startKl:null,slutKl:null,lokale:null,medarbejder:null})
+    }));
+    const total=nulstillet.reduce((a,p)=>a+p.opgaver.filter(o=>!o.låst).length,0);
     setProgress({done:0,total});
     await new Promise(r=>setTimeout(r,80));
     const planConfig={
@@ -10116,7 +10121,7 @@ return [];}},[scopedPatienter,lokTider]);
     };
     let res;
     try {
-      res=runPlanner(patienter,planConfig);
+      res=runPlanner(nulstillet,planConfig);
     } catch(e) {
       setRunning(false); setProgress(null);
       setToast({msg:"Fejl i planlægger: "+e.message,type:"error"});
