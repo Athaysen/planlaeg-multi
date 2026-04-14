@@ -51,6 +51,12 @@ const PD = ["MILJØOBS  Forberedelse Pædagog","MILJØOBS  Patient Pædagog","MI
 const ALLE_K = [...PK,...PD,...LK];
 
 const BASE_MED = [];
+// Sikrer at medarbejdere med tomt kompetencer-array får default for deres titel
+const ensureKompetencer=(m)=>{
+  if(m.kompetencer&&m.kompetencer.length>0) return m;
+  const t=m.titel||"Psykolog";
+  return{...m,kompetencer:t==="Læge"?[...LK]:t==="Pædagog"?[...PD]:[...PK]};
+};
 const FORLOB = {
   1:[{o:"TEST 1  Forberedelse Psykolog",m:45,p:false,tl:"08:00",ss:"17:00",s:1,l:["Kontor"]},{o:"TEST 1  Patient Psykolog",m:90,p:true,tl:"10:00",ss:"17:00",s:2,l:["Lokale 1"]},{o:"TEST 1  Efterbehandling Psykolog",m:45,p:false,tl:"08:00",ss:"17:00",s:3,l:["Kontor"]},{o:"TEST 2  Forberedelse Psykolog",m:45,p:false,tl:"08:00",ss:"17:00",s:4,l:["Kontor"]},{o:"TEST 2  Patient Psykolog",m:60,p:true,tl:"10:00",ss:"17:00",s:5,l:["Lokale 1"]},{o:"TEST 2  Efterbehandling Psykolog",m:45,p:false,tl:"08:00",ss:"17:00",s:6,l:["Kontor"]},{o:"NNFP  Forberedelse Pædagog",m:90,p:false,tl:"08:00",ss:"17:00",s:7,l:["Kontor"]},{o:"NNFP  Patient Pædagog",m:45,p:true,tl:"10:00",ss:"17:00",s:8,l:["Lokale 1","Lokale 2","Lokale 3","Lokale 4","Lokale 5","Lokale 6","Lokale 7"]},{o:"NNFP  Efterbehandling Pædagog",m:90,p:false,tl:"08:00",ss:"17:00",s:9,l:["Kontor"]},{o:"KONFERENCE Læge",m:45,p:false,tl:"08:00",ss:"17:00",s:10,l:["Lokale 1","Lokale 2","Lokale 3","Lokale 4","Lokale 5","Lokale 6","Lokale 7","Kontor"]}],
   2:[{o:"FAMILIESAMTALE  Forberedelse Psykolog",m:45,p:false,tl:"08:00",ss:"17:00",s:1,l:["Kontor"]},{o:"FAMILIESAMTALE  Patient Psykolog",m:45,p:true,tl:"10:00",ss:"17:00",s:2,l:["Lokale 1","Lokale 2","Lokale 3","Lokale 4","Lokale 5","Lokale 6","Lokale 7"]},{o:"FAMILIESAMTALE  Efterbehandling Psykolog",m:15,p:false,tl:"08:00",ss:"17:00",s:3,l:["Kontor"]},{o:"ADOS 1  Forberedelse Psykolog",m:45,p:false,tl:"08:00",ss:"17:00",s:4,l:["Kontor"]},{o:"ADOS 1  Patient Psykolog",m:60,p:true,tl:"10:00",ss:"17:00",s:5,l:["Lokale 2","Lokale 3"]},{o:"ADOS 1  Efterbehandling Psykolog",m:45,p:false,tl:"08:00",ss:"17:00",s:6,l:["Kontor"]},{o:"FNU S  Forberedelse Læge",m:15,p:false,tl:"08:00",ss:"17:00",s:7,l:["Kontor"]},{o:"FNU S  Patient Læge",m:45,p:true,tl:"10:00",ss:"17:00",s:8,l:["Lokale 1","Lokale 2","Lokale 3","Lokale 4","Lokale 5","Lokale 6","Lokale 7"]},{o:"FNU S  Efterbehandling Læge",m:15,p:false,tl:"08:00",ss:"17:00",s:9,l:["Kontor"]},{o:"KONFERENCE Læge",m:45,p:false,tl:"08:00",ss:"17:00",s:10,l:["Lokale 1","Lokale 2","Lokale 3","Lokale 4","Lokale 5","Lokale 6","Lokale 7","Kontor"]}],
@@ -1056,7 +1062,7 @@ function PatientDetaljeModal({pat,medarbejdere=[],patienter,forlob=FORLOB,onClos
 
   const TABS=[
     {id:"overblik",label:"Overblik"},
-    {id:"indsatser",label:`Indsatser${tot>0?" ("+tot+")":""}`},
+    {id:"indsatser",label:`Opgaver${tot>0?" ("+tot+")":""}`},
     {id:"foraeld",label:"Forældre / Værge"},
     {id:"adresser",label:`Adresser${(p.adresser||[]).length>0?" ("+(p.adresser||[]).length+")":""}`},
   ];
@@ -1102,7 +1108,7 @@ function PatientDetaljeModal({pat,medarbejdere=[],patienter,forlob=FORLOB,onClos
               </div>
             </div>
             <div style={{display:"flex",gap:6,flexShrink:0,marginLeft:12,alignItems:"center"}}>
-              {!p.forlobNr&&<Btn v="primary" small onClick={onTildelForlob}>+ Forløb</Btn>}
+              <Btn v="primary" small onClick={onTildelForlob}>{p.forlobNr?"~ Forløb":"+ Forløb"}</Btn>
               <Btn v="subtle" small onClick={onAddOpg}>+ Opgave</Btn>
               <Btn v="outline" small onClick={onEdit}>Rediger</Btn>
               <div style={{position:"relative"}}>
@@ -1316,7 +1322,7 @@ function PatientDetaljeModal({pat,medarbejdere=[],patienter,forlob=FORLOB,onClos
             <div>
               {p.opgaver.length===0&&(
                 <div style={{textAlign:"center",padding:"40px 0",color:C.txtM}}>
-                  <div style={{marginBottom:12,fontSize:14}}>Ingen indsatser tildelt endnu</div>
+                  <div style={{marginBottom:12,fontSize:14}}>Ingen opgaver tildelt endnu</div>
                   <div style={{display:"flex",gap:8,justifyContent:"center"}}>
                     <Btn v="primary" onClick={onTildelForlob}>Tildel forløb</Btn>
                     <Btn v="outline" onClick={onAddOpg}>Tilføj enkeltopgave</Btn>
@@ -1806,15 +1812,18 @@ function PatientKalenderView({patienter,medarbejdere,setPatienter,forlob=FORLOB,
           <TildelForlobForm
             forlob={forlob}
             onSave={(forlobNr)=>{
+              const pat = patienter.find(p=>p.id===tildelForlob);
               const nyOpgaver = buildPatient(
-                {...patienter.find(p=>p.id===tildelForlob), forlobNr},
+                {...pat, forlobNr},
                 forlob
               ).opgaver;
+              // Fjern gamle forløbs-opgaver (sekvens < 999 = fra forløb), behold manuelt tilføjede
+              const gamleManuelle = (pat?.opgaver||[]).filter(o=>o.sekvens>=999);
               setPatienter(ps=>ps.map(p=>p.id!==tildelForlob?p:{
                 ...p,
                 forlobNr,
                 forlobLabel:"Forløb nr. "+forlobNr,
-                opgaver:[...p.opgaver,...nyOpgaver]
+                opgaver:[...nyOpgaver,...gamleManuelle]
               }));
               setTildelForlob(null);
             }}
@@ -3058,7 +3067,7 @@ function MedForm({med,onSave,onClose,certifikater=[]}){
     arbejdsstedVej:med?.arbejdsstedVej||"",
     arbejdsstedPostnr:med?.arbejdsstedPostnr||"",
     arbejdsstedBy:med?.arbejdsstedBy||"",
-    kompetencer:med?.kompetencer||[...PK],
+    kompetencer:(med?.kompetencer&&med.kompetencer.length>0)?med.kompetencer:(()=>{const t=med?.titel||"Psykolog";return t==="Læge"?[...LK]:t==="Pædagog"?[...PD]:[...PK];})(),
     arbejdsdage:med?.arbejdsdage||defaultDage,
     medarbejderId:med?.medarbejderId||"",
     epjKalenderApi:med?.epjKalenderApi||"",
@@ -3154,15 +3163,50 @@ function MedForm({med,onSave,onClose,certifikater=[]}){
         </div>
       </FRow>
 
-      {/* Kompetencer */}
+      {/* Kompetencer — grupperet efter titel */}
       <FRow label={`Kompetencer (${f.kompetencer.length} valgt)`}>
-        <div style={{maxHeight:180,overflowY:"auto",display:"flex",flexDirection:"column",gap:2,background:C.s1,borderRadius:8,padding:8,border:`1px solid ${C.brd}`}}>
-          {ALLE_K.map(k=>(
-            <label key={k} style={{display:"flex",alignItems:"center",gap:7,cursor:"pointer",padding:"3px 4px",borderRadius:5,background:f.kompetencer.includes(k)?C.accM:"transparent"}}>
-              <input type="checkbox" checked={f.kompetencer.includes(k)} onChange={()=>togK(k)} style={{accentColor:C.acc}}/>
-              <span style={{color:f.kompetencer.includes(k)?C.acc:C.txtD,fontSize:12}}>{k}</span>
-            </label>
-          ))}
+        <div style={{maxHeight:260,overflowY:"auto",display:"flex",flexDirection:"column",gap:10,background:C.s1,borderRadius:8,padding:10,border:`1px solid ${C.brd}`}}>
+          {(()=>{
+            const grupper=[
+              {id:"Psykolog",label:"Psykolog",komp:PK},
+              {id:"Læge",label:"Læge",komp:LK},
+              {id:"Pædagog",label:"Pædagog",komp:PD},
+            ];
+            const egne=(f.kompetencer||[]).filter(k=>![...PK,...LK,...PD].includes(k));
+            if(egne.length>0) grupper.push({id:"oevrig",label:"Øvrige",komp:egne});
+            return grupper.map(({id,label,komp})=>{
+              const alleMarkeret=komp.every(k=>f.kompetencer.includes(k));
+              const nogenMarkeret=komp.some(k=>f.kompetencer.includes(k));
+              const togGruppe=()=>{
+                if(alleMarkeret) set("kompetencer",f.kompetencer.filter(k=>!komp.includes(k)));
+                else set("kompetencer",[...new Set([...f.kompetencer,...komp])]);
+              };
+              return(
+                <div key={id}>
+                  <div style={{display:"flex",alignItems:"center",gap:6,marginBottom:4,cursor:"pointer"}} onClick={togGruppe}>
+                    <span style={{padding:"2px 10px",borderRadius:12,fontSize:11,fontWeight:700,
+                      background:alleMarkeret?C.acc:nogenMarkeret?C.accM:"transparent",
+                      color:alleMarkeret?"#fff":nogenMarkeret?C.acc:C.txtD,
+                      border:`1px solid ${alleMarkeret?C.acc:nogenMarkeret?C.acc:C.brd}`}}>{label}</span>
+                    <div style={{height:1,flex:1,background:C.brd}}/>
+                    <span style={{fontSize:10,color:C.txtM}}>{f.kompetencer.filter(k=>komp.includes(k)).length}/{komp.length}</span>
+                  </div>
+                  <div style={{display:"flex",flexWrap:"wrap",gap:4}}>
+                    {komp.map(k=>(
+                      <button key={k} onClick={()=>togK(k)}
+                        style={{padding:"3px 8px",borderRadius:5,cursor:"pointer",fontFamily:"inherit",fontSize:11,
+                          fontWeight:f.kompetencer.includes(k)?700:400,
+                          background:f.kompetencer.includes(k)?C.accM:"transparent",
+                          color:f.kompetencer.includes(k)?C.acc:C.txtM,
+                          border:`1px solid ${f.kompetencer.includes(k)?C.acc:C.brd}`,transition:"all .1s"}}>
+                        {k}
+                      </button>
+                    ))}
+                  </div>
+                </div>
+              );
+            });
+          })()}
         </div>
       </FRow>
       {/* Certifikater */}
@@ -3211,15 +3255,16 @@ function MedForm({med,onSave,onClose,certifikater=[]}){
 
 // LOKALER VIEW - redigerbare åbningstider + næste/seneste bookinger
 // ===============================================
-function LokalerView({patienter,lokTider,setLokTider,lokMeta={},setLokMeta,lokaler=[],saveLokaler=()=>{},adminData={}}){
+function LokalerView({patienter,lokTider,setLokTider,lokMeta={},setLokMeta,lokaler=[],saveLokaler=()=>{},adminData={},udstyrsKat=[],saveUdstyrsKat=()=>{},udstyrsPakker=[],saveUdstyrsPakker=()=>{}}){
+  const [topTab,setTopTab]=useState("lokaler"); // "lokaler" | "udstyr"
   const iDagLok=today();
   const [fraDato,setFraDato]=useState(addDays(iDagLok,-28));
   const [tilDato,setTilDato]=useState(iDagLok);
   const inPeriod=(o)=>o.dato?o.dato>=fraDato&&o.dato<=tilDato:false;
   const [valgt,setValgt]=useState(null);
-  const [bookingRetning,setBookingRetning]=useState("seneste"); // "seneste" | "næste"
-  const [editTiderLok,setEditTiderLok]=useState(null); // lokale-navn | null
-  const [editMetaLok,setEditMetaLok]=useState(null); // lokale-navn | null
+  const [bookingRetning,setBookingRetning]=useState("seneste");
+  const [editTiderLok,setEditTiderLok]=useState(null);
+  const [editMetaLok,setEditMetaLok]=useState(null);
 
   const LT = lokTider || DEFAULT_LOK_TIDER;
   const dagNavne=["Mandag","Tirsdag","Onsdag","Torsdag","Fredag","Lørdag","Søndag"];
@@ -3229,10 +3274,9 @@ function LokalerView({patienter,lokTider,setLokTider,lokMeta={},setLokMeta,lokal
     return lokaler.map(lok=>{
       const booket=patienter.flatMap(p=>p.opgaver.filter(o=>o.lokale===lok&&o.status==="planlagt"&&inPeriod(o)));
       const h=booket.reduce((a,o)=>a+o.minutter/60,0);
-      // Beregn antal forekomster af hver ugedag i perioden (matematisk, ingen loop)
         const antalDageFn=(dagNr)=>{
           const totalDage=daysBetween(fraDato,tilDato)+1;
-          const startDag=parseLocalDate(fraDato).getDay(); // 0=søn
+          const startDag=parseLocalDate(fraDato).getDay();
           const fuldeUger=Math.floor(totalDage/7);
           const resDage=totalDage%7;
           const normDag=(dagNr-startDag+7)%7;
@@ -3251,7 +3295,6 @@ function LokalerView({patienter,lokTider,setLokTider,lokMeta={},setLokMeta,lokal
           return{dag,opAbn,åbMin:åbMinPerDag,booketMin,antalDage,
             pct:totalÅbMin>0?Math.round(booketMin/totalÅbMin*100):0};
         });
-        // Samlet for alle dage
         const totalÅbMinAlle=dagStats.reduce((a,d)=>a+d.åbMin*d.antalDage,0);
         const totalBooketMin=dagStats.reduce((a,d)=>a+d.booketMin,0);
         const samletPct=totalÅbMinAlle>0?Math.round(totalBooketMin/totalÅbMinAlle*100):0;
@@ -3259,7 +3302,6 @@ function LokalerView({patienter,lokTider,setLokTider,lokMeta={},setLokMeta,lokal
     });
   },[patienter,LT,lokaler,fraDato,tilDato]);
 
-  // Seneste eller næste bookinger
   const getBookinger=(stat)=>{
     if(bookingRetning==="seneste"){
       return stat.booket.filter(o=>o.dato<=iDag).sort((a,b)=>b.dato.localeCompare(a.dato)||b.startKl.localeCompare(a.startKl)).slice(0,15);
@@ -3276,9 +3318,28 @@ function LokalerView({patienter,lokTider,setLokTider,lokMeta={},setLokMeta,lokal
     setEditTiderLok(null);
   };
 
+  // Alle udstyr items fra kategorier (fladt)
+  const alleUdstyrItems=useMemo(()=>udstyrsKat.flatMap(k=>(k.items||[]).map(i=>({...i,kategori:k.navn}))),[udstyrsKat]);
+
   return(
     <div style={{display:"flex",flexDirection:"column",height:"calc(100vh-100px)",gap:0}}>
-      <ViewHeader titel="Lokaler" undertitel="Opret og administrer lokaler — åbningstider, adresser og kapacitet"/>
+      <ViewHeader titel="Lokaler & Udstyr" undertitel="Administrer lokaler, udstyr og udstyrspakker"/>
+
+      {/* Top-tabs */}
+      <div style={{display:"flex",gap:0,borderBottom:`1px solid ${C.brd}`,marginBottom:8}}>
+        {[{id:"lokaler",label:"Lokaler"},{id:"udstyr",label:"Udstyr"}].map(t=>(
+          <button key={t.id} onClick={()=>setTopTab(t.id)}
+            style={{padding:"10px 24px",border:"none",fontFamily:"inherit",cursor:"pointer",
+              background:"none",fontWeight:topTab===t.id?700:400,fontSize:14,
+              color:topTab===t.id?C.acc:C.txtD,
+              borderBottom:topTab===t.id?`2px solid ${C.acc}`:"2px solid transparent",marginBottom:-1}}>
+            {t.label}
+          </button>
+        ))}
+      </div>
+
+      {/* ══════ LOKALER TAB ══════ */}
+      {topTab==="lokaler"&&(<>
       <PeriodeVaelger fraDato={fraDato} setFraDato={setFraDato} tilDato={tilDato} setTilDato={setTilDato}/>
       <div style={{display:"flex",gap:14,flex:1,overflow:"hidden",marginTop:12}}>
 
@@ -3319,7 +3380,6 @@ function LokalerView({patienter,lokTider,setLokTider,lokMeta={},setLokMeta,lokal
       </div>
 
       {/* Detalje */}
-{/* Detalje */}
       <div style={{flex:1,background:C.s2,border:`1px solid ${C.brd}`,borderRadius:12,overflow:"hidden",display:"flex",flexDirection:"column"}}>
         {!valgt?(
           <div style={{flex:1,display:"flex",alignItems:"center",justifyContent:"center",flexDirection:"column",gap:8,color:C.txtM}}>
@@ -3329,6 +3389,8 @@ function LokalerView({patienter,lokTider,setLokTider,lokMeta={},setLokMeta,lokal
           const stat=lokStats.find(l=>l.lok===valgt);
           if(!stat) return null;
           const bookinger=getBookinger(stat);
+          const lokUdstyr=lokMeta[valgt]?.udstyrIds||[];
+          const lokPakker=lokMeta[valgt]?.udstyrsPakkeIds||[];
           return(
             <>
               <div style={{padding:"14px 18px",borderBottom:`1px solid ${C.brd}`,display:"flex",justifyContent:"space-between",alignItems:"center",flexWrap:"wrap",gap:8}}>
@@ -3339,7 +3401,8 @@ function LokalerView({patienter,lokTider,setLokTider,lokMeta={},setLokMeta,lokal
                     <Pill color={C.acc} bg={C.accM}>{stat.h.toFixed(1)} timer booket</Pill>
                     {lokMeta[valgt]?.lokaleId&&<Pill color={C.txtM} bg={C.s3}>ID: {lokMeta[valgt].lokaleId}</Pill>}
                     {lokMeta[valgt]?.kapacitet&&<Pill color={C.txtM} bg={C.s3}> {lokMeta[valgt].kapacitet} pers.</Pill>}
-                    {lokMeta[valgt]?.udstyr&&<Pill color={C.txtM} bg={C.s3}> {lokMeta[valgt].udstyr}</Pill>}
+                    {lokUdstyr.length>0&&<Pill color={C.pur} bg={C.purM}>{lokUdstyr.length} udstyr</Pill>}
+                    {lokPakker.length>0&&<Pill color={C.blue} bg={C.blueM}>{lokPakker.length} pakker</Pill>}
                     {(()=>{const kr=lokMeta[valgt]?.krPrTime;const adminKr=(adminData?.taktDefaults?.Lokale?.krPrTime);const vis=kr??adminKr;return vis?<Pill color={C.acc} bg={C.accM}>{vis.toLocaleString("da-DK")} kr/t</Pill>:null;})()}
                   </div>
                 </div>
@@ -3348,6 +3411,17 @@ function LokalerView({patienter,lokTider,setLokTider,lokMeta={},setLokMeta,lokal
                 </div>
               </div>
               <div style={{flex:1,overflowY:"auto",padding:16}}>
+                {/* Udstyr & pakker på lokalet */}
+                {(lokUdstyr.length>0||lokPakker.length>0)&&(
+                  <div style={{marginBottom:20}}>
+                    <div style={{color:C.txt,fontWeight:700,marginBottom:8,fontSize:13}}>Tilknyttet udstyr & pakker</div>
+                    <div style={{display:"flex",flexWrap:"wrap",gap:5}}>
+                      {lokUdstyr.map(uid=>{const it=alleUdstyrItems.find(x=>x.id===uid);return it?<Pill key={uid} color={C.pur} bg={C.purM}>{it.navn} <span style={{opacity:.6,fontSize:10}}>({it.kategori})</span></Pill>:null;})}
+                      {lokPakker.map(pid=>{const pk=udstyrsPakker.find(x=>x.id===pid);return pk?<Pill key={pid} color={C.blue} bg={C.blueM}>{pk.navn}</Pill>:null;})}
+                    </div>
+                  </div>
+                )}
+
                 {/* Åbningstider tabel */}
                 <div style={{color:C.txt,fontWeight:700,marginBottom:10,fontSize:13}}>Åbningstider & udnyttelse pr. dag</div>
                 <table style={{width:"100%",borderCollapse:"collapse",marginBottom:20}}>
@@ -3377,7 +3451,6 @@ function LokalerView({patienter,lokTider,setLokTider,lokMeta={},setLokMeta,lokal
                         </td>
                       </tr>
                     ))}
-                      {/* Samlet-række */}
                       <tr style={{borderTop:`2px solid ${C.brd}`,background:C.s3}}>
                         <td style={{padding:"8px 8px",color:C.txt,fontSize:13,fontWeight:700}}>Samlet</td>
                         <td style={{padding:"8px 8px",color:C.txtM,fontSize:12}}>—</td>
@@ -3432,22 +3505,21 @@ function LokalerView({patienter,lokTider,setLokTider,lokMeta={},setLokMeta,lokal
         })()}
       </div>
 
-      {/* Modal: Rediger åbningstider */}
+      {/* Modal: Rediger lokale */}
       {editMetaLok&&(
-        <Modal title={`Lokaleinfo - ${editMetaLok}`} onClose={()=>setEditMetaLok(null)} w={520}>
+        <Modal title={`Lokaleinfo - ${editMetaLok}`} onClose={()=>setEditMetaLok(null)} w={560}>
           <LokMetaForm
               lok={editMetaLok}
               meta={lokMeta[editMetaLok]||{}}
               lokaler={lokaler}
               lokTider={lokTider}
               setLokTider={setLokTider}
+              udstyrsKat={udstyrsKat}
+              udstyrsPakker={udstyrsPakker}
               onSave={(gammelLok,m)=>{
-                // Håndter omdøbning
                 if(m.navn && m.navn!==gammelLok){
                   const nyLok=m.navn.trim();
-                  // Opdater lokaler-liste
                   saveLokaler(lokaler.map(l=>l===gammelLok?nyLok:l));
-                  // Flyt lokMeta nøgle + gem ny meta
                   setLokMeta(p=>{const{[gammelLok]:_,...rest}=p;return{...rest,[nyLok]:{...m,_editOpen:undefined}};});
                   if(valgt===gammelLok) setValgt(nyLok);
                 } else {
@@ -3470,6 +3542,273 @@ function LokalerView({patienter,lokTider,setLokTider,lokMeta={},setLokMeta,lokal
         </Modal>
       )}
       </div>
+      </>)}
+
+      {/* ══════ UDSTYR TAB ══════ */}
+      {topTab==="udstyr"&&(
+        <UdstyrsTabView udstyrsKat={udstyrsKat} saveUdstyrsKat={saveUdstyrsKat} udstyrsPakker={udstyrsPakker} saveUdstyrsPakker={saveUdstyrsPakker}/>
+      )}
+    </div>
+  );
+}
+
+// ── Udstyr-fanen: Kategorier, items og pakker ──────────────────
+function UdstyrsTabView({udstyrsKat,saveUdstyrsKat,udstyrsPakker,saveUdstyrsPakker}){
+  const [subTab,setSubTab]=useState("kategorier"); // "kategorier" | "pakker"
+  const [editKat,setEditKat]=useState(null);
+  const [editPakke,setEditPakke]=useState(null);
+  const [nyKatNavn,setNyKatNavn]=useState("");
+  const [nyPakkeNavn,setNyPakkeNavn]=useState("");
+
+  // Alle items fra alle kategorier
+  const alleItems=useMemo(()=>udstyrsKat.flatMap(k=>(k.items||[]).map(i=>({...i,katId:k.id,katNavn:k.navn}))),[udstyrsKat]);
+
+  // ── Kategori CRUD ──
+  const addKat=()=>{
+    const n=nyKatNavn.trim();if(!n)return;
+    saveUdstyrsKat([...udstyrsKat,{id:`ukat_${uid()}`,navn:n,items:[]}]);
+    setNyKatNavn("");
+  };
+  const delKat=(id)=>saveUdstyrsKat(udstyrsKat.filter(k=>k.id!==id));
+  const renameKat=(id,navn)=>saveUdstyrsKat(udstyrsKat.map(k=>k.id===id?{...k,navn}:k));
+
+  // ── Item CRUD ──
+  const addItem=(katId,navn)=>{
+    const n=navn.trim();if(!n)return;
+    saveUdstyrsKat(udstyrsKat.map(k=>k.id===katId?{...k,items:[...(k.items||[]),{id:`uitm_${uid()}`,navn:n}]}:k));
+  };
+  const delItem=(katId,itemId)=>saveUdstyrsKat(udstyrsKat.map(k=>k.id===katId?{...k,items:(k.items||[]).filter(i=>i.id!==itemId)}:k));
+  const renameItem=(katId,itemId,navn)=>saveUdstyrsKat(udstyrsKat.map(k=>k.id===katId?{...k,items:(k.items||[]).map(i=>i.id===itemId?{...i,navn}:i)}:k));
+
+  // ── Pakke CRUD ──
+  const addPakke=()=>{
+    const n=nyPakkeNavn.trim();if(!n)return;
+    saveUdstyrsPakker([...udstyrsPakker,{id:`upak_${uid()}`,navn:n,itemIds:[]}]);
+    setNyPakkeNavn("");
+  };
+  const delPakke=(id)=>saveUdstyrsPakker(udstyrsPakker.filter(p=>p.id!==id));
+  const renamePakke=(id,navn)=>saveUdstyrsPakker(udstyrsPakker.map(p=>p.id===id?{...p,navn}:p));
+  const togglePakkeItem=(pakkeId,itemId)=>{
+    saveUdstyrsPakker(udstyrsPakker.map(p=>{
+      if(p.id!==pakkeId)return p;
+      const has=p.itemIds.includes(itemId);
+      return{...p,itemIds:has?p.itemIds.filter(x=>x!==itemId):[...p.itemIds,itemId]};
+    }));
+  };
+
+  return(
+    <div style={{flex:1,overflow:"hidden",display:"flex",flexDirection:"column"}}>
+      {/* Sub-tabs */}
+      <div style={{display:"flex",gap:6,marginBottom:12}}>
+        {[{id:"kategorier",label:"Kategorier & Udstyr"},{id:"pakker",label:"Udstyrspakker"}].map(t=>(
+          <button key={t.id} onClick={()=>setSubTab(t.id)}
+            style={{padding:"7px 18px",borderRadius:8,border:`1px solid ${subTab===t.id?C.acc:C.brd}`,
+              background:subTab===t.id?C.accM:"transparent",color:subTab===t.id?C.acc:C.txtD,
+              fontSize:13,fontWeight:subTab===t.id?700:400,cursor:"pointer",fontFamily:"inherit"}}>
+            {t.label}
+          </button>
+        ))}
+      </div>
+
+      {/* ── KATEGORIER & UDSTYR ── */}
+      {subTab==="kategorier"&&(
+        <div style={{flex:1,overflowY:"auto"}}>
+          {/* Opret kategori */}
+          <div style={{display:"flex",gap:8,marginBottom:16}}>
+            <input value={nyKatNavn} onChange={e=>setNyKatNavn(e.target.value)}
+              onKeyDown={e=>{if(e.key==="Enter")addKat();}}
+              placeholder="Ny kategori-navn..."
+              style={{flex:1,padding:"9px 13px",borderRadius:8,border:`1px solid ${C.brd}`,background:C.s2,color:C.txt,fontSize:13,fontFamily:"inherit",outline:"none"}}/>
+            <Btn v="primary" onClick={addKat}>+ Kategori</Btn>
+          </div>
+
+          {udstyrsKat.length===0&&(
+            <div style={{color:C.txtM,fontSize:13,textAlign:"center",padding:40}}>
+              Ingen udstyrskategorier oprettet endnu. Opret en kategori for at tilfoeje udstyr.
+            </div>
+          )}
+
+          {udstyrsKat.map(kat=>(
+            <KategoriKort key={kat.id} kat={kat} onRename={(n)=>renameKat(kat.id,n)} onDelete={()=>delKat(kat.id)}
+              onAddItem={(n)=>addItem(kat.id,n)} onDelItem={(iid)=>delItem(kat.id,iid)} onRenameItem={(iid,n)=>renameItem(kat.id,iid,n)}/>
+          ))}
+        </div>
+      )}
+
+      {/* ── UDSTYRSPAKKER ── */}
+      {subTab==="pakker"&&(
+        <div style={{flex:1,overflowY:"auto"}}>
+          {/* Opret pakke */}
+          <div style={{display:"flex",gap:8,marginBottom:16}}>
+            <input value={nyPakkeNavn} onChange={e=>setNyPakkeNavn(e.target.value)}
+              onKeyDown={e=>{if(e.key==="Enter")addPakke();}}
+              placeholder="Ny pakke-navn..."
+              style={{flex:1,padding:"9px 13px",borderRadius:8,border:`1px solid ${C.brd}`,background:C.s2,color:C.txt,fontSize:13,fontFamily:"inherit",outline:"none"}}/>
+            <Btn v="primary" onClick={addPakke}>+ Pakke</Btn>
+          </div>
+
+          {alleItems.length===0&&(
+            <div style={{color:C.txtM,fontSize:13,textAlign:"center",padding:20,background:C.s2,borderRadius:10,border:`1px solid ${C.brd}`,marginBottom:16}}>
+              Opret kategorier og udstyr under "Kategorier & Udstyr" foerst, for at kunne samle dem i pakker.
+            </div>
+          )}
+
+          {udstyrsPakker.length===0&&alleItems.length>0&&(
+            <div style={{color:C.txtM,fontSize:13,textAlign:"center",padding:40}}>
+              Ingen udstyrspakker oprettet endnu.
+            </div>
+          )}
+
+          {udstyrsPakker.map(pakke=>(
+            <PakkeKort key={pakke.id} pakke={pakke} alleItems={alleItems} udstyrsKat={udstyrsKat}
+              onRename={(n)=>renamePakke(pakke.id,n)} onDelete={()=>delPakke(pakke.id)}
+              onToggleItem={(iid)=>togglePakkeItem(pakke.id,iid)}/>
+          ))}
+        </div>
+      )}
+    </div>
+  );
+}
+
+// ── Kategori-kort med items ──
+function KategoriKort({kat,onRename,onDelete,onAddItem,onDelItem,onRenameItem}){
+  const [editNavn,setEditNavn]=useState(false);
+  const [navn,setNavn]=useState(kat.navn);
+  const [nytItem,setNytItem]=useState("");
+  const [editItemId,setEditItemId]=useState(null);
+  const [editItemNavn,setEditItemNavn]=useState("");
+  const [confirmDel,setConfirmDel]=useState(false);
+
+  return(
+    <div style={{background:C.s2,border:`1px solid ${C.brd}`,borderRadius:12,marginBottom:12,overflow:"hidden"}}>
+      {/* Header */}
+      <div style={{padding:"10px 14px",borderBottom:`1px solid ${C.brd}`,display:"flex",justifyContent:"space-between",alignItems:"center",background:C.s3}}>
+        {editNavn?(
+          <div style={{display:"flex",gap:6,flex:1}}>
+            <input value={navn} onChange={e=>setNavn(e.target.value)} autoFocus
+              onKeyDown={e=>{if(e.key==="Enter"){onRename(navn);setEditNavn(false);}if(e.key==="Escape")setEditNavn(false);}}
+              style={{flex:1,padding:"4px 8px",borderRadius:6,border:`1px solid ${C.brd}`,background:C.s1,color:C.txt,fontSize:13,fontFamily:"inherit"}}/>
+            <Btn v="primary" small onClick={()=>{onRename(navn);setEditNavn(false);}}>Gem</Btn>
+          </div>
+        ):(
+          <div style={{display:"flex",alignItems:"center",gap:8}}>
+            <span style={{color:C.txt,fontWeight:700,fontSize:14}}>{kat.navn}</span>
+            <Pill color={C.txtM} bg={C.s2} sm>{(kat.items||[]).length} udstyr</Pill>
+          </div>
+        )}
+        {!editNavn&&(
+          <div style={{display:"flex",gap:4}}>
+            <Btn v="ghost" small onClick={()=>{setNavn(kat.navn);setEditNavn(true);}}>Omdoeb</Btn>
+            <Btn v="ghost" small onClick={()=>setConfirmDel(true)} style={{color:C.red}}>Slet</Btn>
+          </div>
+        )}
+      </div>
+
+      {/* Items */}
+      <div style={{padding:"10px 14px"}}>
+        <div style={{display:"flex",flexWrap:"wrap",gap:6,marginBottom:10}}>
+          {(kat.items||[]).map(item=>(
+            <div key={item.id} style={{display:"flex",alignItems:"center",gap:4,background:C.accM,border:`1px solid ${C.acc}44`,borderRadius:7,padding:"4px 10px"}}>
+              {editItemId===item.id?(
+                <input value={editItemNavn} onChange={e=>setEditItemNavn(e.target.value)} autoFocus
+                  onKeyDown={e=>{if(e.key==="Enter"){onRenameItem(item.id,editItemNavn);setEditItemId(null);}if(e.key==="Escape")setEditItemId(null);}}
+                  style={{width:100,padding:"2px 4px",borderRadius:4,border:`1px solid ${C.brd}`,background:C.s1,color:C.txt,fontSize:12,fontFamily:"inherit"}}/>
+              ):(
+                <span style={{color:C.acc,fontSize:12,fontWeight:600,cursor:"pointer"}}
+                  onClick={()=>{setEditItemId(item.id);setEditItemNavn(item.navn);}}>{item.navn}</span>
+              )}
+              <button onClick={()=>onDelItem(item.id)}
+                style={{background:"none",border:"none",color:C.red,cursor:"pointer",fontSize:14,padding:0,lineHeight:1,fontFamily:"inherit"}}>x</button>
+            </div>
+          ))}
+        </div>
+        {/* Tilfoej item */}
+        <div style={{display:"flex",gap:6}}>
+          <input value={nytItem} onChange={e=>setNytItem(e.target.value)}
+            onKeyDown={e=>{if(e.key==="Enter"){onAddItem(nytItem);setNytItem("");}}}
+            placeholder="Tilfoej udstyr..."
+            style={{flex:1,padding:"6px 10px",borderRadius:7,border:`1px solid ${C.brd}`,background:C.s3,color:C.txt,fontSize:12,fontFamily:"inherit",outline:"none"}}/>
+          <button onClick={()=>{onAddItem(nytItem);setNytItem("");}}
+            style={{padding:"6px 14px",borderRadius:7,border:"none",background:C.acc,color:"#fff",fontSize:12,fontWeight:600,cursor:"pointer",fontFamily:"inherit"}}>
+            + Tilfoej
+          </button>
+        </div>
+      </div>
+
+      {confirmDel&&<ConfirmDialog tekst={`Slet kategorien "${kat.navn}" og alt udstyr i den?`} onJa={()=>{onDelete();setConfirmDel(false);}} onNej={()=>setConfirmDel(false)}/>}
+    </div>
+  );
+}
+
+// ── Pakke-kort med item-toggle ──
+function PakkeKort({pakke,alleItems,udstyrsKat,onRename,onDelete,onToggleItem}){
+  const [editNavn,setEditNavn]=useState(false);
+  const [navn,setNavn]=useState(pakke.navn);
+  const [confirmDel,setConfirmDel]=useState(false);
+  const [expanded,setExpanded]=useState(false);
+
+  return(
+    <div style={{background:C.s2,border:`1px solid ${C.brd}`,borderRadius:12,marginBottom:12,overflow:"hidden"}}>
+      {/* Header */}
+      <div style={{padding:"10px 14px",borderBottom:`1px solid ${C.brd}`,display:"flex",justifyContent:"space-between",alignItems:"center",background:C.s3}}>
+        {editNavn?(
+          <div style={{display:"flex",gap:6,flex:1}}>
+            <input value={navn} onChange={e=>setNavn(e.target.value)} autoFocus
+              onKeyDown={e=>{if(e.key==="Enter"){onRename(navn);setEditNavn(false);}if(e.key==="Escape")setEditNavn(false);}}
+              style={{flex:1,padding:"4px 8px",borderRadius:6,border:`1px solid ${C.brd}`,background:C.s1,color:C.txt,fontSize:13,fontFamily:"inherit"}}/>
+            <Btn v="primary" small onClick={()=>{onRename(navn);setEditNavn(false);}}>Gem</Btn>
+          </div>
+        ):(
+          <div style={{display:"flex",alignItems:"center",gap:8,cursor:"pointer"}} onClick={()=>setExpanded(!expanded)}>
+            <span style={{color:C.txt,fontWeight:700,fontSize:14}}>{pakke.navn}</span>
+            <Pill color={C.blue} bg={C.blueM} sm>{pakke.itemIds.length} udstyr</Pill>
+            <span style={{color:C.txtM,fontSize:10}}>{expanded?"v":">"}</span>
+          </div>
+        )}
+        {!editNavn&&(
+          <div style={{display:"flex",gap:4}}>
+            <Btn v="ghost" small onClick={()=>{setNavn(pakke.navn);setEditNavn(true);}}>Omdoeb</Btn>
+            <Btn v="ghost" small onClick={()=>setConfirmDel(true)} style={{color:C.red}}>Slet</Btn>
+          </div>
+        )}
+      </div>
+
+      {/* Valgte items opsummering */}
+      {!expanded&&pakke.itemIds.length>0&&(
+        <div style={{padding:"8px 14px",display:"flex",flexWrap:"wrap",gap:4}}>
+          {pakke.itemIds.map(iid=>{const it=alleItems.find(x=>x.id===iid);return it?<Pill key={iid} color={C.acc} bg={C.accM} sm>{it.navn}</Pill>:null;})}
+        </div>
+      )}
+
+      {/* Expanded: toggle items by kategori */}
+      {expanded&&(
+        <div style={{padding:"10px 14px"}}>
+          {udstyrsKat.map(kat=>{
+            const items=kat.items||[];
+            if(items.length===0)return null;
+            return(
+              <div key={kat.id} style={{marginBottom:10}}>
+                <div style={{color:C.txtM,fontSize:11,fontWeight:600,marginBottom:5}}>{kat.navn}</div>
+                <div style={{display:"flex",flexWrap:"wrap",gap:5}}>
+                  {items.map(item=>{
+                    const aktiv=pakke.itemIds.includes(item.id);
+                    return(
+                      <button key={item.id} onClick={()=>onToggleItem(item.id)}
+                        style={{padding:"5px 12px",borderRadius:6,cursor:"pointer",fontFamily:"inherit",fontSize:12,
+                          fontWeight:aktiv?700:400,background:aktiv?C.accM:"transparent",
+                          color:aktiv?C.acc:C.txtM,border:`1px solid ${aktiv?C.acc:C.brd}`,transition:"all .12s"}}>
+                        {item.navn}
+                      </button>
+                    );
+                  })}
+                </div>
+              </div>
+            );
+          })}
+        </div>
+      )}
+
+      {confirmDel&&<ConfirmDialog tekst={`Slet pakken "${pakke.navn}"?`} onJa={()=>{onDelete();setConfirmDel(false);}} onNej={()=>setConfirmDel(false)}/>}
     </div>
   );
 }
@@ -3596,7 +3935,7 @@ function UdstyrPanel({udstyr=[], onChange}) {
 }
 
 
-function LokMetaForm({lok,meta,onSave,onClose,onDelete=null,onRename=null,lokaler=[],lokTider={},setLokTider=()=>{},indsatser=[],setIndsatser=()=>{}}){
+function LokMetaForm({lok,meta,onSave,onClose,onDelete=null,onRename=null,lokaler=[],lokTider={},setLokTider=()=>{},indsatser=[],setIndsatser=()=>{},udstyrsKat=[],udstyrsPakker=[]}){
   const [delLok,setDelLok]=useState(null);
   const [lmfTab,setLmfTab]=useState("info");
   const dagNavne=["Mandag","Tirsdag","Onsdag","Torsdag","Fredag","Lørdag","Søndag"];
@@ -3604,9 +3943,10 @@ function LokMetaForm({lok,meta,onSave,onClose,onDelete=null,onRename=null,lokale
     lokaleId:meta.lokaleId||"",
     kapacitet:meta.kapacitet||"",
     udstyr:(typeof meta.udstyr==="string"&&meta.udstyr?meta.udstyr.split(/[,،]+/).map(s=>s.trim()).filter(Boolean):Array.isArray(meta.udstyr)?meta.udstyr:[]),
+    udstyrIds:meta.udstyrIds||[],
+    udstyrsPakkeIds:meta.udstyrsPakkeIds||[],
     krPrTime:meta.krPrTime!==undefined?meta.krPrTime:null,
     navn:lok,
-    // adresse
     vej:(meta.adresse||{}).vej||"",
     husnr:(meta.adresse||{}).husnr||"",
     postnr:(meta.adresse||{}).postnr||"",
@@ -3691,11 +4031,58 @@ function LokMetaForm({lok,meta,onSave,onClose,onDelete=null,onRename=null,lokale
             </div>
           </div>
 
-          {/* Udstyr afsnit */}
+          {/* Udstyr afsnit — fra centralt katalog */}
           <div style={{background:C.s3,borderRadius:9,padding:"12px 14px",border:`1px solid ${C.brd}`}}>
-            <div style={{color:C.txtD,fontWeight:700,fontSize:12,marginBottom:10}}>Udstyr</div>
-            <UdstyrPanel udstyr={f.udstyr} onChange={v=>set("udstyr",v)}/>
+            <div style={{color:C.txtD,fontWeight:700,fontSize:12,marginBottom:10}}>Udstyr (fra katalog)</div>
+            {udstyrsKat.length===0?(
+              <div style={{color:C.txtM,fontSize:12}}>Opret udstyrskategorier under fanen "Udstyr" foerst.</div>
+            ):(
+              <div style={{display:"flex",flexDirection:"column",gap:8}}>
+                {udstyrsKat.map(kat=>{
+                  const items=kat.items||[];
+                  if(items.length===0)return null;
+                  return(
+                    <div key={kat.id}>
+                      <div style={{color:C.txtM,fontSize:11,fontWeight:600,marginBottom:4}}>{kat.navn}</div>
+                      <div style={{display:"flex",flexWrap:"wrap",gap:5}}>
+                        {items.map(item=>{
+                          const aktiv=f.udstyrIds.includes(item.id);
+                          return(
+                            <button key={item.id} onClick={()=>set("udstyrIds",aktiv?f.udstyrIds.filter(x=>x!==item.id):[...f.udstyrIds,item.id])}
+                              style={{padding:"4px 10px",borderRadius:6,cursor:"pointer",fontFamily:"inherit",fontSize:12,
+                                fontWeight:aktiv?700:400,background:aktiv?C.accM:"transparent",
+                                color:aktiv?C.acc:C.txtM,border:`1px solid ${aktiv?C.acc:C.brd}`,transition:"all .12s"}}>
+                              {item.navn}
+                            </button>
+                          );
+                        })}
+                      </div>
+                    </div>
+                  );
+                })}
+              </div>
+            )}
           </div>
+
+          {/* Udstyrspakker */}
+          {udstyrsPakker.length>0&&(
+            <div style={{background:C.s3,borderRadius:9,padding:"12px 14px",border:`1px solid ${C.brd}`}}>
+              <div style={{color:C.txtD,fontWeight:700,fontSize:12,marginBottom:10}}>Udstyrspakker</div>
+              <div style={{display:"flex",flexWrap:"wrap",gap:5}}>
+                {udstyrsPakker.map(pk=>{
+                  const aktiv=f.udstyrsPakkeIds.includes(pk.id);
+                  return(
+                    <button key={pk.id} onClick={()=>set("udstyrsPakkeIds",aktiv?f.udstyrsPakkeIds.filter(x=>x!==pk.id):[...f.udstyrsPakkeIds,pk.id])}
+                      style={{padding:"5px 12px",borderRadius:6,cursor:"pointer",fontFamily:"inherit",fontSize:12,
+                        fontWeight:aktiv?700:400,background:aktiv?C.blueM:"transparent",
+                        color:aktiv?C.blue:C.txtM,border:`1px solid ${aktiv?C.blue:C.brd}`,transition:"all .12s"}}>
+                      {pk.navn} <span style={{opacity:.5,fontSize:10}}>({pk.itemIds.length})</span>
+                    </button>
+                  );
+                })}
+              </div>
+            </div>
+          )}
         </div>
       )}
 
@@ -3712,7 +4099,7 @@ function LokMetaForm({lok,meta,onSave,onClose,onDelete=null,onRename=null,lokale
           <Btn v="ghost" onClick={onClose}>Annuller</Btn>
           <Btn v="primary" onClick={()=>onSave(lok,{
             lokaleId:f.lokaleId,kapacitet:f.kapacitet,
-            udstyr:f.udstyr,
+            udstyr:f.udstyr,udstyrIds:f.udstyrIds,udstyrsPakkeIds:f.udstyrsPakkeIds,
             adresse:{vej:f.vej,husnr:f.husnr,postnr:f.postnr,by:f.by},
             navn:f.navn,krPrTime:f.krPrTime!==null?Number(f.krPrTime):null,
           })}>Gem info</Btn>
@@ -3790,7 +4177,7 @@ function IndsatsForm({indsats, onSave, onClose, lokaler=ALLE_LOK}) {
 
       {/* Indsatsens overordnede navn */}
       <div style={{background:C.s3,borderRadius:10,padding:"12px 16px",border:`1px solid ${C.brd}`}}>
-        <FRow label="Indsatsens navn (gruppenavn)">
+        <FRow label="Opgavens navn (gruppenavn)">
           <Input value={f.navn} onChange={sNavn} placeholder="F.eks. ADOS 4"/>
         </FRow>
       </div>
@@ -3854,7 +4241,7 @@ function IndsatsForm({indsats, onSave, onClose, lokaler=ALLE_LOK}) {
                     style={{accentColor:C.grn,width:14,height:14}}/>
                   <span style={{color:el.patInv?C.grn:C.txtM,fontSize:12,fontWeight:el.patInv?600:400}}>
                     Patient til stede
-                    {erFørste&&<span style={{color:C.txtM,fontWeight:400,fontStyle:"italic",marginLeft:6,fontSize:11}}>NB: dette element sætter medarbejderen for hele indsatsen</span>}
+                    {erFørste&&<span style={{color:C.txtM,fontWeight:400,fontStyle:"italic",marginLeft:6,fontSize:11}}>NB: dette element sætter medarbejderen for hele opgaven</span>}
                   </span>
                 </label>
                 {el.patInv&&(
@@ -4038,7 +4425,7 @@ function IndsatsForm({indsats, onSave, onClose, lokaler=ALLE_LOK}) {
           if(!isValid){setGrpFejl("Angiv gruppenavn, og sørg for at alle elementer har navn og mindst ét lokale");return;}
           setGrpFejl("");
           onSave(f);
-        }}>Gem indsats</Btn>
+        }}>Gem opgave</Btn>
       </div>
     </div>
   );
@@ -4059,52 +4446,149 @@ function CertifikaterTab({certifikater=[],setCertifikater}){
   const setCerts=setCertifikater||(()=>{});
   const [nytNavn, setNytNavn] = React.useState("");
   const [nytBeskrivelse, setNytBeskrivelse] = React.useState("");
+  const [nytKategori, setNytKategori] = React.useState("");
   const [fejl, setFejl] = React.useState("");
-  const [redigerer, setRedigerer] = React.useState(null); // id
+  const [redigerer, setRedigerer] = React.useState(null);
+  const [nyKatNavn, setNyKatNavn] = React.useState("");
+  const [editKatId, setEditKatId] = React.useState(null);
+  const [editKatNavn, setEditKatNavn] = React.useState("");
+
+  // Kategorier: udled fra certifikater + evt. tomme kategorier gemt i _certKategorier
+  const [extraKats, setExtraKats] = React.useState(()=>{try{const s=localStorage.getItem("planmed_certKategorier");return s?JSON.parse(s):[];}catch(e){return[];}});
+  const saveExtraKats=(v)=>{setExtraKats(v);try{localStorage.setItem("planmed_certKategorier",JSON.stringify(v));}catch(e){}};
+
+  // Alle kategorier: fra certifikater + ekstra
+  const kategorier=React.useMemo(()=>{
+    const fraKat=[...new Set(certs.map(c=>c.kategori).filter(Boolean))];
+    const ekstra=extraKats.filter(k=>!fraKat.includes(k));
+    return[...fraKat,...ekstra].sort();
+  },[certs,extraKats]);
+
+  const addKat=()=>{
+    const n=nyKatNavn.trim();
+    if(!n||kategorier.includes(n))return;
+    saveExtraKats([...extraKats,n]);
+    setNyKatNavn("");
+  };
+  const delKat=(kat)=>{
+    // Fjern kategori fra alle certifikater i den + fjern fra ekstra
+    setCerts(p=>p.map(c=>c.kategori===kat?{...c,kategori:""}:c));
+    saveExtraKats(extraKats.filter(k=>k!==kat));
+  };
+  const renameKat=(oldName,newName)=>{
+    const n=newName.trim();if(!n||n===oldName)return;
+    setCerts(p=>p.map(c=>c.kategori===oldName?{...c,kategori:n}:c));
+    saveExtraKats(extraKats.map(k=>k===oldName?n:k));
+    if(nytKategori===oldName) setNytKategori(n);
+  };
 
   const tilfoej = () => {
-    if(!nytNavn.trim()){setFejl("Certifikatnavn er påkrævet");return;}
+    if(!nytNavn.trim()){setFejl("Certifikatnavn er paakraevet");return;}
     if(certs.find(cc=>cc.navn.toLowerCase()===nytNavn.trim().toLowerCase())){setFejl("Et certifikat med dette navn findes allerede");return;}
-    setCerts(prev=>[...prev,{id:"c"+Date.now(),navn:nytNavn.trim(),beskrivelse:nytBeskrivelse.trim()}]);
+    setCerts(prev=>[...prev,{id:"c"+Date.now(),navn:nytNavn.trim(),beskrivelse:nytBeskrivelse.trim(),kategori:nytKategori}]);
     setNytNavn(""); setNytBeskrivelse(""); setFejl("");
   };
 
   const slet = (id) => setCerts(prev=>prev.filter(cc=>cc.id!==id));
 
+  // Gruppér certifikater efter kategori
+  const udenKat=certs.filter(c=>!c.kategori);
+  const medKat=kategorier.map(k=>({kat:k,certs:certs.filter(c=>c.kategori===k)}));
+
+  const CertKort=({cc})=>(
+    <div key={cc.id} style={{background:C.s2,border:"1px solid "+C.brd,borderRadius:10,padding:"12px 16px",display:"flex",justifyContent:"space-between",alignItems:"flex-start",gap:12}}>
+      {redigerer===cc.id ? (
+        <div style={{flex:1,display:"flex",flexDirection:"column",gap:8}}>
+          <Input value={cc.navn} onChange={v=>setCerts(p=>p.map(x=>x.id===cc.id?{...x,navn:v}:x))} placeholder="Certifikatnavn"/>
+          <Input value={cc.beskrivelse||""} onChange={v=>setCerts(p=>p.map(x=>x.id===cc.id?{...x,beskrivelse:v}:x))} placeholder="Beskrivelse (valgfri)"/>
+          <Sel value={cc.kategori||""} onChange={v=>setCerts(p=>p.map(x=>x.id===cc.id?{...x,kategori:v}:x))}
+            options={[{v:"",l:"Ingen kategori"},...kategorier.map(k=>({v:k,l:k}))]}/>
+          <Btn v="primary" small onClick={()=>setRedigerer(null)}>Gem</Btn>
+        </div>
+      ) : (
+        <div style={{flex:1}}>
+          <div style={{color:C.txt,fontWeight:700,fontSize:14}}>{cc.navn}</div>
+          {cc.beskrivelse&&<div style={{color:C.txtM,fontSize:12,marginTop:2}}>{cc.beskrivelse}</div>}
+        </div>
+      )}
+      <div style={{display:"flex",gap:6,flexShrink:0}}>
+        <Btn v="outline" small onClick={()=>setRedigerer(redigerer===cc.id?null:cc.id)}>~ Rediger</Btn>
+        <Btn v="danger" small onClick={()=>slet(cc.id)}>X</Btn>
+      </div>
+    </div>
+  );
+
   return(
-    <div style={{display:"flex",flexDirection:"column",gap:16,maxWidth:640}}>
+    <div style={{display:"flex",flexDirection:"column",gap:16,maxWidth:700}}>
       <div style={{color:C.txtM,fontSize:12}}>
         Certifikater defineres her og kan tildeles medarbejdere under fanen <strong style={{color:C.txt}}>Medarbejdere</strong>.
+        Brug kategorier til at organisere certifikater.
       </div>
 
-      {/* Eksisterende certifikater */}
-      <div style={{display:"flex",flexDirection:"column",gap:8}}>
-        {certs.map(cc=>(
-          <div key={cc.id} style={{background:C.s2,border:"1px solid "+C.brd,borderRadius:10,padding:"12px 16px",display:"flex",justifyContent:"space-between",alignItems:"flex-start",gap:12}}>
-            {redigerer===cc.id ? (
-              <div style={{flex:1,display:"flex",flexDirection:"column",gap:8}}>
-                <Input value={cc.navn} onChange={v=>setCerts(p=>p.map(x=>x.id===cc.id?{...x,navn:v}:x))} placeholder="Certifikatnavn"/>
-                <Input value={cc.beskrivelse||""} onChange={v=>setCerts(p=>p.map(x=>x.id===cc.id?{...x,beskrivelse:v}:x))} placeholder="Beskrivelse (valgfri)"/>
-                <Btn v="primary" small onClick={()=>setRedigerer(null)}>Gem</Btn>
-              </div>
-            ) : (
-              <div style={{flex:1}}>
-                <div style={{color:C.txt,fontWeight:700,fontSize:14}}>{cc.navn}</div>
-                {cc.beskrivelse&&<div style={{color:C.txtM,fontSize:12,marginTop:2}}>{cc.beskrivelse}</div>}
-              </div>
-            )}
-            <div style={{display:"flex",gap:6,flexShrink:0}}>
-              <Btn v="outline" small onClick={()=>setRedigerer(redigerer===cc.id?null:cc.id)}>~ Rediger</Btn>
-              <Btn v="danger" small onClick={()=>slet(cc.id)}>X</Btn>
+      {/* Kategorier administration */}
+      <div style={{background:C.s2,border:"1px solid "+C.brd,borderRadius:12,padding:"14px 16px"}}>
+        <div style={{color:C.txt,fontWeight:700,fontSize:14,marginBottom:10}}>Kategorier</div>
+        <div style={{display:"flex",flexWrap:"wrap",gap:6,marginBottom:10}}>
+          {kategorier.map(kat=>(
+            <div key={kat} style={{display:"flex",alignItems:"center",gap:4,background:C.accM,border:`1px solid ${C.acc}44`,borderRadius:7,padding:"4px 10px"}}>
+              {editKatId===kat?(
+                <div style={{display:"flex",gap:4}}>
+                  <input value={editKatNavn} onChange={e=>setEditKatNavn(e.target.value)} autoFocus
+                    onKeyDown={e=>{if(e.key==="Enter"){renameKat(kat,editKatNavn);setEditKatId(null);}if(e.key==="Escape")setEditKatId(null);}}
+                    style={{width:100,padding:"2px 4px",borderRadius:4,border:`1px solid ${C.brd}`,background:C.s1,color:C.txt,fontSize:12,fontFamily:"inherit"}}/>
+                  <button onClick={()=>{renameKat(kat,editKatNavn);setEditKatId(null);}}
+                    style={{background:"none",border:"none",color:C.acc,cursor:"pointer",fontSize:11,fontFamily:"inherit"}}>OK</button>
+                </div>
+              ):(
+                <span style={{color:C.acc,fontSize:12,fontWeight:600,cursor:"pointer"}}
+                  onClick={()=>{setEditKatId(kat);setEditKatNavn(kat);}}>{kat}</span>
+              )}
+              <span style={{color:C.txtM,fontSize:10}}>({certs.filter(c=>c.kategori===kat).length})</span>
+              <button onClick={()=>delKat(kat)}
+                style={{background:"none",border:"none",color:C.red,cursor:"pointer",fontSize:14,padding:0,lineHeight:1,fontFamily:"inherit"}}>x</button>
             </div>
-          </div>
-        ))}
-        {certs.length===0&&(
-          <div style={{color:C.txtM,textAlign:"center",padding:32,border:"2px dashed "+C.brd,borderRadius:12}}>
-            Ingen certifikater oprettet endnu
-          </div>
-        )}
+          ))}
+          {kategorier.length===0&&<span style={{color:C.txtM,fontSize:12}}>Ingen kategorier oprettet</span>}
+        </div>
+        <div style={{display:"flex",gap:6}}>
+          <input value={nyKatNavn} onChange={e=>setNyKatNavn(e.target.value)}
+            onKeyDown={e=>{if(e.key==="Enter")addKat();}}
+            placeholder="Ny kategori..."
+            style={{flex:1,padding:"6px 10px",borderRadius:7,border:`1px solid ${C.brd}`,background:C.s3,color:C.txt,fontSize:12,fontFamily:"inherit",outline:"none"}}/>
+          <button onClick={addKat}
+            style={{padding:"6px 14px",borderRadius:7,border:"none",background:C.acc,color:"#fff",fontSize:12,fontWeight:600,cursor:"pointer",fontFamily:"inherit"}}>
+            + Kategori
+          </button>
+        </div>
       </div>
+
+      {/* Certifikater grupperet efter kategori */}
+      {medKat.map(({kat,certs:kCerts})=>kCerts.length>0&&(
+        <div key={kat}>
+          <div style={{color:C.acc,fontWeight:700,fontSize:13,marginBottom:6,display:"flex",alignItems:"center",gap:6}}>
+            {kat} <Pill color={C.txtM} bg={C.s3} sm>{kCerts.length}</Pill>
+          </div>
+          <div style={{display:"flex",flexDirection:"column",gap:8}}>
+            {kCerts.map(cc=><CertKort key={cc.id} cc={cc}/>)}
+          </div>
+        </div>
+      ))}
+
+      {/* Uden kategori */}
+      {udenKat.length>0&&(
+        <div>
+          {kategorier.length>0&&<div style={{color:C.txtM,fontWeight:700,fontSize:13,marginBottom:6}}>Uden kategori</div>}
+          <div style={{display:"flex",flexDirection:"column",gap:8}}>
+            {udenKat.map(cc=><CertKort key={cc.id} cc={cc}/>)}
+          </div>
+        </div>
+      )}
+
+      {certs.length===0&&(
+        <div style={{color:C.txtM,textAlign:"center",padding:32,border:"2px dashed "+C.brd,borderRadius:12}}>
+          Ingen certifikater oprettet endnu
+        </div>
+      )}
 
       {/* Opret nyt */}
       <div style={{background:C.s2,border:"1px solid "+C.brd,borderRadius:12,padding:"16px 18px"}}>
@@ -4115,8 +4599,14 @@ function CertifikaterTab({certifikater=[],setCertifikater}){
         <FRow label="Beskrivelse (valgfri)">
           <Input value={nytBeskrivelse} onChange={setNytBeskrivelse} placeholder="Kort beskrivelse af certifikatet"/>
         </FRow>
+        {kategorier.length>0&&(
+          <FRow label="Kategori">
+            <Sel value={nytKategori} onChange={setNytKategori}
+              options={[{v:"",l:"Ingen kategori"},...kategorier.map(k=>({v:k,l:k}))]}/>
+          </FRow>
+        )}
         {fejl&&<div style={{color:C.red,fontSize:12,marginBottom:8}}>{fejl}</div>}
-        <Btn v="primary" onClick={tilfoej}>Tilføj certifikat</Btn>
+        <Btn v="primary" onClick={tilfoej}>Tilfoej certifikat</Btn>
       </div>
     </div>
   );
@@ -4154,7 +4644,7 @@ function IndsatsPanelModal({indsatser=[], medarbejdere=[], setIndsatser, setMeda
   const masseTildel = (titel) => {
     const relevante = indsatser.filter(ind=>getTitler(ind).includes(titel));
     const kompNavne = relevante.map(ind=>ind.opgave||ind.navn||"").filter(Boolean);
-    if(kompNavne.length===0){setTildelStatus(`Ingen indsatser fundet for ${titel}`);return;}
+    if(kompNavne.length===0){setTildelStatus(`Ingen opgaver fundet for ${titel}`);return;}
     let antal=0;
     setMedarbejdere(prev=>prev.map(m=>{
       if(m.titel!==titel) return m;
@@ -4162,26 +4652,26 @@ function IndsatsPanelModal({indsatser=[], medarbejdere=[], setIndsatser, setMeda
       if(nye.length!==(m.kompetencer||[]).length) antal++;
       return {...m,kompetencer:nye};
     }));
-    setTildelStatus(`OK ${kompNavne.length} indsatser tildelt alle ${titel.toLowerCase()}r (${medarbejdere.filter(m=>m.titel===titel).length} medarbejdere opdateret)`);
+    setTildelStatus(`OK ${kompNavne.length} opgaver tildelt alle ${titel.toLowerCase()}r (${medarbejdere.filter(m=>m.titel===titel).length} medarbejdere opdateret)`);
     setTimeout(()=>setTildelStatus(null),4000);
   };
 
   return(
-    <Modal title="Indsatsoversigt" onClose={onClose} w={760}>
+    <Modal title="Opgaveoversigt" onClose={onClose} w={760}>
       <div style={{display:"flex",flexDirection:"column",gap:14}}>
 
         {/* Søg + tilføj */}
         <div style={{display:"flex",gap:8}}>
-          <input value={søg} onChange={e=>setSøg(e.target.value)} placeholder="Søg indsats eller stilling..."
+          <input value={søg} onChange={e=>setSøg(e.target.value)} placeholder="Søg opgave eller stilling..."
             style={{flex:1,padding:"8px 12px",borderRadius:8,border:`1px solid ${C.brd}`,
               background:C.s3,color:C.txt,fontSize:13,fontFamily:"inherit",outline:"none"}}/>
-          <Btn v="primary" onClick={onNy}>+ Ny indsats</Btn>
+          <Btn v="primary" onClick={onNy}>+ Ny opgave</Btn>
         </div>
 
         {/* Masse-tildeling sektion */}
         <div style={{background:C.s3,borderRadius:10,padding:"12px 14px",border:`1px solid ${C.brd}`}}>
           <div style={{fontSize:12,fontWeight:600,color:C.txt,marginBottom:8}}>
-            Tildel alle indsatser til stilling
+            Tildel alle opgaver til stilling
           </div>
           <div style={{display:"flex",gap:8,flexWrap:"wrap",alignItems:"center"}}>
             {titler.map(t=>{
@@ -4194,7 +4684,7 @@ function IndsatsPanelModal({indsatser=[], medarbejdere=[], setIndsatser, setMeda
                     fontSize:12,fontWeight:600,cursor:"pointer",fontFamily:"inherit",
                     display:"flex",alignItems:"center",gap:6}}>
                   <span>{t}</span>
-                  <span style={{opacity:0.7,fontSize:11}}>{antal} indsatser · {medAntal} med.</span>
+                  <span style={{opacity:0.7,fontSize:11}}>{antal} opgaver · {medAntal} med.</span>
                 </button>
               );
             })}
@@ -4208,7 +4698,7 @@ function IndsatsPanelModal({indsatser=[], medarbejdere=[], setIndsatser, setMeda
         <div style={{display:"flex",flexDirection:"column",gap:4,maxHeight:420,overflowY:"auto"}}>
           {filtreret.length===0&&(
             <div style={{color:C.txtM,fontSize:13,textAlign:"center",padding:32}}>
-              Ingen indsatser matcher søgningen
+              Ingen opgaver matcher søgningen
             </div>
           )}
           {filtreret.map(ind=>{
@@ -4251,7 +4741,7 @@ function IndsatsPanelModal({indsatser=[], medarbejdere=[], setIndsatser, setMeda
         <div style={{display:"flex",justifyContent:"space-between",alignItems:"center",
           borderTop:`1px solid ${C.brd}`,paddingTop:10}}>
           <span style={{fontSize:12,color:C.txtM}}>
-            {filtreret.length} af {indsatser.length} indsatser
+            {filtreret.length} af {indsatser.length} opgaver
           </span>
           <Btn v="ghost" onClick={onClose}>Luk</Btn>
         </div>
@@ -4289,29 +4779,59 @@ function ForlobView({forlob,setForlob,medarbejdere,setMedarbejdere,indsatser,set
   // Filtrer forløb der har mindst ét element ud
 const ids=Object.keys(forlob).filter(k=>(forlob[k]||[]).length>0).sort((a,b)=>Number(a)-Number(b));
 
+  // ── Synkroniser forløbsændringer til patienter ──
+  // Gen-bygger opgaver fra forløbet og bevarer status/dato fra eksisterende
+  const syncForlobTilPatienter = (forlobNr, nyeForlobOpgaver) => {
+    setPatienter(ps=>ps.map(p=>{
+      if(String(p.forlobNr)!==String(forlobNr)) return p;
+      // Byg nye opgaver fra det opdaterede forløb
+      const nyBuild = buildPatient({...p, forlobNr}, {[forlobNr]:nyeForlobOpgaver}).opgaver;
+      // Bevar planlagt-status fra eksisterende opgaver (match på opgavenavn)
+      const merged = nyBuild.map(ny=>{
+        const eksist = p.opgaver.find(e=>e.opgave===ny.opgave);
+        if(eksist) {
+          // Bevar dato/tid/medarbejder/status, men tag ny sekvens
+          return {...eksist, sekvens:ny.sekvens, indsatsGruppe:ny.indsatsGruppe};
+        }
+        return ny;
+      });
+      // Tilføj manuelt tilføjede opgaver (sekvens >= 999)
+      const manuelle = p.opgaver.filter(o=>o.sekvens>=999);
+      return {...p, opgaver:[...merged,...manuelle]};
+    }));
+  };
+
   const saveOpg=(idx,data)=>{
+    let nyeOpgaver;
     setForlob(prev=>{
-      const opgaver=[...(prev[selId]||[])];
-      if(idx==="ny") opgaver.push({...data,s:opgaver.length+1});
-      else opgaver[idx]={...data,s:idx+1};
-      return {...prev,[selId]:opgaver};
+      nyeOpgaver=[...(prev[selId]||[])];
+      if(idx==="ny") nyeOpgaver.push({...data,s:nyeOpgaver.length+1});
+      else nyeOpgaver[idx]={...data,s:idx+1};
+      return {...prev,[selId]:nyeOpgaver};
     });
     setEditOpg(null);
+    // Sync sekvens til patienter
+    setTimeout(()=>{if(nyeOpgaver) syncForlobTilPatienter(selId, nyeOpgaver);},0);
   };
   const deleteOpg=(idx)=>{
+    let nyeOpgaver;
     setForlob(prev=>{
-      const opgaver=(prev[selId]||[]).filter((_,i)=>i!==idx).map((o,i)=>({...o,s:i+1}));
-      return {...prev,[selId]:opgaver};
+      nyeOpgaver=(prev[selId]||[]).filter((_,i)=>i!==idx).map((o,i)=>({...o,s:i+1}));
+      return {...prev,[selId]:nyeOpgaver};
     });
+    setTimeout(()=>{if(nyeOpgaver) syncForlobTilPatienter(selId, nyeOpgaver);},0);
   };
   const moveOpg=(idx,dir)=>{
+    let nyeOpgaver;
     setForlob(prev=>{
-      const opgaver=[...(prev[selId]||[])];
+      nyeOpgaver=[...(prev[selId]||[])];
       const ni=idx+dir;
-      if(ni<0||ni>=opgaver.length) return prev;
-      [opgaver[idx],opgaver[ni]]=[opgaver[ni],opgaver[idx]];
-      return {...prev,[selId]:opgaver.map((o,i)=>({...o,s:i+1}))};
+      if(ni<0||ni>=nyeOpgaver.length) return prev;
+      [nyeOpgaver[idx],nyeOpgaver[ni]]=[nyeOpgaver[ni],nyeOpgaver[idx]];
+      nyeOpgaver=nyeOpgaver.map((o,i)=>({...o,s:i+1}));
+      return {...prev,[selId]:nyeOpgaver};
     });
+    setTimeout(()=>{if(nyeOpgaver) syncForlobTilPatienter(selId, nyeOpgaver);},0);
   };
   const opretForlob=()=>{
     const nk=String(Math.max(0,...Object.keys(forlob).map(Number))+1);
@@ -4346,14 +4866,14 @@ const ids=Object.keys(forlob).filter(k=>(forlob[k]||[]).length>0).sort((a,b)=>Nu
 
   // -- Tab bar --
   const TABS = [
-    {id:"indsatser",   label:" Indsatser"},
+    {id:"indsatser",   label:" Opgaver"},
     {id:"forlob",      label:" Forløb"},
     {id:"certifikater",label:"* Certifikater"},
   ];
 
   return(
     <div style={{display:"flex",flexDirection:"column",height:"calc(100vh - 140px)",gap:0}}>
-      <ViewHeader titel="Opgaver" undertitel="Forløbstyper og indsatser"/>
+      <ViewHeader titel="Opgaver" undertitel="Forløbstyper og opgaveskabeloner"/>
       <div style={{display:"flex",gap:6,marginBottom:12}}>
         {TABS.map(t=>(
           <button key={t.id} onClick={()=>setTab(t.id)}
@@ -4368,14 +4888,14 @@ const ids=Object.keys(forlob).filter(k=>(forlob[k]||[]).length>0).sort((a,b)=>Nu
         <div style={{flex:1,overflowY:"auto",display:"flex",flexDirection:"column",gap:10}}>
           <div style={{display:"flex",justifyContent:"flex-end"}}>
             <div style={{display:"flex",gap:6}}>
-              <Btn v="outline" onClick={()=>setVisIndsatsPanel(true)}>Indsatsoversigt</Btn>
-              <Btn v="primary" onClick={()=>setEditIns("ny")}>+ Ny indsats</Btn>
+              <Btn v="outline" onClick={()=>setVisIndsatsPanel(true)}>Opgaveoversigt</Btn>
+              <Btn v="primary" onClick={()=>setEditIns("ny")}>+ Ny opgave</Btn>
             </div>
           </div>
 
           {indsatser.length===0&&(
             <div style={{color:C.txtM,textAlign:"center",padding:40,border:`2px dashed ${C.brd}`,borderRadius:12}}>
-              Ingen indsatser endnu - klik + Ny indsats
+              Ingen opgaver endnu - klik + Ny opgave
             </div>
           )}
 
@@ -4513,12 +5033,12 @@ const ids=Object.keys(forlob).filter(k=>(forlob[k]||[]).length>0).sort((a,b)=>Nu
       {/* -- Modals: Indsats -- */}
       {visIndsatsPanel&&<IndsatsPanelModal indsatser={indsatser} medarbejdere={medarbejdere} setIndsatser={setIndsatser} setMedarbejdere={setMedarbejdere} onClose={()=>setVisIndsatsPanel(false)} onNy={()=>{setVisIndsatsPanel(false);setEditIns("ny");}}/>}
       {editIns&&(
-        <Modal title={editIns==="ny"?"Ny indsats":`Rediger: ${editIns.navn||"indsats"}`} onClose={()=>setEditIns(null)} w={680}>
+        <Modal title={editIns==="ny"?"Ny opgave":`Rediger: ${editIns.navn||"opgave"}`} onClose={()=>setEditIns(null)} w={680}>
           <IndsatsForm indsats={editIns==="ny"?null:editIns} onSave={saveIns} onClose={()=>setEditIns(null)} lokaler={lokaler}/>
         </Modal>
       )}
       {delIns&&(
-        <Modal title="Slet indsats?" onClose={()=>setDelIns(null)} w={400}>
+        <Modal title="Slet opgave?" onClose={()=>setDelIns(null)} w={400}>
           <div style={{color:C.txtD,marginBottom:16,lineHeight:1.6}}>
             Slet <strong style={{color:C.txt}}>{delIns.navn}</strong> med {delIns.elementer?.length||0} elementer?
           </div>
@@ -4638,27 +5158,12 @@ function StrenghedToggle({value, onChange}) {
   );
 }
 
-function IndstillingerView({config,setConfig,setPatienter,setMedarbejdere,setForlob,forlob,setLokTider,lokMeta={},setLokMeta,patienter=[],lokaler=[],saveLokaler=()=>{},medarbejdere=[],setIndsatser=()=>{},indsatser=[]}){
+// ── Planlægningsindstillinger (genbruges i Planlæg-fanen) ──
+function PlanlaegIndstillingerPanel({config,setConfig,setPatienter,setMedarbejdere,setForlob,forlob,setLokTider,lokMeta={},setLokMeta,patienter=[],lokaler=[],saveLokaler=()=>{},medarbejdere=[],setIndsatser=()=>{},indsatser=[]}){
   const [c,setC]=useState({...config,serverModel:config.serverModel||"planmed",selfhostedUrl:config.selfhostedUrl||""});
   const set=(k,v)=>setC(p=>({...p,[k]:v}));
   const [gemtIndstillinger,setGemtIndstillinger]=useState(false);
 
-  const [confirmReset,setConfirmReset]=useState(null);
-  const resetAlt=()=>{
-    setConfirmReset({tekst:"Nulstil alle patienter og opgaver til udgangspunktet?",onJa:()=>{
-    setPatienter(INIT_PATIENTER_RAW.map(r=>buildPatient(r)));
-    setMedarbejdere([...BASE_MED]);
-    setConfirmReset(null);}});
-  };
-  const resetOpgaver=()=>{
-    setConfirmReset({tekst:"Nulstil alle planlagte opgaver (behold patienter)?",onJa:()=>{
-    setPatienter(ps=>ps.map(p=>({...p,opgaver:p.opgaver.map(o=>o.låst?o:{...o,status:"afventer",dato:null,startKl:null,slutKl:null,lokale:null,medarbejder:null})})));
-    setConfirmReset(null);}});
-  };
-
-  const [indTab,setIndTab]=useState("planlaeg");
-
-  // Hjælpefunktion: render en konfigurationsregel med blød/hård toggle
   const KriterieRad = ({label, hint, children, strenghedKey}) => (
     <div style={{background:C.s3,borderRadius:9,padding:"12px 14px",marginBottom:10,border:`1px solid ${C.brd}`}}>
       <div style={{color:C.txt,fontSize:13,fontWeight:600,marginBottom:4}}>{label}</div>
@@ -4677,30 +5182,7 @@ function IndstillingerView({config,setConfig,setPatienter,setMedarbejdere,setFor
 
   return(
     <div style={{display:"flex",flexDirection:"column",gap:16,maxWidth:980}}>
-      <ViewHeader titel="Indstillinger" undertitel=""/>
-
-      {/* TAB-VÆLGER */}
-      <div style={{display:"flex",gap:0,borderBottom:"2px solid "+C.brd}}>
-        {[
-          {id:"planlaeg",label:"Planlægningsindstillinger",col:C.acc},
-          {id:"it",      label:"IT-indstillinger",         col:C.blue},
-          {id:"hjaelp",  label:"Hjælp",                   col:C.grn},
-        ].map(t=>(
-          <button key={t.id} onClick={()=>setIndTab(t.id)}
-            style={{padding:"10px 24px",border:"none",
-              borderBottom:indTab===t.id?"3px solid "+t.col:"3px solid transparent",
-              background:"transparent",color:indTab===t.id?t.col:C.txtD,
-              fontWeight:indTab===t.id?700:400,fontSize:14,cursor:"pointer",
-              fontFamily:"inherit",marginBottom:-2,transition:"color .15s"}}>
-            {t.label}
-          </button>
-        ))}
-      </div>
-
-      {indTab==="planlaeg"&&(
-        <div style={{display:"flex",flexDirection:"column",gap:16}}>
-          <div style={{display:"grid",gridTemplateColumns:"1fr 1fr",gap:16}}>
-
+      <div style={{display:"grid",gridTemplateColumns:"1fr 1fr",gap:16}}>
         {/* -- Tekniske parametre -- */}
         <div style={{background:C.s2,border:`1px solid ${C.brd}`,borderRadius:12,padding:"18px 20px"}}>
           <div style={{color:C.txt,fontWeight:700,fontSize:15,marginBottom:14}}>@ Tekniske parametre</div>
@@ -4749,12 +5231,11 @@ function IndstillingerView({config,setConfig,setPatienter,setMedarbejdere,setFor
             <div style={{color:C.txt,fontSize:13,fontWeight:600,marginBottom:6}}>Deadline-beregning</div>
             <div style={{color:C.txtM,fontSize:11,marginBottom:10}}>Vælg hvorfra "antal dage til deadline" regnes - kun én kan være aktiv ad gangen</div>
             <div style={{display:"flex",flexDirection:"column",gap:8}}>
-              {/* Mulighed 1: Fra henvisningsdato */}
               <label style={{display:"flex",alignItems:"center",gap:10,cursor:"pointer",
                 background:c.deadlineMode==="henvDato"?C.accM:"transparent",
                 border:`1px solid ${c.deadlineMode==="henvDato"?C.acc:C.brd}`,
                 borderRadius:8,padding:"10px 14px",transition:"all .15s"}}>
-                <input type="radio" name="deadlineMode" checked={c.deadlineMode==="henvDato"}
+                <input type="radio" name="deadlineModePI" checked={c.deadlineMode==="henvDato"}
                   onChange={()=>set("deadlineMode","henvDato")}
                   style={{accentColor:C.acc}}/>
                 <div>
@@ -4762,16 +5243,15 @@ function IndstillingerView({config,setConfig,setPatienter,setMedarbejdere,setFor
                   <div style={{color:C.txtM,fontSize:11}}>Deadline = patientens henvisningsdato + antal dage</div>
                 </div>
               </label>
-              {/* Mulighed 2: Fra given indsatsdato */}
               <label style={{display:"flex",alignItems:"center",gap:10,cursor:"pointer",
                 background:c.deadlineMode==="indsatsDato"?C.accM:"transparent",
                 border:`1px solid ${c.deadlineMode==="indsatsDato"?C.acc:C.brd}`,
                 borderRadius:8,padding:"10px 14px",transition:"all .15s"}}>
-                <input type="radio" name="deadlineMode" checked={c.deadlineMode==="indsatsDato"}
+                <input type="radio" name="deadlineModePI" checked={c.deadlineMode==="indsatsDato"}
                   onChange={()=>set("deadlineMode","indsatsDato")}
                   style={{accentColor:C.acc}}/>
                 <div style={{flex:1}}>
-                  <div style={{color:c.deadlineMode==="indsatsDato"?C.acc:C.txt,fontWeight:600,fontSize:12}}> Fra given indsatsdato</div>
+                  <div style={{color:c.deadlineMode==="indsatsDato"?C.acc:C.txt,fontWeight:600,fontSize:12}}> Fra given opgavedato</div>
                   <div style={{color:C.txtM,fontSize:11,marginBottom:c.deadlineMode==="indsatsDato"?6:0}}>Deadline = valgt dato + antal dage</div>
                   {c.deadlineMode==="indsatsDato"&&(
                     <input type="date" value={c.indsatsDato||today()}
@@ -4802,7 +5282,6 @@ function IndstillingerView({config,setConfig,setPatienter,setMedarbejdere,setFor
       <div style={{background:C.s2,border:`1px solid ${C.brd}`,borderRadius:12,padding:"18px 20px"}}>
         <div style={{color:C.txt,fontWeight:700,fontSize:15,marginBottom:14}}># Kapacitetsregler</div>
         <div style={{display:"grid",gridTemplateColumns:"1fr 1fr",gap:12}}>
-
           <KriterieRad
             label="Max patientbesøg per medarbejder per uge"
             hint="Separat fra timerloftet. Tæller kun opgaver hvor patient er til stede."
@@ -4812,7 +5291,6 @@ function IndstillingerView({config,setConfig,setPatienter,setMedarbejdere,setFor
               <span style={{color:C.txtM,fontSize:12}}>besøg/uge</span>
             </div>
           </KriterieRad>
-
           <KriterieRad
             label="Max antal forskellige medarbejdere per patient"
             hint="0 = ingen grænse. Blød: foretrækker kendte. Hård: afviser nye når grænsen er nået."
@@ -4822,7 +5300,6 @@ function IndstillingerView({config,setConfig,setPatienter,setMedarbejdere,setFor
               <span style={{color:C.txtM,fontSize:12}}>{c.maxMedPerPatient===0?"(ingen grænse)":"medarbejdere"}</span>
             </div>
           </KriterieRad>
-
         </div>
       </div>
 
@@ -4847,30 +5324,60 @@ function IndstillingerView({config,setConfig,setPatienter,setMedarbejdere,setFor
         </KriterieRad>
       </div>
 
-
       {/* -- EXCEL IMPORT -- */}
       <div style={{background:C.s2,border:`1px solid ${C.brd}`,borderRadius:12,padding:"18px 20px"}}>
         <div style={{color:C.txt,fontWeight:700,fontSize:15,marginBottom:6}}> Importer fra Excel</div>
-        <div style={{color:C.txtM,fontSize:12,marginBottom:16}}>Upload en Excel-fil (.xlsx) med patienter, medarbejdere eller indsatser. Download skabelonen for korrekt kolonneformat.</div>
+        <div style={{color:C.txtM,fontSize:12,marginBottom:16}}>Upload en Excel-fil (.xlsx) med patienter, medarbejdere eller opgaver. Download skabelonen for korrekt kolonneformat.</div>
         <ExcelImportPanel setPatienter={setPatienter} setMedarbejdere={setMedarbejdere} setForlob={setForlob} forlob={forlob} setLokTider={setLokTider} setLokMeta={setLokMeta} patienter={patienter} medarbejdere={medarbejdere} setIndsatser={setIndsatser} saveLokaler={saveLokaler} lokaler={lokaler}/>
       </div>
 
-      {/* Gem planlaegningsindstillinger */}
-            {/*  Lokale-administration → se Lokaler-fanen  */}
-      <div style={{background:C.s2,border:`1px solid ${C.acc}22`,borderRadius:12,padding:"14px 20px",display:"flex",alignItems:"center",gap:12}}>
-        <span style={{fontSize:20}}></span>
-        <div>
-          <div style={{color:C.txt,fontWeight:600,fontSize:13}}>Lokaler administreres under fanen "Lokaler"</div>
-          <div style={{color:C.txtM,fontSize:12,marginTop:2}}>Opret, omdøb, angiv adresser og slet lokaler direkte fra Lokaler-visningen i menuen til venstre.</div>
-        </div>
-      </div>
-
-            <div style={{display:"flex",justifyContent:"flex-end",gap:8,paddingTop:4}}>
+      <div style={{display:"flex",justifyContent:"flex-end",gap:8,paddingTop:4}}>
         <Btn v="primary" onClick={()=>{setConfig(c);setGemtIndstillinger(true);setTimeout(()=>setGemtIndstillinger(false),2500);}}>Gem indstillinger</Btn>
         {gemtIndstillinger&&<span style={{color:C.acc,fontSize:13,fontWeight:600}}>Indstillinger gemt</span>}
       </div>
+    </div>
+  );
+}
+
+function IndstillingerView({config,setConfig,setPatienter,setMedarbejdere,setForlob,forlob,setLokTider,lokMeta={},setLokMeta,patienter=[],lokaler=[],saveLokaler=()=>{},medarbejdere=[],setIndsatser=()=>{},indsatser=[]}){
+  const [c,setC]=useState({...config,serverModel:config.serverModel||"planmed",selfhostedUrl:config.selfhostedUrl||""});
+  const set=(k,v)=>setC(p=>({...p,[k]:v}));
+
+  const [confirmReset,setConfirmReset]=useState(null);
+  const resetAlt=()=>{
+    setConfirmReset({tekst:"Nulstil alle patienter og opgaver til udgangspunktet?",onJa:()=>{
+    setPatienter(INIT_PATIENTER_RAW.map(r=>buildPatient(r)));
+    setMedarbejdere([...BASE_MED]);
+    setConfirmReset(null);}});
+  };
+  const resetOpgaver=()=>{
+    setConfirmReset({tekst:"Nulstil alle planlagte opgaver (behold patienter)?",onJa:()=>{
+    setPatienter(ps=>ps.map(p=>({...p,opgaver:p.opgaver.map(o=>o.låst?o:{...o,status:"afventer",dato:null,startKl:null,slutKl:null,lokale:null,medarbejder:null})})));
+    setConfirmReset(null);}});
+  };
+
+  const [indTab,setIndTab]=useState("it");
+
+  return(
+    <div style={{display:"flex",flexDirection:"column",gap:16,maxWidth:980}}>
+      <ViewHeader titel="Indstillinger" undertitel=""/>
+
+      {/* TAB-VÆLGER */}
+      <div style={{display:"flex",gap:0,borderBottom:"2px solid "+C.brd}}>
+        {[
+          {id:"it",      label:"IT-indstillinger",         col:C.blue},
+          {id:"hjaelp",  label:"Hjælp",                   col:C.grn},
+        ].map(t=>(
+          <button key={t.id} onClick={()=>setIndTab(t.id)}
+            style={{padding:"10px 24px",border:"none",
+              borderBottom:indTab===t.id?"3px solid "+t.col:"3px solid transparent",
+              background:"transparent",color:indTab===t.id?t.col:C.txtD,
+              fontWeight:indTab===t.id?700:400,fontSize:14,cursor:"pointer",
+              fontFamily:"inherit",marginBottom:-2,transition:"color .15s"}}>
+            {t.label}
+          </button>
+        ))}
       </div>
-      )}
 
       {indTab==="it"&&(
         <div style={{display:"flex",flexDirection:"column",gap:16}}>
@@ -5006,7 +5513,7 @@ function HjaelpTab(){
         },
         {
           titel:"Navigation",
-          tekst:`Menuen til venstre har følgende faner:\n\n Dashboard — Systemoverblik med KPI'er og advarsler\n Patienter — Patientliste og opgaveoversigt\n Kalender — Ugeoversigt over planlagte opgaver\n Medarbejdere — Medarbejderliste og kapacitet\n Lokaler — Lokaler, åbningstider og adresser\n Opgaver — Forløb og indsatsskabeloner\n Planlæg — Automatisk planlægning med motor\n Indstillinger — Systemkonfiguration og hjælp\n Admin — Godkendelser, brugere og afdelinger\n Ejer — Kun for ejerkonto`
+          tekst:`Menuen til venstre har følgende faner:\n\n Dashboard — Systemoverblik med KPI'er og advarsler\n Patienter — Patientliste og opgaveoversigt\n Kalender — Ugeoversigt over planlagte opgaver\n Medarbejdere — Medarbejderliste og kapacitet\n Lokaler — Lokaler, åbningstider og adresser\n Opgaver — Forløb og opgaveskabeloner\n Planlæg — Automatisk planlægning med motor\n Indstillinger — Systemkonfiguration og hjælp\n Admin — Godkendelser, brugere og afdelinger\n Ejer — Kun for ejerkonto`
         }
       ]
     },
@@ -5022,11 +5529,11 @@ function HjaelpTab(){
         },
         {
           titel:"Patientdetaljer og opgaver",
-          tekst:`Klik på en patient i listen for at åbne detaljepanelet med 4 faneblade:\n\n Overblik — Status, afdeling, ansvarlig, tidsvindue\n Indsatser — Alle planlagte og afsluttede opgaver\n Forældre/Værge — Kontaktoplysninger\n Adresser — Patientens tilknyttede adresser\n\nFra indsatser-fanen kan du:\n• Tilføje nye opgaver manuelt\n• Markere opgaver som løste\n• Redigere eller slette opgaver\n• Se advarsel hvis lokale mangler adresse`
+          tekst:`Klik på en patient i listen for at åbne detaljepanelet med 4 faneblade:\n\n Overblik — Status, afdeling, ansvarlig, tidsvindue\n Opgaver — Alle planlagte og afsluttede opgaver\n Forældre/Værge — Kontaktoplysninger\n Adresser — Patientens tilknyttede adresser\n\nFra opgaver-fanen kan du:\n• Tilføje nye opgaver manuelt\n• Markere opgaver som løste\n• Redigere eller slette opgaver\n• Se advarsel hvis lokale mangler adresse`
         },
         {
           titel:"Tildel forløb til patient",
-          tekst:`En patient kan tilknyttes et forløb fra ForløbView (Opgaver-fanen).\n\nI patientkortet klikker du "Tildel forløb" og vælger det relevante forløb. Forløbets indsatser kopieres som opgaveskabeloner til patienten.\n\nForløb kan have en deadline (max dage fra henvisning til afslutning) der konfigureres i Indstillinger.`
+          tekst:`En patient kan tilknyttes et forløb fra ForløbView (Opgaver-fanen).\n\nI patientkortet klikker du "Tildel forløb" og vælger det relevante forløb. Forløbets opgaver kopieres som opgaveskabeloner til patienten.\n\nForløb kan have en deadline (max dage fra henvisning til afslutning) der konfigureres i Indstillinger.`
         },
         {
           titel:"Slette en patient",
@@ -5062,7 +5569,7 @@ function HjaelpTab(){
         },
         {
           titel:"Kompetencer og certifikater",
-          tekst:`Kompetencer tilknyttes medarbejdere som fritekst-tags.\nIndsatselementer kan kræve et specifikt certifikat — planlægningsmotoren matcher automatisk.\n\nCertifikat-skabeloner administreres under Opgaver → Certifikater-fanen.\n\nEksempel: Indsatsen "Psykologsamtale" kræver certifikatet "Autoriseret psykolog" — kun medarbejdere med dette kan tildeles opgaven.`
+          tekst:`Kompetencer tilknyttes medarbejdere som fritekst-tags.\nOpgaveelementer kan kræve et specifikt certifikat — planlægningsmotoren matcher automatisk.\n\nCertifikat-skabeloner administreres under Opgaver → Certifikater-fanen.\n\nEksempel: Opgaven "Psykologsamtale" kræver certifikatet "Autoriseret psykolog" — kun medarbejdere med dette kan tildeles opgaven.`
         },
         {
           titel:"Slette medarbejder",
@@ -5098,23 +5605,23 @@ function HjaelpTab(){
       id:"opgaver",
       ikon:"",
       titel:"Opgaver & Forløb",
-      beskrivelse:"Indsatsskabeloner, forløb, certifikater og rullende opgaver",
+      beskrivelse:"Opgaveskabeloner, forløb, certifikater og rullende opgaver",
       punkter:[
         {
           titel:"Hvad er et forløb?",
-          tekst:`Et forløb er en skabelon for et behandlingsforløb — fx "PPR Standardforløb" eller "Psykologforløb 10 samtaler".\n\nEt forløb indeholder en eller flere indsatser.\nNår et forløb tildeles en patient, genereres opgaver baseret på indsatsskabelonerne.\n\nForløb oprettes og redigeres under Opgaver → Forløb-fanen.`
+          tekst:`Et forløb er en skabelon for et behandlingsforløb — fx "PPR Standardforløb" eller "Psykologforløb 10 samtaler".\n\nEt forløb indeholder en eller flere opgaver.\nNår et forløb tildeles en patient, genereres opgaver baseret på opgaveskabelonerne.\n\nForløb oprettes og redigeres under Opgaver → Forløb-fanen.`
         },
         {
-          titel:"Hvad er en indsats?",
-          tekst:`En indsats er en skabelon for et møde/session — fx "Psykologsamtale 45 min".\n\nEn indsats har et eller flere indsatselementer, der beskriver:\n• Varighed i minutter\n• Tidsvindue (tidligst/senest)\n• Lokaler der kan bruges\n• Certifikatkrav til medarbejder\n• Om patienten skal være til stede (og eventuelt min. ventetid)\n• Om det er en rullende opgave (gentages med interval)\n• Cooldown (min. pause mellem to opgaver af samme type)\n• Om der skal sendes dokument til e-Boks`
+          titel:"Hvad er en opgaveskabelon?",
+          tekst:`En opgaveskabelon er en skabelon for et møde/session — fx "Psykologsamtale 45 min".\n\nEn opgaveskabelon har et eller flere elementer, der beskriver:\n• Varighed i minutter\n• Tidsvindue (tidligst/senest)\n• Lokaler der kan bruges\n• Certifikatkrav til medarbejder\n• Om patienten skal være til stede (og eventuelt min. ventetid)\n• Om det er en rullende opgave (gentages med interval)\n• Cooldown (min. pause mellem to opgaver af samme type)\n• Om der skal sendes dokument til e-Boks`
         },
         {
           titel:"Rullende opgaver",
-          tekst:`En rullende opgave gentager sig automatisk med et defineret interval.\n\nNår opgaven markeres som løst, sendes en notifikation til "Rulleplan" under Admin → Godkendelser.\n\nDér kan admin beslutte:\nOK Forlæng — Opretter ny opgave til samme patient\nx Afslut — Forløbet stopper her\n\nInterval konfigureres i indsatselementet:\n• Tidligst om: Minimum ventetid til næste\n• Senest om: Deadline for at planlægge næste\n• Planlæg senest: Hvornår systemet låser opgaven`
+          tekst:`En rullende opgave gentager sig automatisk med et defineret interval.\n\nNår opgaven markeres som løst, sendes en notifikation til "Rulleplan" under Admin → Godkendelser.\n\nDér kan admin beslutte:\nOK Forlæng — Opretter ny opgave til samme patient\nx Afslut — Forløbet stopper her\n\nInterval konfigureres i opgaveelementet:\n• Tidligst om: Minimum ventetid til næste\n• Senest om: Deadline for at planlægge næste\n• Planlæg senest: Hvornår systemet låser opgaven`
         },
         {
           titel:"Certifikater",
-          tekst:`Under Opgaver → Certifikater kan du oprette certifikattyper fx "Autoriseret psykolog" eller "ABA-terapeut".\n\nCertifikater bruges på to måder:\n1. Indsatselementer kræver et certifikat → kun egnede medarbejdere kan planlægges\n2. Medarbejdere tilknyttes certifikater → systemet filtrerer automatisk\n\nDette sikrer compliance og forhindrer fejlplanlægning.`
+          tekst:`Under Opgaver → Certifikater kan du oprette certifikattyper fx "Autoriseret psykolog" eller "ABA-terapeut".\n\nCertifikater bruges på to måder:\n1. Opgaveelementer kræver et certifikat → kun egnede medarbejdere kan planlægges\n2. Medarbejdere tilknyttes certifikater → systemet filtrerer automatisk\n\nDette sikrer compliance og forhindrer fejlplanlægning.`
         }
       ]
     },
@@ -5178,7 +5685,7 @@ function HjaelpTab(){
         },
         {
           titel:"Importer fra Excel",
-          tekst:`Du kan importere data via Excel-filer under Indstillinger.\n\nFaneblade:\n Patienter — Navn, CPR, afdeling, forældreinformation\n Medarbejdere — Navn, titel, timer, mail, kompetencer\n Indsatser — Indsatsskabeloner med alle parametre\n Lokaler — Lokalenavne, åbningstider og kapacitet\n\nDownload skabelonen for korrekt kolonneformat.\nUpload .xlsx eller .csv filer.`
+          tekst:`Du kan importere data via Excel-filer under Planlæg → Planlæg indstillinger.\n\nFaneblade:\n Patienter — Navn, CPR, afdeling, forældreinformation\n Medarbejdere — Navn, titel, timer, mail, kompetencer\n Opgaver — Opgaveskabeloner med alle parametre\n Lokaler — Lokalenavne, åbningstider og kapacitet\n\nDownload skabelonen for korrekt kolonneformat.\nUpload .xlsx eller .csv filer.`
         }
       ]
     },
@@ -5436,7 +5943,7 @@ function ExcelImportPanel({setPatienter,setMedarbejdere,setForlob,forlob,setLokT
       info:"Titel = Læge/Psykolog/Pædagog · Kompetencer og Certifikater adskilles med komma · Tomme tider = ikke-arbejdsdag · KapacitetsgrænseType = dag/uge/mdr/kvartal/halvaar/år/ialt · TimeprisKrPrTime = individuel pris (tomt = brug faggruppe-standard)",
     },
     indsatser:{
-      navn:"PlanMed_Indsatser_Skabelon",
+      navn:"PlanMed_Opgaver_Skabelon",
       cols:[
         "Opgavenavn","Minutter","PatientInvolveret",
         "MuligeMedarbejdere","MuligeLokaler",
@@ -5448,7 +5955,7 @@ function ExcelImportPanel({setPatienter,setMedarbejdere,setForlob,forlob,setLokT
         ["ECT Behandling","60","ja","Læge","Lokale 2","08:00","14:00","ECT-Certifikat","1","Behandling"],
         ["Pædagogisk støtte","60","ja","Pædagog","Lokale 1,Kontor","08:00","17:00","","1","Støtte"],
       ],
-      info:"PatientInvolveret = ja/nej · MuligeMedarbejdere = titler adskilt med komma · Certifikat = navn på krævet certifikat (tomt = intet krav) · Sekvens = rækkefølge inden for forløb · IndsatsGruppe = overordnet kategori",
+      info:"PatientInvolveret = ja/nej · MuligeMedarbejdere = titler adskilt med komma · Certifikat = navn på krævet certifikat (tomt = intet krav) · Sekvens = rækkefølge inden for forløb · OpgaveGruppe = overordnet kategori",
     },
     lokaler:{
       navn:"PlanMed_Lokaler_Skabelon",
@@ -5592,7 +6099,7 @@ function ExcelImportPanel({setPatienter,setMedarbejdere,setForlob,forlob,setLokT
             })
           );
           const kompStr=get(r,"Kompetencer");
-          const kompetencer=kompStr?kompStr.split(/[,;]/).map(k=>k.trim()).filter(Boolean):[];
+          const kompFraExcel=kompStr?kompStr.split(/[,;]/).map(k=>k.trim()).filter(Boolean):[];
           // Normaliser titel — accepter alle varianter inkl. encoding-forskelle
           const titelRaw=(get(r,"Titel")||"").trim();
           const titelLow=titelRaw.toLowerCase().normalize("NFC");
@@ -5617,7 +6124,7 @@ function ExcelImportPanel({setPatienter,setMedarbejdere,setForlob,forlob,setLokT
             hjemVej:get(r,"HjemVej")||"",
             hjemPostnr:get(r,"HjemPostnr")||"",
             hjemBy:get(r,"HjemBy")||"",
-            kompetencer, arbejdsdage,
+            kompetencer:kompFraExcel.length>0?kompFraExcel:(titelNorm==="Læge"?[...LK]:titelNorm==="Pædagog"?[...PD]:[...PK]), arbejdsdage,
             certifikater:(get(r,"Certifikater")||"").split(/[,;]/).map(k=>k.trim()).filter(Boolean),
             medarbejderId:get(r,"MedarbejderId")||"",
             epjKalenderApi:get(r,"EpjKalenderApi")||"",
@@ -5691,7 +6198,24 @@ function ExcelImportPanel({setPatienter,setMedarbejdere,setForlob,forlob,setLokT
             return[...opdaterede,...nye];
           });
         }
-        setStatus({ok:true,msg:"OK "+nyeInds.length+" indsatser importeret"});
+        // Tildel importerede opgavenavne som kompetencer til medarbejdere med matchende titel
+        if(setMedarbejdere&&nyeInds.length>0){
+          const TITLER_NORM={"Psykolog":"Psykolog","Læge":"Læge","Pædagog":"Pædagog","Laege":"Læge","Paedagog":"Pædagog"};
+          setMedarbejdere(prev=>prev.map(m=>{
+            // Find alle opgaver denne medarbejders titel kan løse
+            const nyeKomp=nyeInds
+              .filter(ind=>{
+                const titler=(ind.muligeMed||[]).map(t=>TITLER_NORM[t]||t);
+                return titler.length===0||titler.includes(m.titel);
+              })
+              .map(ind=>ind.opgave)
+              .filter(Boolean);
+            if(nyeKomp.length===0) return m;
+            const samlet=[...new Set([...(m.kompetencer||[]),...nyeKomp])];
+            return samlet.length===(m.kompetencer||[]).length?m:{...m,kompetencer:samlet};
+          }));
+        }
+        setStatus({ok:true,msg:"OK "+nyeInds.length+" opgaver importeret"});
       } else if(tab==="lokaler"){
         if(!setLokTider){setStatus({ok:false,msg:"Lokaler import fejlede - prøv fra Lokaler-fanen"});return;}
         const dagMap={
@@ -5723,9 +6247,27 @@ function ExcelImportPanel({setPatienter,setMedarbejdere,setForlob,forlob,setLokT
         // Opdater lokaler-liste
         const nyeLokNavne=raw.map(r=>get(r,"Lokale")).filter(Boolean);
         if(saveLokaler){
-          // Byg ny komplet lokaler-liste
-          const nyListe=[...new Set([...(lokaler||[]),...nyeLokNavne])];
-          saveLokaler(nyListe);
+          // Tilføj lokaler — duplikerede navne får suffix (2), (3) osv.
+          const eksisterende=new Set(lokaler||[]);
+          const tilføjet=[];
+          nyeLokNavne.forEach(navn=>{
+            let endeligtNavn=navn;
+            let nr=1;
+            while(eksisterende.has(endeligtNavn)){
+              nr++;
+              endeligtNavn=`${navn} (${nr})`;
+            }
+            eksisterende.add(endeligtNavn);
+            tilføjet.push(endeligtNavn);
+            // Kopiér åbningstider og meta til det nye navn hvis det er omdøbt
+            if(endeligtNavn!==navn){
+              Object.entries(nyeTider).forEach(([dag,loks])=>{
+                if(loks[navn]) nyeTider[dag][endeligtNavn]={...loks[navn]};
+              });
+              if(nyMeta[navn]) nyMeta[endeligtNavn]={...nyMeta[navn],lokaleId:nyMeta[navn].lokaleId?nyMeta[navn].lokaleId+"-"+nr:""};
+            }
+          });
+          saveLokaler([...eksisterende]);
         }
         setStatus({ok:true,msg:"OK "+loknr+" lokaler importeret/opdateret"});
       }
@@ -5740,7 +6282,7 @@ function ExcelImportPanel({setPatienter,setMedarbejdere,setForlob,forlob,setLokT
     <div style={{display:"flex",flexDirection:"column",gap:14}}>
       {/* Tab-valg */}
       <div style={{display:"flex",gap:6}}>
-        {[["patienter"," Patienter"],["medarbejdere","+ Medarbejdere"],["indsatser"," Indsatser"],["lokaler"," Lokaler"]].map(([v,l])=>(
+        {[["patienter"," Patienter"],["medarbejdere","+ Medarbejdere"],["indsatser"," Opgaver"],["lokaler"," Lokaler"]].map(([v,l])=>(
           <button key={v} onClick={()=>{setTab(v);setPreview(null);setStatus(null);}}
             style={{background:tab===v?C.accM:"transparent",color:tab===v?C.acc:C.txtD,
               border:`1px solid ${tab===v?C.acc:C.brd}`,borderRadius:8,padding:"7px 16px",
@@ -5964,7 +6506,7 @@ const NAV_ITEMS = [
   {id:"patienter",    label:"Patienter"},
   {id:"kalender",     label:"Kalender"},
   {id:"medarbejdere", label:"Medarbejdere"},
-  {id:"lokaler",      label:"Lokaler"},
+  {id:"lokaler",      label:"Lokaler & Udstyr"},
   {id:"forlob",       label:"Opgaver"},
   {sep:true},
   {id:"planlog",      label:"Planlæg"},
@@ -6436,7 +6978,7 @@ function MinProfilPanel({med, medarbejdere, certifikater=[], onSave=()=>{}, onSe
     hjemBy:med?.hjemBy||"",
     medarbejderId:med?.medarbejderId||"",
     epjKalenderApi:med?.epjKalenderApi||"",
-    kompetencer:med?.kompetencer||[],
+    kompetencer:(med?.kompetencer&&med.kompetencer.length>0)?med.kompetencer:(()=>{const t=med?.titel||"Psykolog";return t==="Læge"?[...LK]:t==="Pædagog"?[...PD]:[...PK];})(),
     arbejdsdage:med?.arbejdsdage||defaultDage,
   });
   const set=(k,v)=>setF(p=>({...p,[k]:v}));
@@ -7858,7 +8400,7 @@ function AdminView({adminData,setAdminData,anmodninger=[],setAnmodninger,medarbe
                         </div>
                         <div style={{display:"flex",gap:6,alignItems:"center"}}>
                           <span style={{color:C.txtM,fontSize:12}}>Gruppér på:</span>
-                          {[["faggruppe","Faggruppe"],["forlob","Forløb"],["indsats","Indsats"],["lokale","Lokale"]].map(([id,lbl])=>(
+                          {[["faggruppe","Faggruppe"],["forlob","Forløb"],["indsats","Opgave"],["lokale","Lokale"]].map(([id,lbl])=>(
                             <button key={id} onClick={()=>setOpgKapGruppe(id)}
                               style={{padding:"5px 11px",borderRadius:6,border:`1px solid ${opgKapGruppe===id?C.acc:C.brd}`,
                                 background:opgKapGruppe===id?C.accM:"transparent",color:opgKapGruppe===id?C.acc:C.txtM,
@@ -7910,13 +8452,13 @@ function AdminView({adminData,setAdminData,anmodninger=[],setAnmodninger,medarbe
                         const gruppeNøgle=(o)=>{
                           if(opgKapGruppe==="faggruppe"){const m=medarbejdere.find(mm=>mm.navn===o.medarbejder);return m?.titel||"Ukendt";}
                           if(opgKapGruppe==="forlob") return o._forlobLabel||"Ukendt forløb";
-                          if(opgKapGruppe==="indsats") return o.opgave||"Ukendt indsats";
+                          if(opgKapGruppe==="indsats") return o.opgave||"Ukendt opgave";
                           if(opgKapGruppe==="lokale") return o.lokale||"Intet lokale";
                           return "Alle";
                         };
                         const afvGruppeNøgle=(o)=>{
                           if(opgKapGruppe==="forlob") return o._forlobLabel||"Ukendt forløb";
-                          if(opgKapGruppe==="indsats") return o.opgave||"Ukendt indsats";
+                          if(opgKapGruppe==="indsats") return o.opgave||"Ukendt opgave";
                           return null;
                         };
 
@@ -7955,7 +8497,7 @@ function AdminView({adminData,setAdminData,anmodninger=[],setAnmodninger,medarbe
                           Object.keys(grupper).forEach(grp=>{
                             // Mulige medarbejdere = dem der har opgaver i gruppen ELLER er muligMed
                             const opgsIGrp=[...alleOpgsMedKontekst,...afvOpgsMedKontekst].filter(o=>
-                              (opgKapGruppe==="forlob"?(o._forlobLabel||"Ukendt forløb"):o.opgave||"Ukendt indsats")===grp
+                              (opgKapGruppe==="forlob"?(o._forlobLabel||"Ukendt forløb"):o.opgave||"Ukendt opgave")===grp
                             );
                             const navne=new Set([
                               ...opgsIGrp.map(o=>o.medarbejder).filter(Boolean),
@@ -8040,7 +8582,7 @@ function AdminView({adminData,setAdminData,anmodninger=[],setAnmodninger,medarbe
                               gridTemplateColumns:erForlobIndsats?"1fr 70px 90px 90px 110px 90px":"1fr 70px 100px 110px 110px 90px",
                               padding:"9px 14px",background:C.s3,borderBottom:`1px solid ${C.brd}`}}>
                               {[
-                                opgKapGruppe==="faggruppe"?"Faggruppe":opgKapGruppe==="forlob"?"Forløb":opgKapGruppe==="indsats"?"Indsats":"Lokale",
+                                opgKapGruppe==="faggruppe"?"Faggruppe":opgKapGruppe==="forlob"?"Forløb":opgKapGruppe==="indsats"?"Opgave":"Lokale",
                                 "Opg.",
                                 erForlobIndsats?"Planlagt":"Timer krævet",
                                 erForlobIndsats?"Afventer":"Max kapacitet",
@@ -8716,29 +9258,96 @@ function AdminBrugereTab({selskab,updS}){
 }
 
 
+// ── Ressource-analyse (separat fra planlægning) ──
+function analyserRessourcer(patienter=[], config={}) {
+  const {medarbejdere=[],lokTider={},lokaler:lokArr}=config;
+  const lokaler=Array.isArray(lokArr)?lokArr:[];
+  const toMin=(hm)=>{if(!hm)return 0;const[h,m]=(hm||"0:0").split(":").map(Number);return h*60+(m||0);};
+  const TITLER=["Psykolog","Læge","Pædagog"];
+  const normT=t=>t==="Laege"?"Læge":t==="Paedagog"?"Pædagog":t;
+  const dage=["Mandag","Tirsdag","Onsdag","Torsdag","Fredag"];
+
+  // Medarbejder-analyse
+  const medRes=TITLER.map(t=>{
+    const meds=medarbejdere.filter(m=>m.titel===t);
+    const kap=meds.reduce((a,m)=>{
+      const d=Object.values(m.arbejdsdage||{}).filter(d=>d.aktiv);
+      return a+d.reduce((s,d)=>s+toMin(d.slut||"16:00")-toMin(d.start||"08:30"),0);
+    },0);
+    let eft=0;
+    patienter.forEach(p=>p.opgaver.forEach(o=>{
+      if(o.status==="planlagt"&&o.låst) return;
+      const mm=o.muligeMed||[];
+      const match=mm.find(m=>TITLER.includes(normT(m)));
+      if(match&&normT(match)===t) eft+=(o.minutter||60);
+      else if(!match&&o.opgave?.includes(t)) eft+=(o.minutter||60);
+    }));
+    const ratio=Math.round(eft/(kap||1)*100)/100;
+    return{titel:t,antal:meds.length,kapacitet:kap,efterspørgsel:eft,ratio,flaskehals:false};
+  });
+  const maxMedRatio=Math.max(...medRes.map(r=>r.ratio));
+  medRes.forEach(r=>{if(r.ratio===maxMedRatio&&r.ratio>0)r.flaskehals=true;});
+
+  // Lokale-analyse: gruppér varianter
+  const alleLok=new Set();
+  Object.values(lokTider).forEach(dl=>Object.keys(dl).forEach(l=>alleLok.add(l)));
+  lokaler.forEach(l=>alleLok.add(l));
+  const grp={};
+  alleLok.forEach(l=>{const b=l.replace(/\s*\(\d+\)$/,"");if(!grp[b])grp[b]=[];grp[b].push(l);});
+
+  const lokRes=Object.entries(grp).map(([basis,loks])=>{
+    let basisMin=0;
+    dage.forEach(dag=>{
+      const lt=lokTider[dag]?.[basis];
+      if(lt){const å=toMin(lt.å||"00:00"),l=toMin(lt.l||"00:00");if(l>å)basisMin+=l-å;}
+    });
+    const kap=basisMin*loks.length;
+    let eft=0;
+    patienter.forEach(p=>p.opgaver.forEach(o=>{
+      if(o.status==="planlagt"&&o.låst) return;
+      const baser=[...new Set((o.muligeLok||[]).map(l=>l.replace(/\s*\(\d+\)$/,"")))];
+      if(baser.includes(basis)) eft+=(o.minutter||60)/(baser.length||1);
+    }));
+    const ratio=Math.round(eft/(kap||1)*100)/100;
+    return{navn:basis,antal:loks.length,kapacitet:kap,efterspørgsel:eft,ratio,flaskehals:false};
+  }).filter(r=>r.efterspørgsel>0).sort((a,b)=>b.ratio-a.ratio);
+  const maxLokRatio=Math.max(...lokRes.map(r=>r.ratio),0);
+  lokRes.forEach(r=>{if(r.ratio===maxLokRatio&&r.ratio>0)r.flaskehals=true;});
+
+  const primær=maxLokRatio>maxMedRatio
+    ?`${lokRes.find(r=>r.flaskehals)?.navn||"?"} (lokale, ratio: ${maxLokRatio})`
+    :`${medRes.find(r=>r.flaskehals)?.titel||"?"} (medarbejder, ratio: ${maxMedRatio})`;
+
+  let anbefaling=null;
+  const flask=medRes.find(r=>r.flaskehals);
+  if(flask&&flask.ratio>1.5) anbefaling=`Overvej at ansætte flere ${flask.titel.toLowerCase()}er — efterspørgslen er ${Math.round(flask.ratio*100-100)}% over kapaciteten`;
+  const lokFlask=lokRes.find(r=>r.flaskehals);
+  if(lokFlask&&lokFlask.ratio>1.5&&(!flask||lokFlask.ratio>flask.ratio)) anbefaling=`${lokFlask.navn} er overbelastet — overvej at tilføje flere eller udvide åbningstider`;
+
+  return{medarbejdere:medRes,lokaler:lokRes,primærFlaskehals:primær,anbefaling};
+}
+
 // ===============================================
 // PLANLOG VIEW
 // ===============================================
-function PlanLogView({patienter,planLog=[],medarbejdere=[],setPatienter,onPlan,running,progress,planFraDato,setPlanFraDato,afdScope,alleAfdelinger=[],toggleAktiv,toggleRes,lokaler=[],certifikater=[],planDebug}){
-  const [filter,setFilter]=useState("alle"); // alle | planlagt | ikke-planlagt
+function PlanLogView({patienter,planLog=[],medarbejdere=[],setPatienter,onPlan,running,progress,planFraDato,setPlanFraDato,afdScope,alleAfdelinger=[],toggleAktiv,toggleRes,lokaler=[],certifikater=[],planDebug,config={},setConfig=()=>{},setMedarbejdere=()=>{},setForlob=()=>{},forlob={},lokTider={},setLokTider=()=>{},lokMeta={},setLokMeta=()=>{},saveLokaler=()=>{},setIndsatser=()=>{},indsatser=[]}){
+  const [planTab,setPlanTab]=useState("planlaegning");
+  const [filter,setFilter]=useState("alle");
   const [sortCol,setSortCol]=useState("dato");
   const [sortDir,setSortDir]=useState("asc");
 
   const todayStr=today();
 
-  // Saml alle opgaver med patient-info
   const alleOpgaver=useMemo(()=>{
     return patienter.flatMap(p=>
       p.opgaver.map(o=>({...o,patientNavn:p.navn,patientCpr:p.cpr,patientId:p.id}))
     );
   },[patienter]);
 
-  // Filtrer
   const filtered=useMemo(()=>{
     let list=alleOpgaver;
     if(filter==="planlagt") list=list.filter(o=>o.status==="planlagt"&&o.dato);
     else if(filter==="ikke-planlagt") list=list.filter(o=>o.status!=="planlagt"||!o.dato);
-    // Sorter
     list=[...list].sort((a,b)=>{
       let va,vb;
       if(sortCol==="dato"){va=a.dato||"";vb=b.dato||"";}
@@ -8768,6 +9377,21 @@ function PlanLogView({patienter,planLog=[],medarbejdere=[],setPatienter,onPlan,r
 
   return(
     <div style={{padding:"0 0 40px"}}>
+      {/* Top tabs */}
+      <div style={{display:"flex",gap:0,borderBottom:`1px solid ${C.brd}`,marginBottom:16}}>
+        {[{id:"planlaegning",label:"Planlægning"},{id:"ressourcer",label:"Ressource-analyse"},{id:"indstillinger",label:"Planlæg indstillinger"}].map(t=>(
+          <button key={t.id} onClick={()=>setPlanTab(t.id)}
+            style={{padding:"10px 24px",border:"none",fontFamily:"inherit",cursor:"pointer",
+              background:"none",fontWeight:planTab===t.id?700:400,fontSize:14,
+              color:planTab===t.id?C.acc:C.txtD,
+              borderBottom:planTab===t.id?`2px solid ${C.acc}`:"2px solid transparent",marginBottom:-1}}>
+            {t.label}
+          </button>
+        ))}
+      </div>
+
+      {/* ══════ PLANLÆGNING TAB ══════ */}
+      {planTab==="planlaegning"&&(<>
       {/* Header */}
       <div style={{display:"flex",justifyContent:"space-between",alignItems:"center",marginBottom:20,flexWrap:"wrap",gap:12}}>
         <div>
@@ -8792,6 +9416,7 @@ function PlanLogView({patienter,planLog=[],medarbejdere=[],setPatienter,onPlan,r
           </button>
         </div>
       </div>
+
 
       {/* Progress */}
       {running&&progress&&(
@@ -8885,6 +9510,71 @@ function PlanLogView({patienter,planLog=[],medarbejdere=[],setPatienter,onPlan,r
           <div style={{fontWeight:700,marginBottom:4}}>Debug</div>
           <pre style={{whiteSpace:"pre-wrap",margin:0}}>{JSON.stringify({planFraDato,afdScope,patienter:patienter.length,medarbejdere:medarbejdere.length,lokaler:lokaler.length},null,2)}</pre>
         </div>
+      )}
+      </>)}
+
+      {/* ══════ RESSOURCE-ANALYSE TAB ══════ */}
+      {planTab==="ressourcer"&&(()=>{ try {
+        const ana = analyserRessourcer(patienter, {...config, lokTider, medarbejdere, lokaler:lokaler||[]});
+        return(
+          <div style={{display:"flex",flexDirection:"column",gap:16}}>
+            {/* Medarbejdere */}
+            <div style={{background:C.s2,border:`1px solid ${C.brd}`,borderRadius:12,padding:"18px 20px"}}>
+              <div style={{fontSize:15,fontWeight:700,color:C.txt,marginBottom:14}}>Medarbejder-kapacitet</div>
+              {ana.medarbejdere.map(r=>(
+                <div key={r.titel} style={{display:"flex",alignItems:"center",gap:10,marginBottom:10,padding:"8px 12px",background:C.s3,borderRadius:8}}>
+                  <span style={{fontSize:13,fontWeight:600,color:C.txt,width:90}}>{r.titel}</span>
+                  <span style={{fontSize:12,color:C.txtM,width:55}}>{r.antal} pers.</span>
+                  <div style={{flex:1,background:C.brd,borderRadius:4,height:10,overflow:"hidden"}}>
+                    <div style={{background:r.ratio>1.5?C.red:r.ratio>1?C.amb:C.grn,height:"100%",borderRadius:4,
+                      width:`${Math.min(r.ratio*50,100)}%`,transition:"width .3s"}}/>
+                  </div>
+                  <span style={{fontSize:12,color:C.txtD,width:100,textAlign:"right"}}>{Math.round(r.kapacitet/60)}t kap.</span>
+                  <span style={{fontSize:12,color:C.txtD,width:100,textAlign:"right"}}>{Math.round(r.efterspørgsel/60)}t behov</span>
+                  <span style={{fontSize:13,fontWeight:700,width:50,textAlign:"right",
+                    color:r.ratio>1.5?C.red:r.ratio>1?C.amb:C.grn}}>{r.ratio}x</span>
+                  {r.flaskehals&&<span style={{fontSize:10,background:C.redM,color:C.red,padding:"2px 8px",borderRadius:6,fontWeight:700}}>FLASKEHALS</span>}
+                </div>
+              ))}
+            </div>
+
+            {/* Lokaler */}
+            <div style={{background:C.s2,border:`1px solid ${C.brd}`,borderRadius:12,padding:"18px 20px"}}>
+              <div style={{fontSize:15,fontWeight:700,color:C.txt,marginBottom:14}}>Lokale-kapacitet</div>
+              {ana.lokaler.map(r=>(
+                <div key={r.navn} style={{display:"flex",alignItems:"center",gap:10,marginBottom:8,padding:"8px 12px",background:C.s3,borderRadius:8}}>
+                  <span style={{fontSize:13,fontWeight:600,color:C.txt,width:120}}>{r.navn}</span>
+                  <span style={{fontSize:12,color:C.txtM,width:50}}>{r.antal} stk.</span>
+                  <div style={{flex:1,background:C.brd,borderRadius:4,height:10,overflow:"hidden"}}>
+                    <div style={{background:r.ratio>1.5?C.red:r.ratio>1?C.amb:C.grn,height:"100%",borderRadius:4,
+                      width:`${Math.min(r.ratio*50,100)}%`,transition:"width .3s"}}/>
+                  </div>
+                  <span style={{fontSize:12,color:C.txtD,width:100,textAlign:"right"}}>{Math.round(r.kapacitet/60)}t kap.</span>
+                  <span style={{fontSize:12,color:C.txtD,width:100,textAlign:"right"}}>{Math.round(r.efterspørgsel/60)}t behov</span>
+                  <span style={{fontSize:13,fontWeight:700,width:50,textAlign:"right",
+                    color:r.ratio>1.5?C.red:r.ratio>1?C.amb:C.grn}}>{r.ratio}x</span>
+                  {r.flaskehals&&<span style={{fontSize:10,background:C.redM,color:C.red,padding:"2px 8px",borderRadius:6,fontWeight:700}}>FLASKEHALS</span>}
+                </div>
+              ))}
+            </div>
+
+            {/* Opsummering */}
+            <div style={{background:C.s2,border:`1px solid ${C.brd}`,borderRadius:12,padding:"18px 20px"}}>
+              <div style={{fontSize:15,fontWeight:700,color:C.txt,marginBottom:10}}>Opsummering</div>
+              <div style={{fontSize:13,color:C.txt,marginBottom:6}}><strong>Primær flaskehals:</strong> {ana.primærFlaskehals}</div>
+              {ana.anbefaling&&<div style={{fontSize:13,color:C.amb,background:C.ambM,padding:"10px 14px",borderRadius:8,border:`1px solid ${C.amb}44`}}>{ana.anbefaling}</div>}
+              <div style={{marginTop:12,fontSize:12,color:C.txtM}}>
+                Ratio over 1.0 = efterspørgslen overstiger kapaciteten. Over 1.5 = kritisk.
+              </div>
+            </div>
+          </div>
+        );
+      } catch(e) { return <div style={{padding:20,color:C.red}}>Fejl i ressource-analyse: {String(e)}</div>; }
+      })()}
+
+      {/* ══════ PLANLÆG INDSTILLINGER TAB ══════ */}
+      {planTab==="indstillinger"&&(
+        <PlanlaegIndstillingerPanel config={config} setConfig={setConfig} setPatienter={setPatienter} setMedarbejdere={setMedarbejdere} setForlob={setForlob} forlob={forlob} setLokTider={setLokTider} lokMeta={lokMeta} setLokMeta={setLokMeta} patienter={patienter} lokaler={lokaler} saveLokaler={saveLokaler} medarbejdere={medarbejdere} setIndsatser={setIndsatser} indsatser={indsatser}/>
       )}
     </div>
   );
@@ -9342,7 +10032,13 @@ export default function App(){
   const [gsQuery,setGsQuery]=useState("");
   const [patienter,setPatienter]=useState(()=>{try{return INIT_PATIENTER_RAW.map(r=>buildPatient(r));}catch(e){
 return [];}});
-  const [medarbejdere,setMedarbejdere]=useState(()=>[...BASE_MED]);
+  const [medarbejdere,setMedarbejdereRaw]=useState(()=>[...BASE_MED].map(ensureKompetencer));
+  const setMedarbejdere=React.useCallback((valOrFn)=>{
+    setMedarbejdereRaw(prev=>{
+      const ny=typeof valOrFn==="function"?valOrFn(prev):valOrFn;
+      return ny.map(ensureKompetencer);
+    });
+  },[]);
   const [forlob,setForlob]=useState(()=>{try{return structuredClone(FORLOB);}catch(e){return {};}});
   const [indsatser,setIndsatser]=useState([]);
   const [lokTider,setLokTider]=useState(()=>structuredClone(DEFAULT_LOK_TIDER));
@@ -9394,6 +10090,11 @@ return [];}});
   const [lokaler,setLokaler]=useState(()=>[...ALLE_LOK]);
   const saveLokaler=(ny)=>{setLokaler(ny);try{localStorage.setItem("planmed_lokaler",JSON.stringify(ny));}catch(e){}};
   const [lokMeta,setLokMeta]=useState({});
+  // Udstyr: kategorier med items, og pakker
+  const [udstyrsKat,setUdstyrsKat]=useState(()=>{try{const s=localStorage.getItem("planmed_udstyrsKat");return s?JSON.parse(s):[];}catch(e){return[];}});
+  const [udstyrsPakker,setUdstyrsPakker]=useState(()=>{try{const s=localStorage.getItem("planmed_udstyrsPakker");return s?JSON.parse(s):[];}catch(e){return[];}});
+  const saveUdstyrsKat=(v)=>{setUdstyrsKat(v);try{localStorage.setItem("planmed_udstyrsKat",JSON.stringify(v));}catch(e){}};
+  const saveUdstyrsPakker=(v)=>{setUdstyrsPakker(v);try{localStorage.setItem("planmed_udstyrsPakker",JSON.stringify(v));}catch(e){}};
   const [certifikater,setCertifikater]=useState(()=>structuredClone(INIT_CERTIFIKATER));
   const [anmodninger,setAnmodninger]=useState([]); // {id,medId,medNavn,medEmail,lederNavn,lederEmail,
   const [rulNotif,setRulNotif]=useState([]); // rulleplan-notifikationer: {id,patId,patNavn,opgaveId,opgaveType,medNavn,medMail,ansvarligNavn,ansvarligMail,oprettet,deadline,rykkerdato,status,log:[]}tidspunkt,felt,fra,til,status:"afventer"|"godkendt"|"afvist",kommentar:""}
@@ -9551,18 +10252,23 @@ return [];}},[scopedPatienter,lokTider]);
   const handlePlan=useCallback(async ()=>{
     if(running)return;
     setRunning(true);
-    const total=patienter.reduce((a,p)=>a+p.opgaver.filter(o=>!o.låst&&o.status!=="planlagt").length,0);
+    // Nulstil alle ikke-låste opgaver før planlægning
+    const nulstillet=patienter.map(p=>({
+      ...p,
+      opgaver:p.opgaver.map(o=>o.låst?o:{...o,status:"afventer",dato:null,startKl:null,slutKl:null,lokale:null,medarbejder:null})
+    }));
+    const total=nulstillet.reduce((a,p)=>a+p.opgaver.filter(o=>!o.låst).length,0);
     setProgress({done:0,total});
     await new Promise(r=>setTimeout(r,80));
     const planConfig={
       ...config,lokTider,planFraDato:planFraDato||null,
-      medarbejdere,transportKmHt:config.transportKmHt||40,
+      medarbejdere,lokaler,transportKmHt:config.transportKmHt||40,
       afdPostnr:config.afdPostnr||"",
       googleMapsKey:config.googleMapsKey||"",transportCache:config.transportCache||{},
     };
     let res;
     try {
-      res=runPlanner(patienter,planConfig);
+      res=runPlanner(nulstillet,planConfig);
     } catch(e) {
       setRunning(false); setProgress(null);
       setToast({msg:"Fejl i planlægger: "+e.message,type:"error"});
@@ -9720,9 +10426,9 @@ return [];}},[scopedPatienter,lokTider]);
           {view==="patienter"&&<ErrorBoundary><PatientKalenderView patienter={scopedPatienter} medarbejdere={scopedMed} setPatienter={setPatienter} forlob={forlob} showToast={showToast} onMarkerLøst={handleMarkerLøst} lokMeta={lokMeta} setAnmodninger={setAnmodninger} adminData={adminData} lokaler={lokaler}/></ErrorBoundary>}
           {view==="kalender"&&<ErrorBoundary><KalenderView patienter={scopedPatienter} medarbejdere={scopedMed} lokaler={lokaler}/></ErrorBoundary>}
           {view==="medarbejdere"&&<ErrorBoundary><MedarbejderView medarbejdere={scopedMed} setMedarbejdere={setMedarbejdere} patienter={scopedPatienter} setPatienter={setPatienter} anmodninger={anmodninger} setAnmodninger={setAnmodninger} isAdmin={isAdmin} certifikater={certifikater} showToast={showToast} adminData={adminData}/></ErrorBoundary>}
-          {view==="lokaler"&&<ErrorBoundary><LokalerView patienter={patienter} lokTider={lokTider} setLokTider={setLokTider} lokMeta={lokMeta} setLokMeta={setLokMeta} lokaler={lokaler} saveLokaler={saveLokaler} adminData={adminData}/></ErrorBoundary>}
+          {view==="lokaler"&&<ErrorBoundary><LokalerView patienter={patienter} lokTider={lokTider} setLokTider={setLokTider} lokMeta={lokMeta} setLokMeta={setLokMeta} lokaler={lokaler} saveLokaler={saveLokaler} adminData={adminData} udstyrsKat={udstyrsKat} saveUdstyrsKat={saveUdstyrsKat} udstyrsPakker={udstyrsPakker} saveUdstyrsPakker={saveUdstyrsPakker}/></ErrorBoundary>}
           {view==="forlob"&&<ErrorBoundary><ForlobView forlob={forlob} setForlob={setForlob} medarbejdere={scopedMed} setMedarbejdere={setMedarbejdere} indsatser={indsatser} setIndsatser={setIndsatser} certifikater={certifikater} setCertifikater={setCertifikater} lokaler={lokaler} setPatienter={setPatienter}/></ErrorBoundary>}
-          {view==="planlog"&&<ErrorBoundary><PlanLogView patienter={scopedPatienter} planLog={planLog} medarbejdere={scopedMed} setPatienter={setPatienter} onPlan={handlePlan} running={running} progress={progress} planFraDato={planFraDato} setPlanFraDato={setPlanFraDato} afdScope={afdScope} alleAfdelinger={alleAfdelinger} toggleAktiv={toggleAktiv} toggleRes={toggleRes} lokaler={lokaler} certifikater={certifikater} planDebug={planDebug}/></ErrorBoundary>}
+          {view==="planlog"&&<ErrorBoundary><PlanLogView patienter={scopedPatienter} planLog={planLog} medarbejdere={scopedMed} setPatienter={setPatienter} setMedarbejdere={setMedarbejdere} onPlan={handlePlan} running={running} progress={progress} planFraDato={planFraDato} setPlanFraDato={setPlanFraDato} afdScope={afdScope} alleAfdelinger={alleAfdelinger} toggleAktiv={toggleAktiv} toggleRes={toggleRes} lokaler={lokaler} certifikater={certifikater} planDebug={planDebug} config={config} setConfig={setConfig} setForlob={setForlob} forlob={forlob} lokTider={lokTider} setLokTider={setLokTider} lokMeta={lokMeta} setLokMeta={setLokMeta} saveLokaler={saveLokaler} setIndsatser={setIndsatser} indsatser={indsatser}/></ErrorBoundary>}
           {view==="admin"&&isAdmin&&<ErrorBoundary><AdminView adminData={adminData} setAdminData={setAdminData} authData={authData} anmodninger={anmodninger} setAnmodninger={setAnmodninger} medarbejdere={medarbejdere} setMedarbejdere={setMedarbejdere} rulNotif={rulNotif} setRulNotif={setRulNotif} patienter={patienter} setPatienter={setPatienter} aktivLog={aktivLog} setAktivLog={setAktivLog} gemLog={gemAktivLog} lokMeta={lokMeta} config={config} setConfig={setConfig} setForlob={setForlob} forlob={forlob} setLokTider={setLokTider} setLokMeta={setLokMeta} lokaler={lokaler} saveLokaler={saveLokaler} indsatser={indsatser} setIndsatser={setIndsatser}/></ErrorBoundary>}
           {view==="ejer"&&(authData.email===EJER_EMAIL||authData.rolle==="ejer")&&<ErrorBoundary><EjerView patienter={patienter} medarbejdere={medarbejdere} adminData={adminData} setAdminData={setAdminData} authData={authData} isUnlocked={isEjer} setEjerUnlocked={setEjerUnlocked} ejerKode={EJER_KODE} lokaler={lokaler} lokMeta={lokMeta} showToast={showToast} certifikater={certifikater} config={config}/></ErrorBoundary>}
           </ErrorBoundary>
@@ -12261,6 +12967,16 @@ function runPlanner(patienter, config={}) {
     step=5,
     maxDage=90,
     planFraDato=null,
+    // Indstillinger fra Planlæg indstillinger
+    maxPatVisitsPerMedPerUge=10,
+    maxPatVisitsStrenged="bloed",
+    maxMedPerPatient=0,
+    maxMedStrenged="bloed",
+    prioritering="henvDato",
+    deadlineMode="henvDato",
+    indsatsDato="",
+    tilladOverstigLåste=false,
+    maxDageForlob=0,
   } = config;
 
   // Klon dybt så vi ikke muterer originaler
@@ -12271,11 +12987,11 @@ function runPlanner(patienter, config={}) {
 
   // Hjælpefunktioner
   const getDag2 = (dato) => {
-    const d = new Date(dato+"T00:00:00");
+    const d = new Date(dato+"T12:00:00");
     return ["Søndag","Mandag","Tirsdag","Onsdag","Torsdag","Fredag","Lørdag"][d.getDay()];
   };
-  const isWeekend2 = (dato) => { const d=new Date(dato+"T00:00:00"); return d.getDay()===0||d.getDay()===6; };
-  const addDays2 = (dato,n) => { const d=new Date(dato+"T00:00:00"); d.setDate(d.getDate()+n); return d.toISOString().slice(0,10); };
+  const isWeekend2 = (dato) => { const d=new Date(dato+"T12:00:00"); return d.getDay()===0||d.getDay()===6; };
+  const addDays2 = (dato,n) => { const d=new Date(dato+"T12:00:00"); d.setDate(d.getDate()+n); const y=d.getFullYear(),m=String(d.getMonth()+1).padStart(2,"0"),dd=String(d.getDate()).padStart(2,"0"); return `${y}-${m}-${dd}`; };
   const toMin2 = (hm) => { if(!hm)return 0; const[h,m]=(hm||"0:0").split(":").map(Number); return h*60+(m||0); };
   const fromMin2 = (min) => { const h=Math.floor(min/60),m=min%60; return `${String(h).padStart(2,"0")}:${String(m).padStart(2,"0")}`; };
 
@@ -12301,6 +13017,79 @@ function runPlanner(patienter, config={}) {
 
   const harOverlap = (bookings, startMin, slutMin) =>
     (bookings||[]).some(b => startMin < b.slut && slutMin > b.start);
+
+  // ── Tracking: besøg per medarbejder per uge (ISO-uge) ──
+  const medVisitsPerUge = {}; // {medNavn: {ugeNr: antal}}
+  const getUgeNr = (dato) => {
+    const d=new Date(dato+"T12:00:00");
+    d.setDate(d.getDate()+3-(d.getDay()+6)%7);
+    const uge1=new Date(d.getFullYear(),0,4);
+    return Math.round(((d-uge1)/86400000-3+(uge1.getDay()+6)%7)/7)+1;
+  };
+  const getUgeKey = (dato) => { const d=new Date(dato+"T00:00:00"); return d.getFullYear()+"-W"+String(getUgeNr(dato)).padStart(2,"0"); };
+
+  // ── Tracking: antal forskellige medarbejdere per patient ──
+  const patMedSet = {}; // {patId: Set<medNavn>}
+
+  // Initialiser tracking fra allerede planlagte opgaver
+  klonPat.forEach(p => {
+    patMedSet[p.id] = new Set();
+    p.opgaver.forEach(o => {
+      if(o.status==="planlagt" && o.dato && o.medarbejder) {
+        // Besøg per uge (kun patientopgaver tæller)
+        if(o.patInv) {
+          const uk=getUgeKey(o.dato);
+          if(!medVisitsPerUge[o.medarbejder]) medVisitsPerUge[o.medarbejder]={};
+          medVisitsPerUge[o.medarbejder][uk]=(medVisitsPerUge[o.medarbejder][uk]||0)+1;
+        }
+        patMedSet[p.id].add(o.medarbejder);
+      }
+    });
+  });
+
+  // ── Hjælper: tjek kapacitetsregler for en medarbejder på en dato ──
+  // Returnerer: "ok" | "bloed" (advarsel men tilladt) | "blokeret" (hård afvisning)
+  const kanBookes = (medNavn, dato, patId, erPatInv) => {
+    let resultat = "ok";
+    // Max patientbesøg per medarbejder per uge
+    if(erPatInv && maxPatVisitsPerMedPerUge>0) {
+      const uk=getUgeKey(dato);
+      const cur=(medVisitsPerUge[medNavn]||{})[uk]||0;
+      if(cur>=maxPatVisitsPerMedPerUge) {
+        if(maxPatVisitsStrenged==="haard") return "blokeret";
+        resultat = "bloed"; // Blød: tillad men nedprioriter
+      }
+    }
+    // Max antal forskellige medarbejdere per patient
+    if(maxMedPerPatient>0 && patId) {
+      const sæt=patMedSet[patId]||new Set();
+      if(!sæt.has(medNavn) && sæt.size>=maxMedPerPatient) {
+        if(maxMedStrenged==="haard") return "blokeret";
+        resultat = "bloed"; // Blød: tillad men nedprioriter
+      }
+    }
+    return resultat;
+  };
+
+  // ── Hjælper: registrer en booking i tracking ──
+  const registrerBooking = (medNavn, dato, patId, erPatInv) => {
+    if(erPatInv) {
+      const uk=getUgeKey(dato);
+      if(!medVisitsPerUge[medNavn]) medVisitsPerUge[medNavn]={};
+      medVisitsPerUge[medNavn][uk]=(medVisitsPerUge[medNavn][uk]||0)+1;
+    }
+    if(patId) {
+      if(!patMedSet[patId]) patMedSet[patId]=new Set();
+      patMedSet[patId].add(medNavn);
+    }
+  };
+
+  // ── Hjælper: beregn deadline for patient ──
+  const beregnDeadline = (pat) => {
+    if(maxDageForlob<=0) return null;
+    const base = deadlineMode==="indsatsDato" && indsatsDato ? indsatsDato : (pat.henvDato||startDato);
+    return addDays2(base, maxDageForlob);
+  };
 
   const findLedigTid = (medNavn, lokNavn, dato, varMin) => {
     const dag = getDag2(dato);
@@ -12338,129 +13127,498 @@ function runPlanner(patienter, config={}) {
     return null;
   };
 
-  // Sorter patienter: haste først, dernæst ældst henvist
+  // ══════════════════════════════════════════════════════════════
+  // FLASKEHALSANALYSE — find den knappe ressource
+  // ══════════════════════════════════════════════════════════════
+  const TITLER_ANALYSE = ["Psykolog","Læge","Pædagog"];
+  const normTitel = t=>t==="Laege"?"Læge":t==="Paedagog"?"Pædagog":t;
+
+  // 1. Beregn kapacitet per titel: antal medarbejdere × timer/uge × søgehorisont
+  const kapPerTitel = {};
+  const medPerTitel = {};
+  TITLER_ANALYSE.forEach(t=>{
+    const meds = medarbejdere.filter(m=>m.titel===t);
+    medPerTitel[t] = meds.length;
+    // Gennemsnitlig tilgængelig tid per uge per medarbejder
+    const timerPerUge = meds.reduce((a,m)=>{
+      const dage = Object.values(m.arbejdsdage||{}).filter(d=>d.aktiv);
+      const minPerUge = dage.reduce((s,d)=>s+toMin2(d.slut||"16:00")-toMin2(d.start||"08:30"),0);
+      return a + minPerUge;
+    },0);
+    kapPerTitel[t] = timerPerUge; // min/uge samlet for alle med denne titel
+  });
+
+  // 2. Beregn efterspørgsel per titel: sum af minutter for alle ventende opgaver
+  const efterspørgselPerTitel = {};
+  TITLER_ANALYSE.forEach(t=>{ efterspørgselPerTitel[t]=0; });
+  klonPat.forEach(p=>p.opgaver.forEach(o=>{
+    if(o.status==="planlagt"||o.låst) return;
+    // Bestem hvilken titel opgaven kræver
+    const mm = o.muligeMed||[];
+    const titelMatch = mm.find(m=>TITLER_ANALYSE.includes(normTitel(m)));
+    if(titelMatch) {
+      const t = normTitel(titelMatch);
+      efterspørgselPerTitel[t] = (efterspørgselPerTitel[t]||0) + (o.minutter||60);
+    } else {
+      // Prøv at udlede fra opgavenavn
+      const found = TITLER_ANALYSE.find(t=>o.opgave?.includes(t));
+      if(found) efterspørgselPerTitel[found] = (efterspørgselPerTitel[found]||0) + (o.minutter||60);
+    }
+  }));
+
+  // 3. Beregn belastningsratio per titel (højere = mere presset)
+  const belastning = {};
+  let flaskehals = null;
+  let maxRatio = 0;
+  TITLER_ANALYSE.forEach(t=>{
+    const kap = kapPerTitel[t]||1;
+    const eft = efterspørgselPerTitel[t]||0;
+    const ratio = eft/kap;
+    belastning[t] = {kapacitet:kap, efterspørgsel:eft, ratio:Math.round(ratio*100)/100, medarbejdere:medPerTitel[t]};
+    if(ratio>maxRatio) { maxRatio=ratio; flaskehals=t; }
+  });
+
+  // 4. Lokale-kapacitet: gruppér varianter ("Kontor", "Kontor (2)" osv.) under basisnavn
+  const dagNavne2=["Mandag","Tirsdag","Onsdag","Torsdag","Fredag"];
+  const alleLokNavneAnalyse = new Set();
+  Object.values(lokTider).forEach(dagLok=>Object.keys(dagLok).forEach(l=>alleLokNavneAnalyse.add(l)));
+  if(config.lokaler) config.lokaler.forEach(l=>alleLokNavneAnalyse.add(l));
+  // Gruppér lokaler efter basisnavn
+  const lokGrupper = {}; // {basisnavn: [lokale1, lokale2, ...]}
+  alleLokNavneAnalyse.forEach(lok=>{
+    const basis = lok.replace(/\s*\(\d+\)$/,""); // "Kontor (2)" → "Kontor"
+    if(!lokGrupper[basis]) lokGrupper[basis]=[];
+    lokGrupper[basis].push(lok);
+  });
+  const lokKap = {};
+  Object.entries(lokGrupper).forEach(([basis,loks])=>{
+    // Beregn kapacitet for basisnavnet og gang med antal i gruppen
+    let basisMinPerUge=0;
+    dagNavne2.forEach(dag=>{
+      const lt=lokTider[dag]?.[basis];
+      if(lt) {
+        const å=toMin2(lt.å||lt.åben||"00:00"), l=toMin2(lt.l||lt.lukket||"00:00");
+        if(l>å) basisMinPerUge+=l-å;
+      }
+      });
+    // Kapacitet = basisnavnets tid × antal lokaler i gruppen
+    const minPerUge = basisMinPerUge * loks.length;
+    lokKap[basis]=minPerUge;
+  });
+
+  // 5. Lokale-efterspørgsel: per basisnavn
+  const lokEfterspørgsel = {};
+  Object.keys(lokGrupper).forEach(b=>{lokEfterspørgsel[b]=0;});
+  klonPat.forEach(p=>p.opgaver.forEach(o=>{
+    if(o.status==="planlagt"||o.låst) return;
+    // Gruppér muligeLok under basisnavne
+    const baser = [...new Set((o.muligeLok||[]).map(l=>l.replace(/\s*\(\d+\)$/,"")))];
+    baser.forEach(basis=>{
+      const andel=(o.minutter||60)/(baser.length||1);
+      lokEfterspørgsel[basis]=(lokEfterspørgsel[basis]||0)+andel;
+    });
+  }));
+
+  // 6. Find lokale-flaskehals (per basisnavn-gruppe)
+  const lokBelastning = {};
+  let lokFlaskehals = null;
+  let lokMaxRatio = 0;
+  Object.keys(lokGrupper).forEach(basis=>{
+    const kap=lokKap[basis]||1;
+    const eft=lokEfterspørgsel[basis]||0;
+    const ratio=eft/kap;
+    const antalLok=lokGrupper[basis].length;
+    lokBelastning[basis]={kapacitet:kap,efterspørgsel:eft,ratio:Math.round(ratio*100)/100,antal:antalLok};
+    if(ratio>lokMaxRatio){lokMaxRatio=ratio;lokFlaskehals=basis;}
+  });
+
+  // 7. Log flaskehalsanalyse
+  planLog.push({type:"info",msg:`── RESSOURCE-ANALYSE: MEDARBEJDERE ──`});
+  TITLER_ANALYSE.forEach(t=>{
+    const b=belastning[t];
+    const bar = t===flaskehals?" *** FLASKEHALS ***":"";
+    planLog.push({type:t===flaskehals?"warn":"info",
+      msg:`${t}: ${b.medarbejdere} medarb., ${Math.round(b.kapacitet/60)}t/uge kap., ${Math.round(b.efterspørgsel/60)}t eftersp. (ratio: ${b.ratio})${bar}`});
+  });
+  planLog.push({type:"info",msg:`── RESSOURCE-ANALYSE: LOKALER ──`});
+  Object.keys(lokGrupper).sort((a,b)=>(lokBelastning[b]?.ratio||0)-(lokBelastning[a]?.ratio||0)).forEach(basis=>{
+    const lb=lokBelastning[basis];
+    if(!lb||lb.efterspørgsel===0) return;
+    const bar=basis===lokFlaskehals?" *** FLASKEHALS ***":"";
+    planLog.push({type:basis===lokFlaskehals?"warn":"info",
+      msg:`${basis} (${lb.antal} stk): ${Math.round(lb.kapacitet/60)}t/uge kap., ${Math.round(lb.efterspørgsel/60)}t eftersp. (ratio: ${lb.ratio})${bar}`});
+  });
+
+  // Samlet flaskehals: den mest pressede ressource (medarbejder eller lokale)
+  const samletFlaskehals = lokMaxRatio>maxRatio ? `Lokale: ${lokFlaskehals}` : `Titel: ${flaskehals}`;
+  planLog.push({type:"warn",msg:`── Primær flaskehals: ${samletFlaskehals} ──`});
+
+  // Sorter patienter: prioritér dem der bruger flaskehalsen mest (de er sværest at planlægge)
   const sorterede = [...klonPat].sort((a,b)=>{
-    if(a.haste&&!b.haste) return -1;
-    if(!a.haste&&b.haste) return 1;
+    if(prioritering==="haste") {
+      if(a.haste&&!b.haste) return -1;
+      if(!a.haste&&b.haste) return 1;
+    }
+    // Patienter med flaskehals-opgaver planlægges først
+    if(flaskehals) {
+      const aFlask = a.opgaver.filter(o=>o.status!=="planlagt"&&!o.låst&&o.opgave?.includes(flaskehals)).length;
+      const bFlask = b.opgaver.filter(o=>o.status!=="planlagt"&&!o.låst&&o.opgave?.includes(flaskehals)).length;
+      if(aFlask!==bFlask) return bFlask-aFlask; // Flest flaskehals-opgaver først
+    }
     return (a.henvDato||"").localeCompare(b.henvDato||"");
   });
 
-  sorterede.forEach(pat => {
-    pat.opgaver
-      .filter(o=>!o.låst && o.status!=="planlagt")
-      .sort((a,b)=>a.sekvens-b.sekvens)
-      .forEach(opg => {
-        const varMin = (opg.minutter||60) + pause;
-        const muligeMed = opg.muligeMed||[];
-        const muligeLok = opg.muligeLok||[];
+  // ── Hjælper: byg kandidatliste for en opgave ──
+  const bygKandidater = (opg) => {
+    const muligeMed = opg.muligeMed||[];
+    const TITLER = ["Psykolog","Læge","Pædagog","Laege","Paedagog"];
+    const harTitelRef = muligeMed.some(mm=>TITLER.includes(mm));
+    let effKandidater;
+    if(muligeMed.length===0) {
+      effKandidater = medarbejdere.map(m=>m.navn);
+    } else if(harTitelRef) {
+      const normT=t=>t==="Laege"?"Læge":t==="Paedagog"?"Pædagog":t;
+      effKandidater = medarbejdere.filter(m=>muligeMed.map(normT).includes(m.titel)).map(m=>m.navn);
+    } else {
+      effKandidater = muligeMed.filter(navn=>medarbejdere.some(m=>m.navn===navn));
+      if(effKandidater.length===0) {
+        effKandidater = medarbejdere.filter(m=>muligeMed.some(mm=>m.titel===mm)).map(m=>m.navn);
+      }
+    }
+    const harKompetence = navn=>{
+      const m = medarbejdere.find(mm=>mm.navn===navn);
+      if(!m) return false;
+      const komp = m.kompetencer||[];
+      if(komp.length===0) return true;
+      if(komp.includes(opg.opgave)) return true;
+      return komp.some(k=>
+        opg.opgave.toLowerCase().includes(k.toLowerCase()) ||
+        k.toLowerCase().includes(opg.opgave.toLowerCase())
+      );
+    };
+    const opgaveErRegistreretSomKomp = effKandidater.some(navn=>{
+      const m=medarbejdere.find(mm=>mm.navn===navn);
+      if(!m||(m.kompetencer||[]).length===0) return false;
+      return harKompetence(navn);
+    });
+    if(opgaveErRegistreretSomKomp) effKandidater = effKandidater.filter(harKompetence);
+    return effKandidater;
+  };
 
-        // Byg kandidatliste: navne-match + titel-match + tom fallback
-        const TITLER = ["Psykolog","Læge","Pædagog","Laege","Paedagog"];
-        const harTitelRef = muligeMed.some(mm=>TITLER.includes(mm));
-        
-        // Hvis muligeMed er tom — brug alle (ingen krav specificeret)
-        // Hvis muligeMed har indhold — respektér det strengt
-        
-        // Byg kandidatliste
-        let effKandidater;
-        if(muligeMed.length===0) {
-          // Ingen krav → alle medarbejdere
-          effKandidater = medarbejdere.map(m=>m.navn);
-        } else if(harTitelRef) {
-          // muligeMed = titler (Psykolog, Læge, Pædagog)
-          const normT=t=>t==="Laege"?"Læge":t==="Paedagog"?"Pædagog":t;
-          effKandidater = medarbejdere
-            .filter(m=>muligeMed.map(normT).includes(m.titel))
-            .map(m=>m.navn);
-        } else {
-          // muligeMed = specifikke navne
-          effKandidater = muligeMed.filter(navn=>medarbejdere.some(m=>m.navn===navn));
-          // Fallback: titel-match hvis ingen navne matcher
-          if(effKandidater.length===0) {
-            effKandidater = medarbejdere
-              .filter(m=>muligeMed.some(mm=>m.titel===mm))
-              .map(m=>m.navn);
-          }
-        }
+  // ── Hjælper: ekspandér lokalenavn til alle varianter ──
+  // "Kontor" → ["Kontor", "Kontor (2)", "Kontor (3)", ...] osv.
+  // Bygger fra BÅDE lokTider OG config.lokaler (saveLokaler-listen)
+  const alleLokNavne = new Set();
+  Object.values(lokTider).forEach(dagLok=>Object.keys(dagLok).forEach(l=>alleLokNavne.add(l)));
+  // Tilføj lokaler fra lokaler-listen (som måske ikke har tider endnu)
+  if(config.lokaler) config.lokaler.forEach(l=>alleLokNavne.add(l));
 
-        // ── KOMPETENCE-TJEK ───────────────────────────────────────────────
-        // Kun medarbejdere der har opgavens navn som kompetence bookes.
-        // Undtagelse A: Medarbejder uden kompetencer = ingen begrænsning
-        // Undtagelse B: Ingen kandidat har kompetencen = brug alle (generisk faggruppe er nok)
-        const harKompetence = navn=>{
-          const m = medarbejdere.find(mm=>mm.navn===navn);
-          if(!m) return false;
-          const komp = m.kompetencer||[];
-          if(komp.length===0) return true; // Ingen kompetencer sat = kan alt
-          // Direkte match på opgavens navn
-          if(komp.includes(opg.opgave)) return true;
-          // Delvis match: "KAT" matcher "KAT individuel", "EMDR" matcher "EMDR session"
-          return komp.some(k=>
-            opg.opgave.toLowerCase().includes(k.toLowerCase()) ||
-            k.toLowerCase().includes(opg.opgave.toLowerCase())
-          );
-        };
-        // Kompetence-tjek: aktiveres KUN hvis opgaven eksplicit er i nogen kandidats kompetence-liste
-        // Ellers: titel-match er tilstrækkeligt (generisk opgave som "Forberedelse Psykolog")
-        const opgaveErRegistreretSomKomp = effKandidater.some(navn=>{
-          const m=medarbejdere.find(mm=>mm.navn===navn);
-          if(!m||(m.kompetencer||[]).length===0) return false;
-          return harKompetence(navn);
-        });
-        if(opgaveErRegistreretSomKomp) {
-          // Nogen har kompetencen → brug kun dem
-          effKandidater = effKandidater.filter(harKompetence);
-        }
-        // Ellers: ingen har registreret kompetencen → brug alle titel-matchede (ingen begrænsning)
-
-        // Prøv at finde et tidspunkt
-        let fundet=false;
-        // Planlæg tidligst fra: max(startDato, pat.henvDato, opg.tidligst)
-        const henvMin = pat.henvDato||startDato;
-        const fraDato = [startDato, henvMin].reduce((a,b)=>a>b?a:b);
-
-        outer:
-        for(let di=0; di<maxDage; di++) {
-          const dato = addDays2(fraDato,di);
-          if(isWeekend2(dato)) continue;
-
-          for(const medNavn of effKandidater) {
-            for(const lokNavn of (muligeLok.length>0?muligeLok:[""])) {
-              const slot = findLedigTid(medNavn, lokNavn||null, dato, varMin);
-              if(slot) {
-                // Book det
-                opg.status="planlagt";
-                opg.dato=dato;
-                opg.startKl=fromMin2(slot.start);
-                opg.slutKl=fromMin2(slot.slut-pause);
-                opg.medarbejder=medNavn;
-                opg.lokale=lokNavn||null;
-
-                if(!medBooket[medNavn]) medBooket[medNavn]={};
-                if(!medBooket[medNavn][dato]) medBooket[medNavn][dato]=[];
-                medBooket[medNavn][dato].push({start:slot.start,slut:slot.slut});
-
-                if(lokNavn) {
-                  if(!lokBooket[lokNavn]) lokBooket[lokNavn]={};
-                  if(!lokBooket[lokNavn][dato]) lokBooket[lokNavn][dato]=[];
-                  lokBooket[lokNavn][dato].push({start:slot.start,slut:slot.slut});
-                }
-
-                planned++;
-                fundet=true;
-                break outer;
-              }
-            }
-          }
-        }
-
-        if(!fundet) {
-          failed++;
-          planLog.push({patId:pat.id,patNavn:pat.navn,opgave:opg.opgave,
-            fejl:`Ingen ledig tid fundet (${effKandidater.join(",")||"ingen medarbejdere"})`});
+  // Sikr at varianter arver åbningstider fra basisnavnet
+  alleLokNavne.forEach(lok=>{
+    const basis = lok.replace(/\s*\(\d+\)$/,"");
+    if(basis!==lok) {
+      // Kopiér tider fra basis hvis varianten ikke har egne
+      Object.keys(lokTider).forEach(dag=>{
+        if(lokTider[dag][basis] && !lokTider[dag][lok]) {
+          lokTider[dag][lok] = {...lokTider[dag][basis]};
         }
       });
+    }
   });
+
+  const ekspanderLokaler = (lokListe) => {
+    const resultat = [];
+    (lokListe||[]).forEach(lok=>{
+      resultat.push(lok);
+      alleLokNavne.forEach(l=>{
+        if(l!==lok && l.startsWith(lok+" (")) resultat.push(l);
+      });
+    });
+    return resultat.length>0 ? resultat : lokListe;
+  };
+
+  // Log antal tilgængelige lokaler per basisnavn
+  const _lokGrpLog = {};
+  alleLokNavne.forEach(l=>{const b=l.replace(/\s*\(\d+\)$/,"");_lokGrpLog[b]=(_lokGrpLog[b]||0)+1;});
+  planLog.push({type:"info",msg:`── LOKALER TILGÆNGELIGE: ${alleLokNavne.size} total (${Object.entries(_lokGrpLog).map(([k,v])=>`${k}:${v}`).join(", ")}) ──`});
+
+  // ── Hjælper: book en enkelt opgave med tidligste start-minut ──
+  const bookOpgave = (opg, effKandidater, tidligstDato, tidligstMin=0, patId=null, deadline=null) => {
+    const varMin = (opg.minutter||60) + pause;
+    const muligeLok = ekspanderLokaler(opg.muligeLok||[]);
+    const opgSenest = opg.senest ? toMin2(opg.senest) : 0;
+    const kendteSæt = patId && patMedSet[patId] ? patMedSet[patId] : new Set();
+    for(let di=0; di<maxDage; di++) {
+      const dato = addDays2(tidligstDato,di);
+      if(isWeekend2(dato)) continue;
+      if(deadline && dato>deadline) return false;
+
+      // tidligstMin gælder kun for tidligstDato; andre dage starter fra opgavens tidligst
+      const dagMin = dato===tidligstDato ? tidligstMin : (opg.tidligst ? toMin2(opg.tidligst) : 0);
+
+      const scored = effKandidater.map(navn=>{
+        const status=kanBookes(navn,dato,patId,opg.patInv);
+        const kendte=kendteSæt.has(navn)?0:1;
+        const prio=status==="blokeret"?2:status==="bloed"?1:0;
+        // Load-balancing: foretræk mindst-belastede medarbejder denne uge
+        const uk=getUgeKey(dato);
+        const ugeBelastning=(medVisitsPerUge[navn]||{})[uk]||0;
+        // Dagbelastning: antal bookinger denne dag
+        const dagBelastning=(medBooket[navn]?.[dato]||[]).length;
+        // Score: status > kendte > ugeBelastning > dagBelastning
+        return{navn,status,score:prio*1000+kendte*100+ugeBelastning*10+dagBelastning};
+      }).filter(s=>s.status!=="blokeret").sort((a,b)=>a.score-b.score);
+
+      for(const {navn:medNavn} of scored) {
+        // Sortér lokaler efter mindst-belastede denne dag
+        const sortLok = (muligeLok.length>0?[...muligeLok]:[""])
+          .sort((a,b)=>((lokBooket[a]?.[dato]||[]).length)-((lokBooket[b]?.[dato]||[]).length));
+        for(const lokNavn of sortLok) {
+          const slot = findLedigTidEfter(medNavn, lokNavn||null, dato, varMin, dagMin, opgSenest);
+          if(slot) {
+            opg.status="planlagt";
+            opg.dato=dato;
+            opg.startKl=fromMin2(slot.start);
+            opg.slutKl=fromMin2(slot.slut-pause);
+            opg.medarbejder=medNavn;
+            opg.lokale=lokNavn||null;
+            if(!medBooket[medNavn]) medBooket[medNavn]={};
+            if(!medBooket[medNavn][dato]) medBooket[medNavn][dato]=[];
+            medBooket[medNavn][dato].push({start:slot.start,slut:slot.slut});
+            if(lokNavn) {
+              if(!lokBooket[lokNavn]) lokBooket[lokNavn]={};
+              if(!lokBooket[lokNavn][dato]) lokBooket[lokNavn][dato]=[];
+              lokBooket[lokNavn][dato].push({start:slot.start,slut:slot.slut});
+            }
+            registrerBooking(medNavn, dato, patId, opg.patInv);
+            return true;
+          }
+        }
+      }
+    }
+    return false;
+  };
+
+  // ── Hjælper: find ledig tid med tidligstMin-offset og senest-grænse ──
+  const findLedigTidEfter = (medNavn, lokNavn, dato, varMin, tidligstMin=0, senestMin=0) => {
+    const dag = getDag2(dato);
+    if(isWeekend2(dato)) return null;
+    const med = medarbejdere.find(m=>m.navn===medNavn);
+    if(!med) return null;
+    const dagInfo = med.arbejdsdage?.[dag];
+    if(!dagInfo || !dagInfo.aktiv) return null;
+    const medStart = toMin2(dagInfo?.start||"08:00");
+    const medSlut  = toMin2(dagInfo?.slut||"16:00");
+    let lokStart=medStart, lokSlut=medSlut;
+    if(lokNavn && lokTider[dag]?.[lokNavn]) {
+      const lt = lokTider[dag][lokNavn];
+      const ls=toMin2(lt.å||lt.åben||"08:00"), le=toMin2(lt.l||lt.lukket||"16:00");
+      if(ls===0&&le===0) return null;
+      lokStart=Math.max(medStart,ls);
+      lokSlut=Math.min(medSlut,le);
+    }
+    // Respektér opgavens senest-grænse
+    if(senestMin>0) lokSlut=Math.min(lokSlut,senestMin);
+    if(lokSlut-lokStart < varMin) return null;
+    const searchStart = Math.max(lokStart, tidligstMin);
+    if(searchStart+varMin>lokSlut) return null;
+    const medDagBooket = medBooket[medNavn]?.[dato]||[];
+    const lokDagBooket = lokBooket[lokNavn]?.[dato]||[];
+    for(let t=searchStart; t+varMin<=lokSlut; t+=step) {
+      const slutT = t+varMin;
+      if(!harOverlap(medDagBooket,t,slutT) && !harOverlap(lokDagBooket,t,slutT)) {
+        return {start:t, slut:slutT};
+      }
+    }
+    return null;
+  };
+
+  // ── Hjælper: book underopgaver (gruppe) med SAMME medarbejder back-to-back ──
+  const bookGruppe = (opgaver, kandidater, tidligstDato, tidligstMin=0, patId=null, deadline=null) => {
+    // Sortér kandidater: foretræk kendte medarbejdere
+    const kendteSæt = patId && patMedSet[patId] ? patMedSet[patId] : new Set();
+    const sortKand = [...kandidater].sort((a,b)=>{
+      const aKendt=kendteSæt.has(a)?0:1, bKendt=kendteSæt.has(b)?0:1;
+      return aKendt-bKendt;
+    });
+    for(let di=0; di<maxDage; di++) {
+      const dato = addDays2(tidligstDato,di);
+      if(isWeekend2(dato)) continue;
+      if(deadline && dato>deadline) return false;
+      const startMin = dato===tidligstDato?tidligstMin:0;
+
+      for(const medNavn of sortKand) {
+        // Tjek kapacitetsregler for denne medarbejder
+        const harPatInv = opgaver.some(o=>o.patInv);
+        if(!kanBookes(medNavn, dato, patId, harPatInv)) continue;
+
+        let curMin = startMin;
+        let slots = [];
+        let ok = true;
+
+        for(const opg of opgaver) {
+          const varMin = (opg.minutter||60) + pause;
+          const muligeLok = opg.muligeLok||[];
+          let fundet = false;
+          for(const lokNavn of (muligeLok.length>0?muligeLok:[""])) {
+            const slot = findLedigTidEfter(medNavn, lokNavn||null, dato, varMin, curMin);
+            if(slot) {
+              slots.push({opg, lokNavn:lokNavn||null, slot});
+              curMin = slot.slut;
+              fundet = true;
+              break;
+            }
+          }
+          if(!fundet) { ok=false; break; }
+        }
+
+        if(ok && slots.length===opgaver.length) {
+          for(const {opg, lokNavn, slot} of slots) {
+            opg.status="planlagt";
+            opg.dato=dato;
+            opg.startKl=fromMin2(slot.start);
+            opg.slutKl=fromMin2(slot.slut-pause);
+            opg.medarbejder=medNavn;
+            opg.lokale=lokNavn;
+            if(!medBooket[medNavn]) medBooket[medNavn]={};
+            if(!medBooket[medNavn][dato]) medBooket[medNavn][dato]=[];
+            medBooket[medNavn][dato].push({start:slot.start,slut:slot.slut});
+            if(lokNavn) {
+              if(!lokBooket[lokNavn]) lokBooket[lokNavn]={};
+              if(!lokBooket[lokNavn][dato]) lokBooket[lokNavn][dato]=[];
+              lokBooket[lokNavn][dato].push({start:slot.start,slut:slot.slut});
+            }
+            registrerBooking(medNavn, dato, patId, opg.patInv);
+          }
+          return true;
+        }
+      }
+    }
+    return false;
+  };
+
+  sorterede.forEach(pat => {
+    const planlagteIds = new Set(pat.opgaver.filter(o=>o.status==="planlagt").map(o=>o.id));
+    const deadline = beregnDeadline(pat);
+
+    // Streng sekvens-rækkefølge: sortér ALLE ventende opgaver efter sekvens
+    const ventende = pat.opgaver
+      .filter(o=>{
+        if(o.status==="planlagt" || planlagteIds.has(o.id)) return false;
+        if(o.låst && !tilladOverstigLåste) return false;
+        return true;
+      })
+      .sort((a,b)=>(a.sekvens||0)-(b.sekvens||0));
+
+    // Track medarbejder per indsatsGruppe (underopgaver deler medarbejder)
+    const gruppeMed = {}; // {grpId: medNavn}
+
+    // Næste opgave kan tidligst starte efter forrige er afsluttet
+    let tidligstDato = [startDato, pat.henvDato||startDato].reduce((a,b)=>a>b?a:b);
+    let tidligstMin = 0;
+    // Track seneste patientbesøgs dato for minGapDays
+    let sidstePatBesøgDato = null;
+
+    // Planlæg hver opgave strengt sekventielt
+    for(const opg of ventende) {
+      if(planlagteIds.has(opg.id)) continue;
+
+      let kandidater = bygKandidater(opg);
+
+      // Hvis opgaven tilhører en gruppe, lås til gruppens medarbejder
+      if(opg.indsatsGruppe && gruppeMed[opg.indsatsGruppe]) {
+        const låstMed = gruppeMed[opg.indsatsGruppe];
+        kandidater = [låstMed, ...kandidater.filter(k=>k!==låstMed)];
+      }
+
+      // minGapDays: hvis denne opgave har patientbesøg, tjek afstand til seneste
+      let effTidligstDato = tidligstDato;
+      let effTidligstMinVal = tidligstMin;
+      if(opg.patInv && sidstePatBesøgDato && minGapDays>0) {
+        const gapDato = addDays2(sidstePatBesøgDato, minGapDays);
+        if(gapDato > effTidligstDato) {
+          effTidligstDato = gapDato;
+          effTidligstMinVal = 0;
+        }
+      }
+
+      // Respektér opgavens eget tidsvindue (tidligst/senest)
+      const opgTidligst = opg.tidligst ? toMin2(opg.tidligst) : 0;
+      const effTidligstMin = Math.max(effTidligstMinVal, opgTidligst);
+
+      const ok = bookOpgave(opg, kandidater, effTidligstDato, effTidligstMin, pat.id, deadline);
+      if(ok) {
+        planned++;
+        planlagteIds.add(opg.id);
+        if(opg.indsatsGruppe && !gruppeMed[opg.indsatsGruppe]) {
+          gruppeMed[opg.indsatsGruppe] = opg.medarbejder;
+        }
+        // Opdater tidligst for næste opgave
+        tidligstDato = opg.dato;
+        tidligstMin = toMin2(opg.slutKl) + pause;
+        // Track seneste patientbesøg
+        if(opg.patInv) sidstePatBesøgDato = opg.dato;
+        planLog.push({type:"info",msg:`[${pat.navn}] #${opg.sekvens} ${opg.opgave} → ${opg.dato} ${opg.startKl}-${opg.slutKl} (${opg.medarbejder}) [næste fra: ${tidligstDato} ${fromMin2(tidligstMin)}]`});
+      } else {
+        failed++;
+        const deadlineMsg = deadline ? ` (deadline: ${deadline})` : "";
+        planLog.push({type:"error",patId:pat.id,patNavn:pat.navn,opgave:opg.opgave,
+          msg:`[${pat.navn}] #${opg.sekvens} ${opg.opgave} — FEJL: ingen ledig tid${deadlineMsg} [søgte fra: ${effTidligstDato} ${fromMin2(effTidligstMin)}]`,
+          fejl:`Sekvens #${opg.sekvens}: Ingen ledig tid fundet${deadlineMsg} (${kandidater.length} kandidater)`});
+        // Stop kæden: efterfølgende opgaver afhænger af denne
+        const rest = ventende.slice(ventende.indexOf(opg)+1);
+        rest.forEach(r=>{
+          failed++;
+          planLog.push({type:"error",patId:pat.id,patNavn:pat.navn,opgave:r.opgave,
+            msg:`[${pat.navn}] #${r.sekvens} ${r.opgave} — SPRUNGET OVER (afventer #${opg.sekvens})`,
+            fejl:`Afventer forrige opgave`});
+        });
+        break;
+      }
+    }
+  });
+
+  // ══════════════════════════════════════════════════════════════
+  // OPSUMMERING — udnyttelsesstatistik efter planlægning
+  // ══════════════════════════════════════════════════════════════
+  planLog.push({type:"info",msg:`── RESULTAT ──`});
+  planLog.push({type:failed>0?"warn":"info",msg:`Planlagt: ${planned} | Fejlet: ${failed} | Total: ${planned+failed}`});
+
+  // Medarbejder-udnyttelse
+  const medStats = {};
+  medarbejdere.forEach(m=>{ medStats[m.navn]={titel:m.titel,minBooket:0,dage:new Set()}; });
+  klonPat.forEach(p=>p.opgaver.forEach(o=>{
+    if(o.status==="planlagt"&&o.medarbejder&&medStats[o.medarbejder]){
+      medStats[o.medarbejder].minBooket+=(o.minutter||0);
+      medStats[o.medarbejder].dage.add(o.dato);
+    }
+  }));
+  planLog.push({type:"info",msg:`── MEDARBEJDER-UDNYTTELSE ──`});
+  Object.entries(medStats).sort((a,b)=>b[1].minBooket-a[1].minBooket).forEach(([navn,s])=>{
+    const timer=Math.round(s.minBooket/60*10)/10;
+    const pct=s.minBooket>0?Math.round(s.minBooket/((medarbejdere.find(m=>m.navn===navn)?.timer||23)*60*Math.ceil(maxDage/7))*100):0;
+    planLog.push({type:"info",msg:`  ${navn} (${s.titel}): ${timer}t booket over ${s.dage.size} dage`});
+  });
+
+  // Lokale-udnyttelse
+  const lokStats = {};
+  klonPat.forEach(p=>p.opgaver.forEach(o=>{
+    if(o.status==="planlagt"&&o.lokale){
+      if(!lokStats[o.lokale]) lokStats[o.lokale]={minBooket:0,dage:new Set()};
+      lokStats[o.lokale].minBooket+=(o.minutter||0);
+      lokStats[o.lokale].dage.add(o.dato);
+    }
+  }));
+  planLog.push({type:"info",msg:`── LOKALE-UDNYTTELSE ──`});
+  Object.entries(lokStats).sort((a,b)=>b[1].minBooket-a[1].minBooket).forEach(([lok,s])=>{
+    planLog.push({type:"info",msg:`  ${lok}: ${Math.round(s.minBooket/60*10)/10}t booket over ${s.dage.size} dage`});
+  });
+
+  // Patienter der ikke er fuldt planlagt
+  const ikkeFuldt = klonPat.filter(p=>p.opgaver.some(o=>o.status!=="planlagt"&&!o.låst));
+  if(ikkeFuldt.length>0){
+    planLog.push({type:"warn",msg:`── ${ikkeFuldt.length} PATIENTER IKKE FULDT PLANLAGT ──`});
+  }
 
   // Synkroniser klonede patienter tilbage til original ordre
   const result = klonPat.map(kp => {
