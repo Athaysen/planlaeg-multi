@@ -3211,15 +3211,16 @@ function MedForm({med,onSave,onClose,certifikater=[]}){
 
 // LOKALER VIEW - redigerbare åbningstider + næste/seneste bookinger
 // ===============================================
-function LokalerView({patienter,lokTider,setLokTider,lokMeta={},setLokMeta,lokaler=[],saveLokaler=()=>{},adminData={}}){
+function LokalerView({patienter,lokTider,setLokTider,lokMeta={},setLokMeta,lokaler=[],saveLokaler=()=>{},adminData={},udstyrsKat=[],saveUdstyrsKat=()=>{},udstyrsPakker=[],saveUdstyrsPakker=()=>{}}){
+  const [topTab,setTopTab]=useState("lokaler"); // "lokaler" | "udstyr"
   const iDagLok=today();
   const [fraDato,setFraDato]=useState(addDays(iDagLok,-28));
   const [tilDato,setTilDato]=useState(iDagLok);
   const inPeriod=(o)=>o.dato?o.dato>=fraDato&&o.dato<=tilDato:false;
   const [valgt,setValgt]=useState(null);
-  const [bookingRetning,setBookingRetning]=useState("seneste"); // "seneste" | "næste"
-  const [editTiderLok,setEditTiderLok]=useState(null); // lokale-navn | null
-  const [editMetaLok,setEditMetaLok]=useState(null); // lokale-navn | null
+  const [bookingRetning,setBookingRetning]=useState("seneste");
+  const [editTiderLok,setEditTiderLok]=useState(null);
+  const [editMetaLok,setEditMetaLok]=useState(null);
 
   const LT = lokTider || DEFAULT_LOK_TIDER;
   const dagNavne=["Mandag","Tirsdag","Onsdag","Torsdag","Fredag","Lørdag","Søndag"];
@@ -3229,10 +3230,9 @@ function LokalerView({patienter,lokTider,setLokTider,lokMeta={},setLokMeta,lokal
     return lokaler.map(lok=>{
       const booket=patienter.flatMap(p=>p.opgaver.filter(o=>o.lokale===lok&&o.status==="planlagt"&&inPeriod(o)));
       const h=booket.reduce((a,o)=>a+o.minutter/60,0);
-      // Beregn antal forekomster af hver ugedag i perioden (matematisk, ingen loop)
         const antalDageFn=(dagNr)=>{
           const totalDage=daysBetween(fraDato,tilDato)+1;
-          const startDag=parseLocalDate(fraDato).getDay(); // 0=søn
+          const startDag=parseLocalDate(fraDato).getDay();
           const fuldeUger=Math.floor(totalDage/7);
           const resDage=totalDage%7;
           const normDag=(dagNr-startDag+7)%7;
@@ -3251,7 +3251,6 @@ function LokalerView({patienter,lokTider,setLokTider,lokMeta={},setLokMeta,lokal
           return{dag,opAbn,åbMin:åbMinPerDag,booketMin,antalDage,
             pct:totalÅbMin>0?Math.round(booketMin/totalÅbMin*100):0};
         });
-        // Samlet for alle dage
         const totalÅbMinAlle=dagStats.reduce((a,d)=>a+d.åbMin*d.antalDage,0);
         const totalBooketMin=dagStats.reduce((a,d)=>a+d.booketMin,0);
         const samletPct=totalÅbMinAlle>0?Math.round(totalBooketMin/totalÅbMinAlle*100):0;
@@ -3259,7 +3258,6 @@ function LokalerView({patienter,lokTider,setLokTider,lokMeta={},setLokMeta,lokal
     });
   },[patienter,LT,lokaler,fraDato,tilDato]);
 
-  // Seneste eller næste bookinger
   const getBookinger=(stat)=>{
     if(bookingRetning==="seneste"){
       return stat.booket.filter(o=>o.dato<=iDag).sort((a,b)=>b.dato.localeCompare(a.dato)||b.startKl.localeCompare(a.startKl)).slice(0,15);
@@ -3276,9 +3274,28 @@ function LokalerView({patienter,lokTider,setLokTider,lokMeta={},setLokMeta,lokal
     setEditTiderLok(null);
   };
 
+  // Alle udstyr items fra kategorier (fladt)
+  const alleUdstyrItems=useMemo(()=>udstyrsKat.flatMap(k=>(k.items||[]).map(i=>({...i,kategori:k.navn}))),[udstyrsKat]);
+
   return(
     <div style={{display:"flex",flexDirection:"column",height:"calc(100vh-100px)",gap:0}}>
-      <ViewHeader titel="Lokaler" undertitel="Opret og administrer lokaler — åbningstider, adresser og kapacitet"/>
+      <ViewHeader titel="Lokaler & Udstyr" undertitel="Administrer lokaler, udstyr og udstyrspakker"/>
+
+      {/* Top-tabs */}
+      <div style={{display:"flex",gap:0,borderBottom:`1px solid ${C.brd}`,marginBottom:8}}>
+        {[{id:"lokaler",label:"Lokaler"},{id:"udstyr",label:"Udstyr"}].map(t=>(
+          <button key={t.id} onClick={()=>setTopTab(t.id)}
+            style={{padding:"10px 24px",border:"none",fontFamily:"inherit",cursor:"pointer",
+              background:"none",fontWeight:topTab===t.id?700:400,fontSize:14,
+              color:topTab===t.id?C.acc:C.txtD,
+              borderBottom:topTab===t.id?`2px solid ${C.acc}`:"2px solid transparent",marginBottom:-1}}>
+            {t.label}
+          </button>
+        ))}
+      </div>
+
+      {/* ══════ LOKALER TAB ══════ */}
+      {topTab==="lokaler"&&(<>
       <PeriodeVaelger fraDato={fraDato} setFraDato={setFraDato} tilDato={tilDato} setTilDato={setTilDato}/>
       <div style={{display:"flex",gap:14,flex:1,overflow:"hidden",marginTop:12}}>
 
@@ -3319,7 +3336,6 @@ function LokalerView({patienter,lokTider,setLokTider,lokMeta={},setLokMeta,lokal
       </div>
 
       {/* Detalje */}
-{/* Detalje */}
       <div style={{flex:1,background:C.s2,border:`1px solid ${C.brd}`,borderRadius:12,overflow:"hidden",display:"flex",flexDirection:"column"}}>
         {!valgt?(
           <div style={{flex:1,display:"flex",alignItems:"center",justifyContent:"center",flexDirection:"column",gap:8,color:C.txtM}}>
@@ -3329,6 +3345,8 @@ function LokalerView({patienter,lokTider,setLokTider,lokMeta={},setLokMeta,lokal
           const stat=lokStats.find(l=>l.lok===valgt);
           if(!stat) return null;
           const bookinger=getBookinger(stat);
+          const lokUdstyr=lokMeta[valgt]?.udstyrIds||[];
+          const lokPakker=lokMeta[valgt]?.udstyrsPakkeIds||[];
           return(
             <>
               <div style={{padding:"14px 18px",borderBottom:`1px solid ${C.brd}`,display:"flex",justifyContent:"space-between",alignItems:"center",flexWrap:"wrap",gap:8}}>
@@ -3339,7 +3357,8 @@ function LokalerView({patienter,lokTider,setLokTider,lokMeta={},setLokMeta,lokal
                     <Pill color={C.acc} bg={C.accM}>{stat.h.toFixed(1)} timer booket</Pill>
                     {lokMeta[valgt]?.lokaleId&&<Pill color={C.txtM} bg={C.s3}>ID: {lokMeta[valgt].lokaleId}</Pill>}
                     {lokMeta[valgt]?.kapacitet&&<Pill color={C.txtM} bg={C.s3}> {lokMeta[valgt].kapacitet} pers.</Pill>}
-                    {lokMeta[valgt]?.udstyr&&<Pill color={C.txtM} bg={C.s3}> {lokMeta[valgt].udstyr}</Pill>}
+                    {lokUdstyr.length>0&&<Pill color={C.pur} bg={C.purM}>{lokUdstyr.length} udstyr</Pill>}
+                    {lokPakker.length>0&&<Pill color={C.blue} bg={C.blueM}>{lokPakker.length} pakker</Pill>}
                     {(()=>{const kr=lokMeta[valgt]?.krPrTime;const adminKr=(adminData?.taktDefaults?.Lokale?.krPrTime);const vis=kr??adminKr;return vis?<Pill color={C.acc} bg={C.accM}>{vis.toLocaleString("da-DK")} kr/t</Pill>:null;})()}
                   </div>
                 </div>
@@ -3348,6 +3367,17 @@ function LokalerView({patienter,lokTider,setLokTider,lokMeta={},setLokMeta,lokal
                 </div>
               </div>
               <div style={{flex:1,overflowY:"auto",padding:16}}>
+                {/* Udstyr & pakker på lokalet */}
+                {(lokUdstyr.length>0||lokPakker.length>0)&&(
+                  <div style={{marginBottom:20}}>
+                    <div style={{color:C.txt,fontWeight:700,marginBottom:8,fontSize:13}}>Tilknyttet udstyr & pakker</div>
+                    <div style={{display:"flex",flexWrap:"wrap",gap:5}}>
+                      {lokUdstyr.map(uid=>{const it=alleUdstyrItems.find(x=>x.id===uid);return it?<Pill key={uid} color={C.pur} bg={C.purM}>{it.navn} <span style={{opacity:.6,fontSize:10}}>({it.kategori})</span></Pill>:null;})}
+                      {lokPakker.map(pid=>{const pk=udstyrsPakker.find(x=>x.id===pid);return pk?<Pill key={pid} color={C.blue} bg={C.blueM}>{pk.navn}</Pill>:null;})}
+                    </div>
+                  </div>
+                )}
+
                 {/* Åbningstider tabel */}
                 <div style={{color:C.txt,fontWeight:700,marginBottom:10,fontSize:13}}>Åbningstider & udnyttelse pr. dag</div>
                 <table style={{width:"100%",borderCollapse:"collapse",marginBottom:20}}>
@@ -3377,7 +3407,6 @@ function LokalerView({patienter,lokTider,setLokTider,lokMeta={},setLokMeta,lokal
                         </td>
                       </tr>
                     ))}
-                      {/* Samlet-række */}
                       <tr style={{borderTop:`2px solid ${C.brd}`,background:C.s3}}>
                         <td style={{padding:"8px 8px",color:C.txt,fontSize:13,fontWeight:700}}>Samlet</td>
                         <td style={{padding:"8px 8px",color:C.txtM,fontSize:12}}>—</td>
@@ -3432,22 +3461,21 @@ function LokalerView({patienter,lokTider,setLokTider,lokMeta={},setLokMeta,lokal
         })()}
       </div>
 
-      {/* Modal: Rediger åbningstider */}
+      {/* Modal: Rediger lokale */}
       {editMetaLok&&(
-        <Modal title={`Lokaleinfo - ${editMetaLok}`} onClose={()=>setEditMetaLok(null)} w={520}>
+        <Modal title={`Lokaleinfo - ${editMetaLok}`} onClose={()=>setEditMetaLok(null)} w={560}>
           <LokMetaForm
               lok={editMetaLok}
               meta={lokMeta[editMetaLok]||{}}
               lokaler={lokaler}
               lokTider={lokTider}
               setLokTider={setLokTider}
+              udstyrsKat={udstyrsKat}
+              udstyrsPakker={udstyrsPakker}
               onSave={(gammelLok,m)=>{
-                // Håndter omdøbning
                 if(m.navn && m.navn!==gammelLok){
                   const nyLok=m.navn.trim();
-                  // Opdater lokaler-liste
                   saveLokaler(lokaler.map(l=>l===gammelLok?nyLok:l));
-                  // Flyt lokMeta nøgle + gem ny meta
                   setLokMeta(p=>{const{[gammelLok]:_,...rest}=p;return{...rest,[nyLok]:{...m,_editOpen:undefined}};});
                   if(valgt===gammelLok) setValgt(nyLok);
                 } else {
@@ -3470,6 +3498,273 @@ function LokalerView({patienter,lokTider,setLokTider,lokMeta={},setLokMeta,lokal
         </Modal>
       )}
       </div>
+      </>)}
+
+      {/* ══════ UDSTYR TAB ══════ */}
+      {topTab==="udstyr"&&(
+        <UdstyrsTabView udstyrsKat={udstyrsKat} saveUdstyrsKat={saveUdstyrsKat} udstyrsPakker={udstyrsPakker} saveUdstyrsPakker={saveUdstyrsPakker}/>
+      )}
+    </div>
+  );
+}
+
+// ── Udstyr-fanen: Kategorier, items og pakker ──────────────────
+function UdstyrsTabView({udstyrsKat,saveUdstyrsKat,udstyrsPakker,saveUdstyrsPakker}){
+  const [subTab,setSubTab]=useState("kategorier"); // "kategorier" | "pakker"
+  const [editKat,setEditKat]=useState(null);
+  const [editPakke,setEditPakke]=useState(null);
+  const [nyKatNavn,setNyKatNavn]=useState("");
+  const [nyPakkeNavn,setNyPakkeNavn]=useState("");
+
+  // Alle items fra alle kategorier
+  const alleItems=useMemo(()=>udstyrsKat.flatMap(k=>(k.items||[]).map(i=>({...i,katId:k.id,katNavn:k.navn}))),[udstyrsKat]);
+
+  // ── Kategori CRUD ──
+  const addKat=()=>{
+    const n=nyKatNavn.trim();if(!n)return;
+    saveUdstyrsKat([...udstyrsKat,{id:`ukat_${uid()}`,navn:n,items:[]}]);
+    setNyKatNavn("");
+  };
+  const delKat=(id)=>saveUdstyrsKat(udstyrsKat.filter(k=>k.id!==id));
+  const renameKat=(id,navn)=>saveUdstyrsKat(udstyrsKat.map(k=>k.id===id?{...k,navn}:k));
+
+  // ── Item CRUD ──
+  const addItem=(katId,navn)=>{
+    const n=navn.trim();if(!n)return;
+    saveUdstyrsKat(udstyrsKat.map(k=>k.id===katId?{...k,items:[...(k.items||[]),{id:`uitm_${uid()}`,navn:n}]}:k));
+  };
+  const delItem=(katId,itemId)=>saveUdstyrsKat(udstyrsKat.map(k=>k.id===katId?{...k,items:(k.items||[]).filter(i=>i.id!==itemId)}:k));
+  const renameItem=(katId,itemId,navn)=>saveUdstyrsKat(udstyrsKat.map(k=>k.id===katId?{...k,items:(k.items||[]).map(i=>i.id===itemId?{...i,navn}:i)}:k));
+
+  // ── Pakke CRUD ──
+  const addPakke=()=>{
+    const n=nyPakkeNavn.trim();if(!n)return;
+    saveUdstyrsPakker([...udstyrsPakker,{id:`upak_${uid()}`,navn:n,itemIds:[]}]);
+    setNyPakkeNavn("");
+  };
+  const delPakke=(id)=>saveUdstyrsPakker(udstyrsPakker.filter(p=>p.id!==id));
+  const renamePakke=(id,navn)=>saveUdstyrsPakker(udstyrsPakker.map(p=>p.id===id?{...p,navn}:p));
+  const togglePakkeItem=(pakkeId,itemId)=>{
+    saveUdstyrsPakker(udstyrsPakker.map(p=>{
+      if(p.id!==pakkeId)return p;
+      const has=p.itemIds.includes(itemId);
+      return{...p,itemIds:has?p.itemIds.filter(x=>x!==itemId):[...p.itemIds,itemId]};
+    }));
+  };
+
+  return(
+    <div style={{flex:1,overflow:"hidden",display:"flex",flexDirection:"column"}}>
+      {/* Sub-tabs */}
+      <div style={{display:"flex",gap:6,marginBottom:12}}>
+        {[{id:"kategorier",label:"Kategorier & Udstyr"},{id:"pakker",label:"Udstyrspakker"}].map(t=>(
+          <button key={t.id} onClick={()=>setSubTab(t.id)}
+            style={{padding:"7px 18px",borderRadius:8,border:`1px solid ${subTab===t.id?C.acc:C.brd}`,
+              background:subTab===t.id?C.accM:"transparent",color:subTab===t.id?C.acc:C.txtD,
+              fontSize:13,fontWeight:subTab===t.id?700:400,cursor:"pointer",fontFamily:"inherit"}}>
+            {t.label}
+          </button>
+        ))}
+      </div>
+
+      {/* ── KATEGORIER & UDSTYR ── */}
+      {subTab==="kategorier"&&(
+        <div style={{flex:1,overflowY:"auto"}}>
+          {/* Opret kategori */}
+          <div style={{display:"flex",gap:8,marginBottom:16}}>
+            <input value={nyKatNavn} onChange={e=>setNyKatNavn(e.target.value)}
+              onKeyDown={e=>{if(e.key==="Enter")addKat();}}
+              placeholder="Ny kategori-navn..."
+              style={{flex:1,padding:"9px 13px",borderRadius:8,border:`1px solid ${C.brd}`,background:C.s2,color:C.txt,fontSize:13,fontFamily:"inherit",outline:"none"}}/>
+            <Btn v="primary" onClick={addKat}>+ Kategori</Btn>
+          </div>
+
+          {udstyrsKat.length===0&&(
+            <div style={{color:C.txtM,fontSize:13,textAlign:"center",padding:40}}>
+              Ingen udstyrskategorier oprettet endnu. Opret en kategori for at tilfoeje udstyr.
+            </div>
+          )}
+
+          {udstyrsKat.map(kat=>(
+            <KategoriKort key={kat.id} kat={kat} onRename={(n)=>renameKat(kat.id,n)} onDelete={()=>delKat(kat.id)}
+              onAddItem={(n)=>addItem(kat.id,n)} onDelItem={(iid)=>delItem(kat.id,iid)} onRenameItem={(iid,n)=>renameItem(kat.id,iid,n)}/>
+          ))}
+        </div>
+      )}
+
+      {/* ── UDSTYRSPAKKER ── */}
+      {subTab==="pakker"&&(
+        <div style={{flex:1,overflowY:"auto"}}>
+          {/* Opret pakke */}
+          <div style={{display:"flex",gap:8,marginBottom:16}}>
+            <input value={nyPakkeNavn} onChange={e=>setNyPakkeNavn(e.target.value)}
+              onKeyDown={e=>{if(e.key==="Enter")addPakke();}}
+              placeholder="Ny pakke-navn..."
+              style={{flex:1,padding:"9px 13px",borderRadius:8,border:`1px solid ${C.brd}`,background:C.s2,color:C.txt,fontSize:13,fontFamily:"inherit",outline:"none"}}/>
+            <Btn v="primary" onClick={addPakke}>+ Pakke</Btn>
+          </div>
+
+          {alleItems.length===0&&(
+            <div style={{color:C.txtM,fontSize:13,textAlign:"center",padding:20,background:C.s2,borderRadius:10,border:`1px solid ${C.brd}`,marginBottom:16}}>
+              Opret kategorier og udstyr under "Kategorier & Udstyr" foerst, for at kunne samle dem i pakker.
+            </div>
+          )}
+
+          {udstyrsPakker.length===0&&alleItems.length>0&&(
+            <div style={{color:C.txtM,fontSize:13,textAlign:"center",padding:40}}>
+              Ingen udstyrspakker oprettet endnu.
+            </div>
+          )}
+
+          {udstyrsPakker.map(pakke=>(
+            <PakkeKort key={pakke.id} pakke={pakke} alleItems={alleItems} udstyrsKat={udstyrsKat}
+              onRename={(n)=>renamePakke(pakke.id,n)} onDelete={()=>delPakke(pakke.id)}
+              onToggleItem={(iid)=>togglePakkeItem(pakke.id,iid)}/>
+          ))}
+        </div>
+      )}
+    </div>
+  );
+}
+
+// ── Kategori-kort med items ──
+function KategoriKort({kat,onRename,onDelete,onAddItem,onDelItem,onRenameItem}){
+  const [editNavn,setEditNavn]=useState(false);
+  const [navn,setNavn]=useState(kat.navn);
+  const [nytItem,setNytItem]=useState("");
+  const [editItemId,setEditItemId]=useState(null);
+  const [editItemNavn,setEditItemNavn]=useState("");
+  const [confirmDel,setConfirmDel]=useState(false);
+
+  return(
+    <div style={{background:C.s2,border:`1px solid ${C.brd}`,borderRadius:12,marginBottom:12,overflow:"hidden"}}>
+      {/* Header */}
+      <div style={{padding:"10px 14px",borderBottom:`1px solid ${C.brd}`,display:"flex",justifyContent:"space-between",alignItems:"center",background:C.s3}}>
+        {editNavn?(
+          <div style={{display:"flex",gap:6,flex:1}}>
+            <input value={navn} onChange={e=>setNavn(e.target.value)} autoFocus
+              onKeyDown={e=>{if(e.key==="Enter"){onRename(navn);setEditNavn(false);}if(e.key==="Escape")setEditNavn(false);}}
+              style={{flex:1,padding:"4px 8px",borderRadius:6,border:`1px solid ${C.brd}`,background:C.s1,color:C.txt,fontSize:13,fontFamily:"inherit"}}/>
+            <Btn v="primary" small onClick={()=>{onRename(navn);setEditNavn(false);}}>Gem</Btn>
+          </div>
+        ):(
+          <div style={{display:"flex",alignItems:"center",gap:8}}>
+            <span style={{color:C.txt,fontWeight:700,fontSize:14}}>{kat.navn}</span>
+            <Pill color={C.txtM} bg={C.s2} sm>{(kat.items||[]).length} udstyr</Pill>
+          </div>
+        )}
+        {!editNavn&&(
+          <div style={{display:"flex",gap:4}}>
+            <Btn v="ghost" small onClick={()=>{setNavn(kat.navn);setEditNavn(true);}}>Omdoeb</Btn>
+            <Btn v="ghost" small onClick={()=>setConfirmDel(true)} style={{color:C.red}}>Slet</Btn>
+          </div>
+        )}
+      </div>
+
+      {/* Items */}
+      <div style={{padding:"10px 14px"}}>
+        <div style={{display:"flex",flexWrap:"wrap",gap:6,marginBottom:10}}>
+          {(kat.items||[]).map(item=>(
+            <div key={item.id} style={{display:"flex",alignItems:"center",gap:4,background:C.accM,border:`1px solid ${C.acc}44`,borderRadius:7,padding:"4px 10px"}}>
+              {editItemId===item.id?(
+                <input value={editItemNavn} onChange={e=>setEditItemNavn(e.target.value)} autoFocus
+                  onKeyDown={e=>{if(e.key==="Enter"){onRenameItem(item.id,editItemNavn);setEditItemId(null);}if(e.key==="Escape")setEditItemId(null);}}
+                  style={{width:100,padding:"2px 4px",borderRadius:4,border:`1px solid ${C.brd}`,background:C.s1,color:C.txt,fontSize:12,fontFamily:"inherit"}}/>
+              ):(
+                <span style={{color:C.acc,fontSize:12,fontWeight:600,cursor:"pointer"}}
+                  onClick={()=>{setEditItemId(item.id);setEditItemNavn(item.navn);}}>{item.navn}</span>
+              )}
+              <button onClick={()=>onDelItem(item.id)}
+                style={{background:"none",border:"none",color:C.red,cursor:"pointer",fontSize:14,padding:0,lineHeight:1,fontFamily:"inherit"}}>x</button>
+            </div>
+          ))}
+        </div>
+        {/* Tilfoej item */}
+        <div style={{display:"flex",gap:6}}>
+          <input value={nytItem} onChange={e=>setNytItem(e.target.value)}
+            onKeyDown={e=>{if(e.key==="Enter"){onAddItem(nytItem);setNytItem("");}}}
+            placeholder="Tilfoej udstyr..."
+            style={{flex:1,padding:"6px 10px",borderRadius:7,border:`1px solid ${C.brd}`,background:C.s3,color:C.txt,fontSize:12,fontFamily:"inherit",outline:"none"}}/>
+          <button onClick={()=>{onAddItem(nytItem);setNytItem("");}}
+            style={{padding:"6px 14px",borderRadius:7,border:"none",background:C.acc,color:"#fff",fontSize:12,fontWeight:600,cursor:"pointer",fontFamily:"inherit"}}>
+            + Tilfoej
+          </button>
+        </div>
+      </div>
+
+      {confirmDel&&<ConfirmDialog tekst={`Slet kategorien "${kat.navn}" og alt udstyr i den?`} onJa={()=>{onDelete();setConfirmDel(false);}} onNej={()=>setConfirmDel(false)}/>}
+    </div>
+  );
+}
+
+// ── Pakke-kort med item-toggle ──
+function PakkeKort({pakke,alleItems,udstyrsKat,onRename,onDelete,onToggleItem}){
+  const [editNavn,setEditNavn]=useState(false);
+  const [navn,setNavn]=useState(pakke.navn);
+  const [confirmDel,setConfirmDel]=useState(false);
+  const [expanded,setExpanded]=useState(false);
+
+  return(
+    <div style={{background:C.s2,border:`1px solid ${C.brd}`,borderRadius:12,marginBottom:12,overflow:"hidden"}}>
+      {/* Header */}
+      <div style={{padding:"10px 14px",borderBottom:`1px solid ${C.brd}`,display:"flex",justifyContent:"space-between",alignItems:"center",background:C.s3}}>
+        {editNavn?(
+          <div style={{display:"flex",gap:6,flex:1}}>
+            <input value={navn} onChange={e=>setNavn(e.target.value)} autoFocus
+              onKeyDown={e=>{if(e.key==="Enter"){onRename(navn);setEditNavn(false);}if(e.key==="Escape")setEditNavn(false);}}
+              style={{flex:1,padding:"4px 8px",borderRadius:6,border:`1px solid ${C.brd}`,background:C.s1,color:C.txt,fontSize:13,fontFamily:"inherit"}}/>
+            <Btn v="primary" small onClick={()=>{onRename(navn);setEditNavn(false);}}>Gem</Btn>
+          </div>
+        ):(
+          <div style={{display:"flex",alignItems:"center",gap:8,cursor:"pointer"}} onClick={()=>setExpanded(!expanded)}>
+            <span style={{color:C.txt,fontWeight:700,fontSize:14}}>{pakke.navn}</span>
+            <Pill color={C.blue} bg={C.blueM} sm>{pakke.itemIds.length} udstyr</Pill>
+            <span style={{color:C.txtM,fontSize:10}}>{expanded?"v":">"}</span>
+          </div>
+        )}
+        {!editNavn&&(
+          <div style={{display:"flex",gap:4}}>
+            <Btn v="ghost" small onClick={()=>{setNavn(pakke.navn);setEditNavn(true);}}>Omdoeb</Btn>
+            <Btn v="ghost" small onClick={()=>setConfirmDel(true)} style={{color:C.red}}>Slet</Btn>
+          </div>
+        )}
+      </div>
+
+      {/* Valgte items opsummering */}
+      {!expanded&&pakke.itemIds.length>0&&(
+        <div style={{padding:"8px 14px",display:"flex",flexWrap:"wrap",gap:4}}>
+          {pakke.itemIds.map(iid=>{const it=alleItems.find(x=>x.id===iid);return it?<Pill key={iid} color={C.acc} bg={C.accM} sm>{it.navn}</Pill>:null;})}
+        </div>
+      )}
+
+      {/* Expanded: toggle items by kategori */}
+      {expanded&&(
+        <div style={{padding:"10px 14px"}}>
+          {udstyrsKat.map(kat=>{
+            const items=kat.items||[];
+            if(items.length===0)return null;
+            return(
+              <div key={kat.id} style={{marginBottom:10}}>
+                <div style={{color:C.txtM,fontSize:11,fontWeight:600,marginBottom:5}}>{kat.navn}</div>
+                <div style={{display:"flex",flexWrap:"wrap",gap:5}}>
+                  {items.map(item=>{
+                    const aktiv=pakke.itemIds.includes(item.id);
+                    return(
+                      <button key={item.id} onClick={()=>onToggleItem(item.id)}
+                        style={{padding:"5px 12px",borderRadius:6,cursor:"pointer",fontFamily:"inherit",fontSize:12,
+                          fontWeight:aktiv?700:400,background:aktiv?C.accM:"transparent",
+                          color:aktiv?C.acc:C.txtM,border:`1px solid ${aktiv?C.acc:C.brd}`,transition:"all .12s"}}>
+                        {item.navn}
+                      </button>
+                    );
+                  })}
+                </div>
+              </div>
+            );
+          })}
+        </div>
+      )}
+
+      {confirmDel&&<ConfirmDialog tekst={`Slet pakken "${pakke.navn}"?`} onJa={()=>{onDelete();setConfirmDel(false);}} onNej={()=>setConfirmDel(false)}/>}
     </div>
   );
 }
@@ -3596,7 +3891,7 @@ function UdstyrPanel({udstyr=[], onChange}) {
 }
 
 
-function LokMetaForm({lok,meta,onSave,onClose,onDelete=null,onRename=null,lokaler=[],lokTider={},setLokTider=()=>{},indsatser=[],setIndsatser=()=>{}}){
+function LokMetaForm({lok,meta,onSave,onClose,onDelete=null,onRename=null,lokaler=[],lokTider={},setLokTider=()=>{},indsatser=[],setIndsatser=()=>{},udstyrsKat=[],udstyrsPakker=[]}){
   const [delLok,setDelLok]=useState(null);
   const [lmfTab,setLmfTab]=useState("info");
   const dagNavne=["Mandag","Tirsdag","Onsdag","Torsdag","Fredag","Lørdag","Søndag"];
@@ -3604,9 +3899,10 @@ function LokMetaForm({lok,meta,onSave,onClose,onDelete=null,onRename=null,lokale
     lokaleId:meta.lokaleId||"",
     kapacitet:meta.kapacitet||"",
     udstyr:(typeof meta.udstyr==="string"&&meta.udstyr?meta.udstyr.split(/[,،]+/).map(s=>s.trim()).filter(Boolean):Array.isArray(meta.udstyr)?meta.udstyr:[]),
+    udstyrIds:meta.udstyrIds||[],
+    udstyrsPakkeIds:meta.udstyrsPakkeIds||[],
     krPrTime:meta.krPrTime!==undefined?meta.krPrTime:null,
     navn:lok,
-    // adresse
     vej:(meta.adresse||{}).vej||"",
     husnr:(meta.adresse||{}).husnr||"",
     postnr:(meta.adresse||{}).postnr||"",
@@ -3691,11 +3987,58 @@ function LokMetaForm({lok,meta,onSave,onClose,onDelete=null,onRename=null,lokale
             </div>
           </div>
 
-          {/* Udstyr afsnit */}
+          {/* Udstyr afsnit — fra centralt katalog */}
           <div style={{background:C.s3,borderRadius:9,padding:"12px 14px",border:`1px solid ${C.brd}`}}>
-            <div style={{color:C.txtD,fontWeight:700,fontSize:12,marginBottom:10}}>Udstyr</div>
-            <UdstyrPanel udstyr={f.udstyr} onChange={v=>set("udstyr",v)}/>
+            <div style={{color:C.txtD,fontWeight:700,fontSize:12,marginBottom:10}}>Udstyr (fra katalog)</div>
+            {udstyrsKat.length===0?(
+              <div style={{color:C.txtM,fontSize:12}}>Opret udstyrskategorier under fanen "Udstyr" foerst.</div>
+            ):(
+              <div style={{display:"flex",flexDirection:"column",gap:8}}>
+                {udstyrsKat.map(kat=>{
+                  const items=kat.items||[];
+                  if(items.length===0)return null;
+                  return(
+                    <div key={kat.id}>
+                      <div style={{color:C.txtM,fontSize:11,fontWeight:600,marginBottom:4}}>{kat.navn}</div>
+                      <div style={{display:"flex",flexWrap:"wrap",gap:5}}>
+                        {items.map(item=>{
+                          const aktiv=f.udstyrIds.includes(item.id);
+                          return(
+                            <button key={item.id} onClick={()=>set("udstyrIds",aktiv?f.udstyrIds.filter(x=>x!==item.id):[...f.udstyrIds,item.id])}
+                              style={{padding:"4px 10px",borderRadius:6,cursor:"pointer",fontFamily:"inherit",fontSize:12,
+                                fontWeight:aktiv?700:400,background:aktiv?C.accM:"transparent",
+                                color:aktiv?C.acc:C.txtM,border:`1px solid ${aktiv?C.acc:C.brd}`,transition:"all .12s"}}>
+                              {item.navn}
+                            </button>
+                          );
+                        })}
+                      </div>
+                    </div>
+                  );
+                })}
+              </div>
+            )}
           </div>
+
+          {/* Udstyrspakker */}
+          {udstyrsPakker.length>0&&(
+            <div style={{background:C.s3,borderRadius:9,padding:"12px 14px",border:`1px solid ${C.brd}`}}>
+              <div style={{color:C.txtD,fontWeight:700,fontSize:12,marginBottom:10}}>Udstyrspakker</div>
+              <div style={{display:"flex",flexWrap:"wrap",gap:5}}>
+                {udstyrsPakker.map(pk=>{
+                  const aktiv=f.udstyrsPakkeIds.includes(pk.id);
+                  return(
+                    <button key={pk.id} onClick={()=>set("udstyrsPakkeIds",aktiv?f.udstyrsPakkeIds.filter(x=>x!==pk.id):[...f.udstyrsPakkeIds,pk.id])}
+                      style={{padding:"5px 12px",borderRadius:6,cursor:"pointer",fontFamily:"inherit",fontSize:12,
+                        fontWeight:aktiv?700:400,background:aktiv?C.blueM:"transparent",
+                        color:aktiv?C.blue:C.txtM,border:`1px solid ${aktiv?C.blue:C.brd}`,transition:"all .12s"}}>
+                      {pk.navn} <span style={{opacity:.5,fontSize:10}}>({pk.itemIds.length})</span>
+                    </button>
+                  );
+                })}
+              </div>
+            </div>
+          )}
         </div>
       )}
 
@@ -3712,7 +4055,7 @@ function LokMetaForm({lok,meta,onSave,onClose,onDelete=null,onRename=null,lokale
           <Btn v="ghost" onClick={onClose}>Annuller</Btn>
           <Btn v="primary" onClick={()=>onSave(lok,{
             lokaleId:f.lokaleId,kapacitet:f.kapacitet,
-            udstyr:f.udstyr,
+            udstyr:f.udstyr,udstyrIds:f.udstyrIds,udstyrsPakkeIds:f.udstyrsPakkeIds,
             adresse:{vej:f.vej,husnr:f.husnr,postnr:f.postnr,by:f.by},
             navn:f.navn,krPrTime:f.krPrTime!==null?Number(f.krPrTime):null,
           })}>Gem info</Btn>
@@ -4346,7 +4689,7 @@ const ids=Object.keys(forlob).filter(k=>(forlob[k]||[]).length>0).sort((a,b)=>Nu
 
   // -- Tab bar --
   const TABS = [
-    {id:"indsatser",   label:" Indsatser"},
+    {id:"indsatser",   label:" Opgaver"},
     {id:"forlob",      label:" Forløb"},
     {id:"certifikater",label:"* Certifikater"},
   ];
@@ -5964,7 +6307,7 @@ const NAV_ITEMS = [
   {id:"patienter",    label:"Patienter"},
   {id:"kalender",     label:"Kalender"},
   {id:"medarbejdere", label:"Medarbejdere"},
-  {id:"lokaler",      label:"Lokaler"},
+  {id:"lokaler",      label:"Lokaler & Udstyr"},
   {id:"forlob",       label:"Opgaver"},
   {sep:true},
   {id:"planlog",      label:"Planlæg"},
@@ -9394,6 +9737,11 @@ return [];}});
   const [lokaler,setLokaler]=useState(()=>[...ALLE_LOK]);
   const saveLokaler=(ny)=>{setLokaler(ny);try{localStorage.setItem("planmed_lokaler",JSON.stringify(ny));}catch(e){}};
   const [lokMeta,setLokMeta]=useState({});
+  // Udstyr: kategorier med items, og pakker
+  const [udstyrsKat,setUdstyrsKat]=useState(()=>{try{const s=localStorage.getItem("planmed_udstyrsKat");return s?JSON.parse(s):[];}catch(e){return[];}});
+  const [udstyrsPakker,setUdstyrsPakker]=useState(()=>{try{const s=localStorage.getItem("planmed_udstyrsPakker");return s?JSON.parse(s):[];}catch(e){return[];}});
+  const saveUdstyrsKat=(v)=>{setUdstyrsKat(v);try{localStorage.setItem("planmed_udstyrsKat",JSON.stringify(v));}catch(e){}};
+  const saveUdstyrsPakker=(v)=>{setUdstyrsPakker(v);try{localStorage.setItem("planmed_udstyrsPakker",JSON.stringify(v));}catch(e){}};
   const [certifikater,setCertifikater]=useState(()=>structuredClone(INIT_CERTIFIKATER));
   const [anmodninger,setAnmodninger]=useState([]); // {id,medId,medNavn,medEmail,lederNavn,lederEmail,
   const [rulNotif,setRulNotif]=useState([]); // rulleplan-notifikationer: {id,patId,patNavn,opgaveId,opgaveType,medNavn,medMail,ansvarligNavn,ansvarligMail,oprettet,deadline,rykkerdato,status,log:[]}tidspunkt,felt,fra,til,status:"afventer"|"godkendt"|"afvist",kommentar:""}
@@ -9720,7 +10068,7 @@ return [];}},[scopedPatienter,lokTider]);
           {view==="patienter"&&<ErrorBoundary><PatientKalenderView patienter={scopedPatienter} medarbejdere={scopedMed} setPatienter={setPatienter} forlob={forlob} showToast={showToast} onMarkerLøst={handleMarkerLøst} lokMeta={lokMeta} setAnmodninger={setAnmodninger} adminData={adminData} lokaler={lokaler}/></ErrorBoundary>}
           {view==="kalender"&&<ErrorBoundary><KalenderView patienter={scopedPatienter} medarbejdere={scopedMed} lokaler={lokaler}/></ErrorBoundary>}
           {view==="medarbejdere"&&<ErrorBoundary><MedarbejderView medarbejdere={scopedMed} setMedarbejdere={setMedarbejdere} patienter={scopedPatienter} setPatienter={setPatienter} anmodninger={anmodninger} setAnmodninger={setAnmodninger} isAdmin={isAdmin} certifikater={certifikater} showToast={showToast} adminData={adminData}/></ErrorBoundary>}
-          {view==="lokaler"&&<ErrorBoundary><LokalerView patienter={patienter} lokTider={lokTider} setLokTider={setLokTider} lokMeta={lokMeta} setLokMeta={setLokMeta} lokaler={lokaler} saveLokaler={saveLokaler} adminData={adminData}/></ErrorBoundary>}
+          {view==="lokaler"&&<ErrorBoundary><LokalerView patienter={patienter} lokTider={lokTider} setLokTider={setLokTider} lokMeta={lokMeta} setLokMeta={setLokMeta} lokaler={lokaler} saveLokaler={saveLokaler} adminData={adminData} udstyrsKat={udstyrsKat} saveUdstyrsKat={saveUdstyrsKat} udstyrsPakker={udstyrsPakker} saveUdstyrsPakker={saveUdstyrsPakker}/></ErrorBoundary>}
           {view==="forlob"&&<ErrorBoundary><ForlobView forlob={forlob} setForlob={setForlob} medarbejdere={scopedMed} setMedarbejdere={setMedarbejdere} indsatser={indsatser} setIndsatser={setIndsatser} certifikater={certifikater} setCertifikater={setCertifikater} lokaler={lokaler} setPatienter={setPatienter}/></ErrorBoundary>}
           {view==="planlog"&&<ErrorBoundary><PlanLogView patienter={scopedPatienter} planLog={planLog} medarbejdere={scopedMed} setPatienter={setPatienter} onPlan={handlePlan} running={running} progress={progress} planFraDato={planFraDato} setPlanFraDato={setPlanFraDato} afdScope={afdScope} alleAfdelinger={alleAfdelinger} toggleAktiv={toggleAktiv} toggleRes={toggleRes} lokaler={lokaler} certifikater={certifikater} planDebug={planDebug}/></ErrorBoundary>}
           {view==="admin"&&isAdmin&&<ErrorBoundary><AdminView adminData={adminData} setAdminData={setAdminData} authData={authData} anmodninger={anmodninger} setAnmodninger={setAnmodninger} medarbejdere={medarbejdere} setMedarbejdere={setMedarbejdere} rulNotif={rulNotif} setRulNotif={setRulNotif} patienter={patienter} setPatienter={setPatienter} aktivLog={aktivLog} setAktivLog={setAktivLog} gemLog={gemAktivLog} lokMeta={lokMeta} config={config} setConfig={setConfig} setForlob={setForlob} forlob={forlob} setLokTider={setLokTider} setLokMeta={setLokMeta} lokaler={lokaler} saveLokaler={saveLokaler} indsatser={indsatser} setIndsatser={setIndsatser}/></ErrorBoundary>}
