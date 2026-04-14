@@ -4780,21 +4780,24 @@ function ForlobView({forlob,setForlob,medarbejdere,setMedarbejdere,indsatser,set
 const ids=Object.keys(forlob).filter(k=>(forlob[k]||[]).length>0).sort((a,b)=>Number(a)-Number(b));
 
   // ── Synkroniser forløbsændringer til patienter ──
-  // Når et forløb ændres, opdaterer vi sekvens og opgavenavne
-  // for alle patienter der har det forløb tildelt
-  const syncForlobTilPatienter = (forlobNr, nyeOpgaver) => {
+  // Gen-bygger opgaver fra forløbet og bevarer status/dato fra eksisterende
+  const syncForlobTilPatienter = (forlobNr, nyeForlobOpgaver) => {
     setPatienter(ps=>ps.map(p=>{
       if(String(p.forlobNr)!==String(forlobNr)) return p;
-      // Matcher patientens opgaver til forløbets opgaver via index/sekvens
-      const opdateret = p.opgaver.map(opg=>{
-        // Find matchende forløbs-opgave baseret på opgavenavn
-        const matchIdx = nyeOpgaver.findIndex(fo=>fo.o===opg.opgave);
-        if(matchIdx>=0) {
-          return {...opg, sekvens: nyeOpgaver[matchIdx].s};
+      // Byg nye opgaver fra det opdaterede forløb
+      const nyBuild = buildPatient({...p, forlobNr}, {[forlobNr]:nyeForlobOpgaver}).opgaver;
+      // Bevar planlagt-status fra eksisterende opgaver (match på opgavenavn)
+      const merged = nyBuild.map(ny=>{
+        const eksist = p.opgaver.find(e=>e.opgave===ny.opgave);
+        if(eksist) {
+          // Bevar dato/tid/medarbejder/status, men tag ny sekvens
+          return {...eksist, sekvens:ny.sekvens, indsatsGruppe:ny.indsatsGruppe};
         }
-        return opg;
+        return ny;
       });
-      return {...p, opgaver:opdateret};
+      // Tilføj manuelt tilføjede opgaver (sekvens >= 999)
+      const manuelle = p.opgaver.filter(o=>o.sekvens>=999);
+      return {...p, opgaver:[...merged,...manuelle]};
     }));
   };
 
