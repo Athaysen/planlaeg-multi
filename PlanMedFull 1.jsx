@@ -13188,6 +13188,8 @@ function runPlanner(patienter, config={}) {
     // Næste opgave kan tidligst starte efter forrige er afsluttet
     let tidligstDato = [startDato, pat.henvDato||startDato].reduce((a,b)=>a>b?a:b);
     let tidligstMin = 0;
+    // Track seneste patientbesøgs dato for minGapDays
+    let sidstePatBesøgDato = null;
 
     // Planlæg hver opgave strengt sekventielt
     for(const opg of ventende) {
@@ -13201,29 +13203,33 @@ function runPlanner(patienter, config={}) {
         kandidater = [låstMed, ...kandidater.filter(k=>k!==låstMed)];
       }
 
+      // minGapDays: hvis denne opgave har patientbesøg, tjek afstand til seneste
+      let effTidligstDato = tidligstDato;
+      let effTidligstMinVal = tidligstMin;
+      if(opg.patInv && sidstePatBesøgDato && minGapDays>0) {
+        const gapDato = addDays2(sidstePatBesøgDato, minGapDays);
+        if(gapDato > effTidligstDato) {
+          effTidligstDato = gapDato;
+          effTidligstMinVal = 0;
+        }
+      }
+
       // Respektér opgavens eget tidsvindue (tidligst/senest)
       const opgTidligst = opg.tidligst ? toMin2(opg.tidligst) : 0;
-      const effTidligstMin = Math.max(tidligstMin, opgTidligst);
+      const effTidligstMin = Math.max(effTidligstMinVal, opgTidligst);
 
-      const ok = bookOpgave(opg, kandidater, tidligstDato, effTidligstMin, pat.id, deadline);
+      const ok = bookOpgave(opg, kandidater, effTidligstDato, effTidligstMin, pat.id, deadline);
       if(ok) {
         planned++;
         planlagteIds.add(opg.id);
         if(opg.indsatsGruppe && !gruppeMed[opg.indsatsGruppe]) {
           gruppeMed[opg.indsatsGruppe] = opg.medarbejder;
         }
-        // Næste opgave: anvend minGapDays for patientopgaver, ellers lige efter
-        // minGapDays gælder mellem opgaver der involverer patient (besøg)
-        // Underopgaver i samme gruppe (indsatsGruppe) ligger tæt — gap gælder mellem grupper
-        const næsteErSammeGruppe = opg.indsatsGruppe && ventende[ventende.indexOf(opg)+1]?.indsatsGruppe === opg.indsatsGruppe;
-        if(opg.patInv && minGapDays>0 && !næsteErSammeGruppe) {
-          // Spring minGapDays frem efter et patientbesøg
-          tidligstDato = addDays2(opg.dato, minGapDays);
-          tidligstMin = 0;
-        } else {
-          tidligstDato = opg.dato;
-          tidligstMin = toMin2(opg.slutKl) + pause;
-        }
+        // Opdater tidligst for næste opgave
+        tidligstDato = opg.dato;
+        tidligstMin = toMin2(opg.slutKl) + pause;
+        // Track seneste patientbesøg
+        if(opg.patInv) sidstePatBesøgDato = opg.dato;
         planLog.push({type:"info",msg:`[${pat.navn}] #${opg.sekvens} ${opg.opgave} → ${opg.dato} ${opg.startKl}-${opg.slutKl} (${opg.medarbejder}) [næste fra: ${tidligstDato} ${fromMin2(tidligstMin)}]`});
       } else {
         failed++;
