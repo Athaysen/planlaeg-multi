@@ -13031,15 +13031,66 @@ function runPlanner(patienter, config={}) {
     if(ratio>maxRatio) { maxRatio=ratio; flaskehals=t; }
   });
 
-  // 4. Log flaskehalsanalyse
-  planLog.push({type:"info",msg:`── RESSOURCE-ANALYSE ──`});
+  // 4. Lokale-kapacitet: tilgængelig tid per uge per lokale
+  const dagNavne2=["Mandag","Tirsdag","Onsdag","Torsdag","Fredag"];
+  const lokKap = {};
+  const alleLokaler = [...new Set(klonPat.flatMap(p=>p.opgaver.flatMap(o=>o.muligeLok||[])))].filter(Boolean);
+  alleLokaler.forEach(lok=>{
+    let minPerUge=0;
+    dagNavne2.forEach(dag=>{
+      const lt=lokTider[dag]?.[lok];
+      if(lt) {
+        const å=toMin2(lt.å||lt.åben||"00:00"), l=toMin2(lt.l||lt.lukket||"00:00");
+        if(l>å) minPerUge+=l-å;
+      }
+    });
+    lokKap[lok]=minPerUge;
+  });
+
+  // 5. Lokale-efterspørgsel: sum af minutter for opgaver der kræver hvert lokale
+  const lokEfterspørgsel = {};
+  alleLokaler.forEach(l=>{lokEfterspørgsel[l]=0;});
+  klonPat.forEach(p=>p.opgaver.forEach(o=>{
+    if(o.status==="planlagt"||o.låst) return;
+    (o.muligeLok||[]).forEach(lok=>{
+      // Fordel efterspørgslen jævnt over mulige lokaler
+      const andel=(o.minutter||60)/((o.muligeLok||[]).length||1);
+      lokEfterspørgsel[lok]=(lokEfterspørgsel[lok]||0)+andel;
+    });
+  }));
+
+  // 6. Find lokale-flaskehals
+  const lokBelastning = {};
+  let lokFlaskehals = null;
+  let lokMaxRatio = 0;
+  alleLokaler.forEach(lok=>{
+    const kap=lokKap[lok]||1;
+    const eft=lokEfterspørgsel[lok]||0;
+    const ratio=eft/kap;
+    lokBelastning[lok]={kapacitet:kap,efterspørgsel:eft,ratio:Math.round(ratio*100)/100};
+    if(ratio>lokMaxRatio){lokMaxRatio=ratio;lokFlaskehals=lok;}
+  });
+
+  // 7. Log flaskehalsanalyse
+  planLog.push({type:"info",msg:`── RESSOURCE-ANALYSE: MEDARBEJDERE ──`});
   TITLER_ANALYSE.forEach(t=>{
     const b=belastning[t];
     const bar = t===flaskehals?" *** FLASKEHALS ***":"";
     planLog.push({type:t===flaskehals?"warn":"info",
-      msg:`${t}: ${b.medarbejdere} medarbejdere, ${Math.round(b.kapacitet/60)}t/uge kapacitet, ${Math.round(b.efterspørgsel/60)}t efterspørgsel (ratio: ${b.ratio})${bar}`});
+      msg:`${t}: ${b.medarbejdere} medarb., ${Math.round(b.kapacitet/60)}t/uge kap., ${Math.round(b.efterspørgsel/60)}t eftersp. (ratio: ${b.ratio})${bar}`});
   });
-  planLog.push({type:"info",msg:`── Planlægger med fokus på ${flaskehals||"alle"}-ressourcen ──`});
+  planLog.push({type:"info",msg:`── RESSOURCE-ANALYSE: LOKALER ──`});
+  alleLokaler.sort((a,b)=>(lokBelastning[b]?.ratio||0)-(lokBelastning[a]?.ratio||0)).forEach(lok=>{
+    const lb=lokBelastning[lok];
+    if(!lb||lb.efterspørgsel===0) return;
+    const bar=lok===lokFlaskehals?" *** FLASKEHALS ***":"";
+    planLog.push({type:lok===lokFlaskehals?"warn":"info",
+      msg:`${lok}: ${Math.round(lb.kapacitet/60)}t/uge kap., ${Math.round(lb.efterspørgsel/60)}t eftersp. (ratio: ${lb.ratio})${bar}`});
+  });
+
+  // Samlet flaskehals: den mest pressede ressource (medarbejder eller lokale)
+  const samletFlaskehals = lokMaxRatio>maxRatio ? `Lokale: ${lokFlaskehals}` : `Titel: ${flaskehals}`;
+  planLog.push({type:"warn",msg:`── Primær flaskehals: ${samletFlaskehals} ──`});
 
   // Sorter patienter: prioritér dem der bruger flaskehalsen mest (de er sværest at planlægge)
   const sorterede = [...klonPat].sort((a,b)=>{
