@@ -12802,11 +12802,11 @@ function runPlanner(patienter, config={}) {
 
   // Hjælpefunktioner
   const getDag2 = (dato) => {
-    const d = new Date(dato+"T00:00:00");
+    const d = new Date(dato+"T12:00:00");
     return ["Søndag","Mandag","Tirsdag","Onsdag","Torsdag","Fredag","Lørdag"][d.getDay()];
   };
-  const isWeekend2 = (dato) => { const d=new Date(dato+"T00:00:00"); return d.getDay()===0||d.getDay()===6; };
-  const addDays2 = (dato,n) => { const d=new Date(dato+"T00:00:00"); d.setDate(d.getDate()+n); return d.toISOString().slice(0,10); };
+  const isWeekend2 = (dato) => { const d=new Date(dato+"T12:00:00"); return d.getDay()===0||d.getDay()===6; };
+  const addDays2 = (dato,n) => { const d=new Date(dato+"T12:00:00"); d.setDate(d.getDate()+n); const y=d.getFullYear(),m=String(d.getMonth()+1).padStart(2,"0"),dd=String(d.getDate()).padStart(2,"0"); return `${y}-${m}-${dd}`; };
   const toMin2 = (hm) => { if(!hm)return 0; const[h,m]=(hm||"0:0").split(":").map(Number); return h*60+(m||0); };
   const fromMin2 = (min) => { const h=Math.floor(min/60),m=min%60; return `${String(h).padStart(2,"0")}:${String(m).padStart(2,"0")}`; };
 
@@ -12836,7 +12836,7 @@ function runPlanner(patienter, config={}) {
   // ── Tracking: besøg per medarbejder per uge (ISO-uge) ──
   const medVisitsPerUge = {}; // {medNavn: {ugeNr: antal}}
   const getUgeNr = (dato) => {
-    const d=new Date(dato+"T00:00:00");
+    const d=new Date(dato+"T12:00:00");
     d.setDate(d.getDate()+3-(d.getDay()+6)%7);
     const uge1=new Date(d.getFullYear(),0,4);
     return Math.round(((d-uge1)/86400000-3+(uge1.getDay()+6)%7)/7)+1;
