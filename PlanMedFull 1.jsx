@@ -51,6 +51,12 @@ const PD = ["MILJØOBS  Forberedelse Pædagog","MILJØOBS  Patient Pædagog","MI
 const ALLE_K = [...PK,...PD,...LK];
 
 const BASE_MED = [];
+// Sikrer at medarbejdere med tomt kompetencer-array får default for deres titel
+const ensureKompetencer=(m)=>{
+  if(m.kompetencer&&m.kompetencer.length>0) return m;
+  const t=m.titel||"Psykolog";
+  return{...m,kompetencer:t==="Læge"?[...LK]:t==="Pædagog"?[...PD]:[...PK]};
+};
 const FORLOB = {
   1:[{o:"TEST 1  Forberedelse Psykolog",m:45,p:false,tl:"08:00",ss:"17:00",s:1,l:["Kontor"]},{o:"TEST 1  Patient Psykolog",m:90,p:true,tl:"10:00",ss:"17:00",s:2,l:["Lokale 1"]},{o:"TEST 1  Efterbehandling Psykolog",m:45,p:false,tl:"08:00",ss:"17:00",s:3,l:["Kontor"]},{o:"TEST 2  Forberedelse Psykolog",m:45,p:false,tl:"08:00",ss:"17:00",s:4,l:["Kontor"]},{o:"TEST 2  Patient Psykolog",m:60,p:true,tl:"10:00",ss:"17:00",s:5,l:["Lokale 1"]},{o:"TEST 2  Efterbehandling Psykolog",m:45,p:false,tl:"08:00",ss:"17:00",s:6,l:["Kontor"]},{o:"NNFP  Forberedelse Pædagog",m:90,p:false,tl:"08:00",ss:"17:00",s:7,l:["Kontor"]},{o:"NNFP  Patient Pædagog",m:45,p:true,tl:"10:00",ss:"17:00",s:8,l:["Lokale 1","Lokale 2","Lokale 3","Lokale 4","Lokale 5","Lokale 6","Lokale 7"]},{o:"NNFP  Efterbehandling Pædagog",m:90,p:false,tl:"08:00",ss:"17:00",s:9,l:["Kontor"]},{o:"KONFERENCE Læge",m:45,p:false,tl:"08:00",ss:"17:00",s:10,l:["Lokale 1","Lokale 2","Lokale 3","Lokale 4","Lokale 5","Lokale 6","Lokale 7","Kontor"]}],
   2:[{o:"FAMILIESAMTALE  Forberedelse Psykolog",m:45,p:false,tl:"08:00",ss:"17:00",s:1,l:["Kontor"]},{o:"FAMILIESAMTALE  Patient Psykolog",m:45,p:true,tl:"10:00",ss:"17:00",s:2,l:["Lokale 1","Lokale 2","Lokale 3","Lokale 4","Lokale 5","Lokale 6","Lokale 7"]},{o:"FAMILIESAMTALE  Efterbehandling Psykolog",m:15,p:false,tl:"08:00",ss:"17:00",s:3,l:["Kontor"]},{o:"ADOS 1  Forberedelse Psykolog",m:45,p:false,tl:"08:00",ss:"17:00",s:4,l:["Kontor"]},{o:"ADOS 1  Patient Psykolog",m:60,p:true,tl:"10:00",ss:"17:00",s:5,l:["Lokale 2","Lokale 3"]},{o:"ADOS 1  Efterbehandling Psykolog",m:45,p:false,tl:"08:00",ss:"17:00",s:6,l:["Kontor"]},{o:"FNU S  Forberedelse Læge",m:15,p:false,tl:"08:00",ss:"17:00",s:7,l:["Kontor"]},{o:"FNU S  Patient Læge",m:45,p:true,tl:"10:00",ss:"17:00",s:8,l:["Lokale 1","Lokale 2","Lokale 3","Lokale 4","Lokale 5","Lokale 6","Lokale 7"]},{o:"FNU S  Efterbehandling Læge",m:15,p:false,tl:"08:00",ss:"17:00",s:9,l:["Kontor"]},{o:"KONFERENCE Læge",m:45,p:false,tl:"08:00",ss:"17:00",s:10,l:["Lokale 1","Lokale 2","Lokale 3","Lokale 4","Lokale 5","Lokale 6","Lokale 7","Kontor"]}],
@@ -3058,7 +3064,7 @@ function MedForm({med,onSave,onClose,certifikater=[]}){
     arbejdsstedVej:med?.arbejdsstedVej||"",
     arbejdsstedPostnr:med?.arbejdsstedPostnr||"",
     arbejdsstedBy:med?.arbejdsstedBy||"",
-    kompetencer:med?.kompetencer||(()=>{const t=med?.titel||"Psykolog";return t==="Læge"?[...LK]:t==="Pædagog"?[...PD]:[...PK];})(),
+    kompetencer:(med?.kompetencer&&med.kompetencer.length>0)?med.kompetencer:(()=>{const t=med?.titel||"Psykolog";return t==="Læge"?[...LK]:t==="Pædagog"?[...PD]:[...PK];})(),
     arbejdsdage:med?.arbejdsdage||defaultDage,
     medarbejderId:med?.medarbejderId||"",
     epjKalenderApi:med?.epjKalenderApi||"",
@@ -6060,7 +6066,7 @@ function ExcelImportPanel({setPatienter,setMedarbejdere,setForlob,forlob,setLokT
             })
           );
           const kompStr=get(r,"Kompetencer");
-          const kompetencer=kompStr?kompStr.split(/[,;]/).map(k=>k.trim()).filter(Boolean):[];
+          const kompFraExcel=kompStr?kompStr.split(/[,;]/).map(k=>k.trim()).filter(Boolean):[];
           // Normaliser titel — accepter alle varianter inkl. encoding-forskelle
           const titelRaw=(get(r,"Titel")||"").trim();
           const titelLow=titelRaw.toLowerCase().normalize("NFC");
@@ -6085,7 +6091,7 @@ function ExcelImportPanel({setPatienter,setMedarbejdere,setForlob,forlob,setLokT
             hjemVej:get(r,"HjemVej")||"",
             hjemPostnr:get(r,"HjemPostnr")||"",
             hjemBy:get(r,"HjemBy")||"",
-            kompetencer, arbejdsdage,
+            kompetencer:kompFraExcel.length>0?kompFraExcel:(titelNorm==="Læge"?[...LK]:titelNorm==="Pædagog"?[...PD]:[...PK]), arbejdsdage,
             certifikater:(get(r,"Certifikater")||"").split(/[,;]/).map(k=>k.trim()).filter(Boolean),
             medarbejderId:get(r,"MedarbejderId")||"",
             epjKalenderApi:get(r,"EpjKalenderApi")||"",
@@ -6904,7 +6910,7 @@ function MinProfilPanel({med, medarbejdere, certifikater=[], onSave=()=>{}, onSe
     hjemBy:med?.hjemBy||"",
     medarbejderId:med?.medarbejderId||"",
     epjKalenderApi:med?.epjKalenderApi||"",
-    kompetencer:med?.kompetencer||[],
+    kompetencer:(med?.kompetencer&&med.kompetencer.length>0)?med.kompetencer:(()=>{const t=med?.titel||"Psykolog";return t==="Læge"?[...LK]:t==="Pædagog"?[...PD]:[...PK];})(),
     arbejdsdage:med?.arbejdsdage||defaultDage,
   });
   const set=(k,v)=>setF(p=>({...p,[k]:v}));
@@ -9829,7 +9835,13 @@ export default function App(){
   const [gsQuery,setGsQuery]=useState("");
   const [patienter,setPatienter]=useState(()=>{try{return INIT_PATIENTER_RAW.map(r=>buildPatient(r));}catch(e){
 return [];}});
-  const [medarbejdere,setMedarbejdere]=useState(()=>[...BASE_MED]);
+  const [medarbejdere,setMedarbejdereRaw]=useState(()=>[...BASE_MED].map(ensureKompetencer));
+  const setMedarbejdere=React.useCallback((valOrFn)=>{
+    setMedarbejdereRaw(prev=>{
+      const ny=typeof valOrFn==="function"?valOrFn(prev):valOrFn;
+      return ny.map(ensureKompetencer);
+    });
+  },[]);
   const [forlob,setForlob]=useState(()=>{try{return structuredClone(FORLOB);}catch(e){return {};}});
   const [indsatser,setIndsatser]=useState([]);
   const [lokTider,setLokTider]=useState(()=>structuredClone(DEFAULT_LOK_TIDER));
