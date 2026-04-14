@@ -1108,7 +1108,7 @@ function PatientDetaljeModal({pat,medarbejdere=[],patienter,forlob=FORLOB,onClos
               </div>
             </div>
             <div style={{display:"flex",gap:6,flexShrink:0,marginLeft:12,alignItems:"center"}}>
-              {!p.forlobNr&&<Btn v="primary" small onClick={onTildelForlob}>+ Forløb</Btn>}
+              <Btn v="primary" small onClick={onTildelForlob}>{p.forlobNr?"~ Forløb":"+ Forløb"}</Btn>
               <Btn v="subtle" small onClick={onAddOpg}>+ Opgave</Btn>
               <Btn v="outline" small onClick={onEdit}>Rediger</Btn>
               <div style={{position:"relative"}}>
@@ -1812,15 +1812,18 @@ function PatientKalenderView({patienter,medarbejdere,setPatienter,forlob=FORLOB,
           <TildelForlobForm
             forlob={forlob}
             onSave={(forlobNr)=>{
+              const pat = patienter.find(p=>p.id===tildelForlob);
               const nyOpgaver = buildPatient(
-                {...patienter.find(p=>p.id===tildelForlob), forlobNr},
+                {...pat, forlobNr},
                 forlob
               ).opgaver;
+              // Fjern gamle forløbs-opgaver (sekvens < 999 = fra forløb), behold manuelt tilføjede
+              const gamleManuelle = (pat?.opgaver||[]).filter(o=>o.sekvens>=999);
               setPatienter(ps=>ps.map(p=>p.id!==tildelForlob?p:{
                 ...p,
                 forlobNr,
                 forlobLabel:"Forløb nr. "+forlobNr,
-                opgaver:[...p.opgaver,...nyOpgaver]
+                opgaver:[...nyOpgaver,...gamleManuelle]
               }));
               setTildelForlob(null);
             }}
