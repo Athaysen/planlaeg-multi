@@ -13049,44 +13049,56 @@ function runPlanner(patienter, config={}) {
     if(ratio>maxRatio) { maxRatio=ratio; flaskehals=t; }
   });
 
-  // 4. Lokale-kapacitet: tilgængelig tid per uge per lokale
+  // 4. Lokale-kapacitet: gruppér varianter ("Kontor", "Kontor (2)" osv.) under basisnavn
   const dagNavne2=["Mandag","Tirsdag","Onsdag","Torsdag","Fredag"];
+  const alleLokNavneAnalyse = new Set();
+  Object.values(lokTider).forEach(dagLok=>Object.keys(dagLok).forEach(l=>alleLokNavneAnalyse.add(l)));
+  // Gruppér lokaler efter basisnavn
+  const lokGrupper = {}; // {basisnavn: [lokale1, lokale2, ...]}
+  alleLokNavneAnalyse.forEach(lok=>{
+    const basis = lok.replace(/\s*\(\d+\)$/,""); // "Kontor (2)" → "Kontor"
+    if(!lokGrupper[basis]) lokGrupper[basis]=[];
+    lokGrupper[basis].push(lok);
+  });
   const lokKap = {};
-  const alleLokaler = [...new Set(klonPat.flatMap(p=>p.opgaver.flatMap(o=>o.muligeLok||[])))].filter(Boolean);
-  alleLokaler.forEach(lok=>{
+  Object.entries(lokGrupper).forEach(([basis,loks])=>{
     let minPerUge=0;
-    dagNavne2.forEach(dag=>{
-      const lt=lokTider[dag]?.[lok];
-      if(lt) {
-        const å=toMin2(lt.å||lt.åben||"00:00"), l=toMin2(lt.l||lt.lukket||"00:00");
-        if(l>å) minPerUge+=l-å;
-      }
+    loks.forEach(lok=>{
+      dagNavne2.forEach(dag=>{
+        const lt=lokTider[dag]?.[lok];
+        if(lt) {
+          const å=toMin2(lt.å||lt.åben||"00:00"), l=toMin2(lt.l||lt.lukket||"00:00");
+          if(l>å) minPerUge+=l-å;
+        }
+      });
     });
-    lokKap[lok]=minPerUge;
+    lokKap[basis]=minPerUge;
   });
 
-  // 5. Lokale-efterspørgsel: sum af minutter for opgaver der kræver hvert lokale
+  // 5. Lokale-efterspørgsel: per basisnavn
   const lokEfterspørgsel = {};
-  alleLokaler.forEach(l=>{lokEfterspørgsel[l]=0;});
+  Object.keys(lokGrupper).forEach(b=>{lokEfterspørgsel[b]=0;});
   klonPat.forEach(p=>p.opgaver.forEach(o=>{
     if(o.status==="planlagt"||o.låst) return;
-    (o.muligeLok||[]).forEach(lok=>{
-      // Fordel efterspørgslen jævnt over mulige lokaler
-      const andel=(o.minutter||60)/((o.muligeLok||[]).length||1);
-      lokEfterspørgsel[lok]=(lokEfterspørgsel[lok]||0)+andel;
+    // Gruppér muligeLok under basisnavne
+    const baser = [...new Set((o.muligeLok||[]).map(l=>l.replace(/\s*\(\d+\)$/,"")))];
+    baser.forEach(basis=>{
+      const andel=(o.minutter||60)/(baser.length||1);
+      lokEfterspørgsel[basis]=(lokEfterspørgsel[basis]||0)+andel;
     });
   }));
 
-  // 6. Find lokale-flaskehals
+  // 6. Find lokale-flaskehals (per basisnavn-gruppe)
   const lokBelastning = {};
   let lokFlaskehals = null;
   let lokMaxRatio = 0;
-  alleLokaler.forEach(lok=>{
-    const kap=lokKap[lok]||1;
-    const eft=lokEfterspørgsel[lok]||0;
+  Object.keys(lokGrupper).forEach(basis=>{
+    const kap=lokKap[basis]||1;
+    const eft=lokEfterspørgsel[basis]||0;
     const ratio=eft/kap;
-    lokBelastning[lok]={kapacitet:kap,efterspørgsel:eft,ratio:Math.round(ratio*100)/100};
-    if(ratio>lokMaxRatio){lokMaxRatio=ratio;lokFlaskehals=lok;}
+    const antalLok=lokGrupper[basis].length;
+    lokBelastning[basis]={kapacitet:kap,efterspørgsel:eft,ratio:Math.round(ratio*100)/100,antal:antalLok};
+    if(ratio>lokMaxRatio){lokMaxRatio=ratio;lokFlaskehals=basis;}
   });
 
   // 7. Log flaskehalsanalyse
@@ -13098,12 +13110,12 @@ function runPlanner(patienter, config={}) {
       msg:`${t}: ${b.medarbejdere} medarb., ${Math.round(b.kapacitet/60)}t/uge kap., ${Math.round(b.efterspørgsel/60)}t eftersp. (ratio: ${b.ratio})${bar}`});
   });
   planLog.push({type:"info",msg:`── RESSOURCE-ANALYSE: LOKALER ──`});
-  alleLokaler.sort((a,b)=>(lokBelastning[b]?.ratio||0)-(lokBelastning[a]?.ratio||0)).forEach(lok=>{
-    const lb=lokBelastning[lok];
+  Object.keys(lokGrupper).sort((a,b)=>(lokBelastning[b]?.ratio||0)-(lokBelastning[a]?.ratio||0)).forEach(basis=>{
+    const lb=lokBelastning[basis];
     if(!lb||lb.efterspørgsel===0) return;
-    const bar=lok===lokFlaskehals?" *** FLASKEHALS ***":"";
-    planLog.push({type:lok===lokFlaskehals?"warn":"info",
-      msg:`${lok}: ${Math.round(lb.kapacitet/60)}t/uge kap., ${Math.round(lb.efterspørgsel/60)}t eftersp. (ratio: ${lb.ratio})${bar}`});
+    const bar=basis===lokFlaskehals?" *** FLASKEHALS ***":"";
+    planLog.push({type:basis===lokFlaskehals?"warn":"info",
+      msg:`${basis} (${lb.antal} stk): ${Math.round(lb.kapacitet/60)}t/uge kap., ${Math.round(lb.efterspørgsel/60)}t eftersp. (ratio: ${lb.ratio})${bar}`});
   });
 
   // Samlet flaskehals: den mest pressede ressource (medarbejder eller lokale)
@@ -13162,10 +13174,26 @@ function runPlanner(patienter, config={}) {
     return effKandidater;
   };
 
+  // ── Hjælper: ekspandér lokalenavn til alle varianter ──
+  // "Kontor" → ["Kontor", "Kontor (2)", "Kontor (3)", ...] osv.
+  const alleLokNavne = new Set();
+  Object.values(lokTider).forEach(dagLok=>Object.keys(dagLok).forEach(l=>alleLokNavne.add(l)));
+  const ekspanderLokaler = (lokListe) => {
+    const resultat = [];
+    (lokListe||[]).forEach(lok=>{
+      resultat.push(lok);
+      // Find alle varianter: "Lokale 1 (2)", "Lokale 1 (3)" osv.
+      alleLokNavne.forEach(l=>{
+        if(l!==lok && l.startsWith(lok+" (")) resultat.push(l);
+      });
+    });
+    return resultat.length>0 ? resultat : lokListe;
+  };
+
   // ── Hjælper: book en enkelt opgave med tidligste start-minut ──
   const bookOpgave = (opg, effKandidater, tidligstDato, tidligstMin=0, patId=null, deadline=null) => {
     const varMin = (opg.minutter||60) + pause;
-    const muligeLok = opg.muligeLok||[];
+    const muligeLok = ekspanderLokaler(opg.muligeLok||[]);
     const opgSenest = opg.senest ? toMin2(opg.senest) : 0;
     const kendteSæt = patId && patMedSet[patId] ? patMedSet[patId] : new Set();
     for(let di=0; di<maxDage; di++) {
