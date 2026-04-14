@@ -12782,6 +12782,16 @@ function runPlanner(patienter, config={}) {
     step=5,
     maxDage=90,
     planFraDato=null,
+    // Indstillinger fra Planlæg indstillinger
+    maxPatVisitsPerMedPerUge=10,
+    maxPatVisitsStrenged="bloed",
+    maxMedPerPatient=0,
+    maxMedStrenged="bloed",
+    prioritering="henvDato",
+    deadlineMode="henvDato",
+    indsatsDato="",
+    tilladOverstigLåste=false,
+    maxDageForlob=0,
   } = config;
 
   // Klon dybt så vi ikke muterer originaler
@@ -12823,6 +12833,77 @@ function runPlanner(patienter, config={}) {
   const harOverlap = (bookings, startMin, slutMin) =>
     (bookings||[]).some(b => startMin < b.slut && slutMin > b.start);
 
+  // ── Tracking: besøg per medarbejder per uge (ISO-uge) ──
+  const medVisitsPerUge = {}; // {medNavn: {ugeNr: antal}}
+  const getUgeNr = (dato) => {
+    const d=new Date(dato+"T00:00:00");
+    d.setDate(d.getDate()+3-(d.getDay()+6)%7);
+    const uge1=new Date(d.getFullYear(),0,4);
+    return Math.round(((d-uge1)/86400000-3+(uge1.getDay()+6)%7)/7)+1;
+  };
+  const getUgeKey = (dato) => { const d=new Date(dato+"T00:00:00"); return d.getFullYear()+"-W"+String(getUgeNr(dato)).padStart(2,"0"); };
+
+  // ── Tracking: antal forskellige medarbejdere per patient ──
+  const patMedSet = {}; // {patId: Set<medNavn>}
+
+  // Initialiser tracking fra allerede planlagte opgaver
+  klonPat.forEach(p => {
+    patMedSet[p.id] = new Set();
+    p.opgaver.forEach(o => {
+      if(o.status==="planlagt" && o.dato && o.medarbejder) {
+        // Besøg per uge (kun patientopgaver tæller)
+        if(o.patInv) {
+          const uk=getUgeKey(o.dato);
+          if(!medVisitsPerUge[o.medarbejder]) medVisitsPerUge[o.medarbejder]={};
+          medVisitsPerUge[o.medarbejder][uk]=(medVisitsPerUge[o.medarbejder][uk]||0)+1;
+        }
+        patMedSet[p.id].add(o.medarbejder);
+      }
+    });
+  });
+
+  // ── Hjælper: tjek kapacitetsregler for en medarbejder på en dato ──
+  const kanBookes = (medNavn, dato, patId, erPatInv) => {
+    // Max patientbesøg per medarbejder per uge
+    if(erPatInv && maxPatVisitsPerMedPerUge>0) {
+      const uk=getUgeKey(dato);
+      const cur=(medVisitsPerUge[medNavn]||{})[uk]||0;
+      if(cur>=maxPatVisitsPerMedPerUge) {
+        if(maxPatVisitsStrenged==="haard") return false;
+        // Blød: tillad men logges (soft overskridelse)
+      }
+    }
+    // Max antal forskellige medarbejdere per patient
+    if(maxMedPerPatient>0 && patId) {
+      const sæt=patMedSet[patId]||new Set();
+      if(!sæt.has(medNavn) && sæt.size>=maxMedPerPatient) {
+        if(maxMedStrenged==="haard") return false;
+        // Blød: foretræk kendte medarbejdere (håndteres ved sortering)
+      }
+    }
+    return true;
+  };
+
+  // ── Hjælper: registrer en booking i tracking ──
+  const registrerBooking = (medNavn, dato, patId, erPatInv) => {
+    if(erPatInv) {
+      const uk=getUgeKey(dato);
+      if(!medVisitsPerUge[medNavn]) medVisitsPerUge[medNavn]={};
+      medVisitsPerUge[medNavn][uk]=(medVisitsPerUge[medNavn][uk]||0)+1;
+    }
+    if(patId) {
+      if(!patMedSet[patId]) patMedSet[patId]=new Set();
+      patMedSet[patId].add(medNavn);
+    }
+  };
+
+  // ── Hjælper: beregn deadline for patient ──
+  const beregnDeadline = (pat) => {
+    if(maxDageForlob<=0) return null;
+    const base = deadlineMode==="indsatsDato" && indsatsDato ? indsatsDato : (pat.henvDato||startDato);
+    return addDays2(base, maxDageForlob);
+  };
+
   const findLedigTid = (medNavn, lokNavn, dato, varMin) => {
     const dag = getDag2(dato);
     if(isWeekend2(dato)) return null;
@@ -12859,10 +12940,14 @@ function runPlanner(patienter, config={}) {
     return null;
   };
 
-  // Sorter patienter: haste først, dernæst ældst henvist
+  // Sorter patienter baseret på prioritering-indstilling
   const sorterede = [...klonPat].sort((a,b)=>{
-    if(a.haste&&!b.haste) return -1;
-    if(!a.haste&&b.haste) return 1;
+    if(prioritering==="haste") {
+      // Hastemarkerede først, derefter tidligst henvist
+      if(a.haste&&!b.haste) return -1;
+      if(!a.haste&&b.haste) return 1;
+    }
+    // Altid sorter efter henvisningsdato (ældste først)
     return (a.henvDato||"").localeCompare(b.henvDato||"");
   });
 
@@ -12904,16 +12989,25 @@ function runPlanner(patienter, config={}) {
   };
 
   // ── Hjælper: book en enkelt opgave med tidligste start-minut ──
-  // tidligstMin: tidligste start på dagen (0 = fra arbejdsdag-start)
-  const bookOpgave = (opg, effKandidater, tidligstDato, tidligstMin=0) => {
+  const bookOpgave = (opg, effKandidater, tidligstDato, tidligstMin=0, patId=null, deadline=null) => {
     const varMin = (opg.minutter||60) + pause;
     const muligeLok = opg.muligeLok||[];
+    // Sortér kandidater: foretræk kendte medarbejdere for patienten (blød maxMed)
+    const kendteSæt = patId && patMedSet[patId] ? patMedSet[patId] : new Set();
+    const sortKand = [...effKandidater].sort((a,b)=>{
+      const aKendt=kendteSæt.has(a)?0:1, bKendt=kendteSæt.has(b)?0:1;
+      return aKendt-bKendt;
+    });
     for(let di=0; di<maxDage; di++) {
       const dato = addDays2(tidligstDato,di);
       if(isWeekend2(dato)) continue;
-      for(const medNavn of effKandidater) {
+      // Deadline-check
+      if(deadline && dato>deadline) {
+        return false; // Forbi deadline
+      }
+      for(const medNavn of sortKand) {
+        if(!kanBookes(medNavn, dato, patId, opg.patInv)) continue;
         for(const lokNavn of (muligeLok.length>0?muligeLok:[""])) {
-          // Brug findLedigTid men med tidligstMin-offset på den specificerede dato
           const slot = findLedigTidEfter(medNavn, lokNavn||null, dato, varMin, dato===tidligstDato?tidligstMin:0);
           if(slot) {
             opg.status="planlagt";
@@ -12930,6 +13024,7 @@ function runPlanner(patienter, config={}) {
               if(!lokBooket[lokNavn][dato]) lokBooket[lokNavn][dato]=[];
               lokBooket[lokNavn][dato].push({start:slot.start,slut:slot.slut});
             }
+            registrerBooking(medNavn, dato, patId, opg.patInv);
             return true;
           }
         }
@@ -12971,18 +13066,26 @@ function runPlanner(patienter, config={}) {
   };
 
   // ── Hjælper: book underopgaver (gruppe) med SAMME medarbejder back-to-back ──
-  const bookGruppe = (opgaver, kandidater, tidligstDato, tidligstMin=0) => {
-    // Prøv hver kombination af medarbejder + startdato
-    // Alle underopgaver skal passe back-to-back med samme medarbejder
+  const bookGruppe = (opgaver, kandidater, tidligstDato, tidligstMin=0, patId=null, deadline=null) => {
+    // Sortér kandidater: foretræk kendte medarbejdere
+    const kendteSæt = patId && patMedSet[patId] ? patMedSet[patId] : new Set();
+    const sortKand = [...kandidater].sort((a,b)=>{
+      const aKendt=kendteSæt.has(a)?0:1, bKendt=kendteSæt.has(b)?0:1;
+      return aKendt-bKendt;
+    });
     for(let di=0; di<maxDage; di++) {
       const dato = addDays2(tidligstDato,di);
       if(isWeekend2(dato)) continue;
+      if(deadline && dato>deadline) return false;
       const startMin = dato===tidligstDato?tidligstMin:0;
 
-      for(const medNavn of kandidater) {
-        // Prøv at booke alle opgaver i rækkefølge med denne medarbejder på denne dag
+      for(const medNavn of sortKand) {
+        // Tjek kapacitetsregler for denne medarbejder
+        const harPatInv = opgaver.some(o=>o.patInv);
+        if(!kanBookes(medNavn, dato, patId, harPatInv)) continue;
+
         let curMin = startMin;
-        let slots = []; // {opg, lokNavn, slot}
+        let slots = [];
         let ok = true;
 
         for(const opg of opgaver) {
@@ -12993,7 +13096,7 @@ function runPlanner(patienter, config={}) {
             const slot = findLedigTidEfter(medNavn, lokNavn||null, dato, varMin, curMin);
             if(slot) {
               slots.push({opg, lokNavn:lokNavn||null, slot});
-              curMin = slot.slut; // Næste underopgave starter lige efter
+              curMin = slot.slut;
               fundet = true;
               break;
             }
@@ -13002,7 +13105,6 @@ function runPlanner(patienter, config={}) {
         }
 
         if(ok && slots.length===opgaver.length) {
-          // Alle underopgaver passer — book dem alle
           for(const {opg, lokNavn, slot} of slots) {
             opg.status="planlagt";
             opg.dato=dato;
@@ -13018,6 +13120,7 @@ function runPlanner(patienter, config={}) {
               if(!lokBooket[lokNavn][dato]) lokBooket[lokNavn][dato]=[];
               lokBooket[lokNavn][dato].push({start:slot.start,slut:slot.slut});
             }
+            registrerBooking(medNavn, dato, patId, opg.patInv);
           }
           return true;
         }
@@ -13028,9 +13131,15 @@ function runPlanner(patienter, config={}) {
 
   sorterede.forEach(pat => {
     const planlagteIds = new Set(pat.opgaver.filter(o=>o.status==="planlagt").map(o=>o.id));
+    const deadline = beregnDeadline(pat);
 
     const ventende = pat.opgaver
-      .filter(o=>!o.låst && o.status!=="planlagt" && !planlagteIds.has(o.id))
+      .filter(o=>{
+        if(o.status==="planlagt" || planlagteIds.has(o.id)) return false;
+        // Låste opgaver: spring over medmindre tilladOverstigLåste er aktiv
+        if(o.låst && !tilladOverstigLåste) return false;
+        return true;
+      })
       .sort((a,b)=>(a.sekvens||0)-(b.sekvens||0));
 
     // Gruppér underopgaver efter indsatsGruppe
@@ -13071,10 +13180,9 @@ function runPlanner(patienter, config={}) {
         }
         if(fælles.length===0 && perOpgKandidater.length>0) fælles=perOpgKandidater[0];
 
-        const ok = bookGruppe(job.opgaver, fælles, tidligstDato, tidligstMin);
+        const ok = bookGruppe(job.opgaver, fælles, tidligstDato, tidligstMin, pat.id, deadline);
         if(ok) {
           job.opgaver.forEach(o=>{ planned++; planlagteIds.add(o.id); });
-          // Næste opgave starter efter sidste underopgaves sluttid
           const sidsteOpg = job.opgaver[job.opgaver.length-1];
           if(sidsteOpg.dato && sidsteOpg.slutKl) {
             tidligstDato = sidsteOpg.dato;
@@ -13088,22 +13196,21 @@ function runPlanner(patienter, config={}) {
           });
         }
       } else {
-        // Enkelt opgave
         const opg=job.opgaver[0];
         const kandidater=bygKandidater(opg);
-        const ok=bookOpgave(opg, kandidater, tidligstDato, tidligstMin);
+        const ok=bookOpgave(opg, kandidater, tidligstDato, tidligstMin, pat.id, deadline);
         if(ok) {
           planned++;
           planlagteIds.add(opg.id);
-          // Næste opgave kan starte efter denne er afsluttet
           if(opg.dato && opg.slutKl) {
             tidligstDato = opg.dato;
             tidligstMin = toMin2(opg.slutKl) + pause;
           }
         } else {
           failed++;
+          const deadlineMsg = deadline ? ` (deadline: ${deadline})` : "";
           planLog.push({patId:pat.id,patNavn:pat.navn,opgave:opg.opgave,
-            fejl:`Ingen ledig tid fundet (${kandidater.join(",")||"ingen medarbejdere"})`});
+            fejl:`Ingen ledig tid fundet${deadlineMsg} (${kandidater.join(",")||"ingen medarbejdere"})`});
         }
       }
     });
