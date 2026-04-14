@@ -12868,18 +12868,12 @@ function runPlanner(patienter, config={}) {
     if(erPatInv && maxPatVisitsPerMedPerUge>0) {
       const uk=getUgeKey(dato);
       const cur=(medVisitsPerUge[medNavn]||{})[uk]||0;
-      if(cur>=maxPatVisitsPerMedPerUge) {
-        if(maxPatVisitsStrenged==="haard") return false;
-        // Blød: tillad men logges (soft overskridelse)
-      }
+      if(cur>=maxPatVisitsPerMedPerUge) return false;
     }
-    // Max antal forskellige medarbejdere per patient
+    // Max antal forskellige medarbejdere per patient — ALTID håndhævet
     if(maxMedPerPatient>0 && patId) {
       const sæt=patMedSet[patId]||new Set();
-      if(!sæt.has(medNavn) && sæt.size>=maxMedPerPatient) {
-        if(maxMedStrenged==="haard") return false;
-        // Blød: foretræk kendte medarbejdere (håndteres ved sortering)
-      }
+      if(!sæt.has(medNavn) && sæt.size>=maxMedPerPatient) return false;
     }
     return true;
   };
@@ -13133,87 +13127,64 @@ function runPlanner(patienter, config={}) {
     const planlagteIds = new Set(pat.opgaver.filter(o=>o.status==="planlagt").map(o=>o.id));
     const deadline = beregnDeadline(pat);
 
+    // Streng sekvens-rækkefølge: sortér ALLE ventende opgaver efter sekvens
     const ventende = pat.opgaver
       .filter(o=>{
         if(o.status==="planlagt" || planlagteIds.has(o.id)) return false;
-        // Låste opgaver: spring over medmindre tilladOverstigLåste er aktiv
         if(o.låst && !tilladOverstigLåste) return false;
         return true;
       })
       .sort((a,b)=>(a.sekvens||0)-(b.sekvens||0));
 
-    // Gruppér underopgaver efter indsatsGruppe
-    const grupper = new Map();
-    const enkelOpg = [];
-    ventende.forEach(opg => {
-      if(opg.indsatsGruppe) {
-        if(!grupper.has(opg.indsatsGruppe)) grupper.set(opg.indsatsGruppe,[]);
-        grupper.get(opg.indsatsGruppe).push(opg);
-      } else {
-        enkelOpg.push(opg);
-      }
-    });
+    // Track medarbejder per indsatsGruppe (underopgaver deler medarbejder)
+    const gruppeMed = {}; // {grpId: medNavn}
 
-    // Saml jobs i sekvens-rækkefølge
-    const alleJobs = [];
-    grupper.forEach((opgaver, grpId) => {
-      opgaver.sort((a,b)=>(a.sekvens||0)-(b.sekvens||0));
-      alleJobs.push({type:"gruppe", grpId, opgaver, minSekvens:opgaver[0]?.sekvens||0});
-    });
-    enkelOpg.forEach(opg => {
-      alleJobs.push({type:"enkel", opgaver:[opg], minSekvens:opg.sekvens||0});
-    });
-    alleJobs.sort((a,b)=>a.minSekvens-b.minSekvens);
-
-    // Track: næste opgave kan tidligst starte efter forrige er afsluttet
+    // Næste opgave kan tidligst starte efter forrige er afsluttet
     let tidligstDato = [startDato, pat.henvDato||startDato].reduce((a,b)=>a>b?a:b);
-    let tidligstMin = 0; // minuttal på tidligstDato (0 = fra arbejdsdag-start)
+    let tidligstMin = 0;
 
-    alleJobs.forEach(job => {
-      if(job.type==="gruppe") {
-        // Underopgaver: find fælles kandidater og book back-to-back med 1 medarbejder
-        const perOpgKandidater = job.opgaver.map(o=>bygKandidater(o));
-        let fælles = perOpgKandidater[0]||[];
-        for(let i=1;i<perOpgKandidater.length;i++){
-          const sæt=new Set(perOpgKandidater[i]);
-          fælles=fælles.filter(k=>sæt.has(k));
+    // Planlæg hver opgave strengt sekventielt
+    for(const opg of ventende) {
+      if(planlagteIds.has(opg.id)) continue; // allerede planlagt
+
+      let kandidater = bygKandidater(opg);
+
+      // Hvis opgaven tilhører en gruppe, lås til gruppens medarbejder
+      if(opg.indsatsGruppe && gruppeMed[opg.indsatsGruppe]) {
+        const låstMed = gruppeMed[opg.indsatsGruppe];
+        // Sæt den låste medarbejder først, behold resten som fallback
+        kandidater = [låstMed, ...kandidater.filter(k=>k!==låstMed)];
+      }
+
+      // Filtrér kandidater der overholder maxMedPerPatient
+      if(maxMedPerPatient>0) {
+        const kendteSæt = patMedSet[pat.id]||new Set();
+        const tilladt = kandidater.filter(k=>kendteSæt.has(k)||kendteSæt.size<maxMedPerPatient);
+        if(tilladt.length>0) kandidater=tilladt;
+      }
+
+      const ok = bookOpgave(opg, kandidater, tidligstDato, tidligstMin, pat.id, deadline);
+      if(ok) {
+        planned++;
+        planlagteIds.add(opg.id);
+        // Registrér medarbejder for gruppen
+        if(opg.indsatsGruppe && !gruppeMed[opg.indsatsGruppe]) {
+          gruppeMed[opg.indsatsGruppe] = opg.medarbejder;
         }
-        if(fælles.length===0 && perOpgKandidater.length>0) fælles=perOpgKandidater[0];
-
-        const ok = bookGruppe(job.opgaver, fælles, tidligstDato, tidligstMin, pat.id, deadline);
-        if(ok) {
-          job.opgaver.forEach(o=>{ planned++; planlagteIds.add(o.id); });
-          const sidsteOpg = job.opgaver[job.opgaver.length-1];
-          if(sidsteOpg.dato && sidsteOpg.slutKl) {
-            tidligstDato = sidsteOpg.dato;
-            tidligstMin = toMin2(sidsteOpg.slutKl) + pause;
-          }
-        } else {
-          job.opgaver.forEach(o=>{
-            failed++;
-            planLog.push({patId:pat.id,patNavn:pat.navn,opgave:o.opgave,
-              fejl:`Ingen ledig tid for samlet underopgave (${fælles.join(",")||"ingen medarbejdere"})`});
-          });
+        // Næste opgave starter tidligst efter denne er afsluttet
+        if(opg.dato && opg.slutKl) {
+          tidligstDato = opg.dato;
+          tidligstMin = toMin2(opg.slutKl) + pause;
         }
       } else {
-        const opg=job.opgaver[0];
-        const kandidater=bygKandidater(opg);
-        const ok=bookOpgave(opg, kandidater, tidligstDato, tidligstMin, pat.id, deadline);
-        if(ok) {
-          planned++;
-          planlagteIds.add(opg.id);
-          if(opg.dato && opg.slutKl) {
-            tidligstDato = opg.dato;
-            tidligstMin = toMin2(opg.slutKl) + pause;
-          }
-        } else {
-          failed++;
-          const deadlineMsg = deadline ? ` (deadline: ${deadline})` : "";
-          planLog.push({patId:pat.id,patNavn:pat.navn,opgave:opg.opgave,
-            fejl:`Ingen ledig tid fundet${deadlineMsg} (${kandidater.join(",")||"ingen medarbejdere"})`});
-        }
+        failed++;
+        const deadlineMsg = deadline ? ` (deadline: ${deadline})` : "";
+        planLog.push({patId:pat.id,patNavn:pat.navn,opgave:opg.opgave,
+          fejl:`Ingen ledig tid fundet${deadlineMsg} (${kandidater.join(",")||"ingen medarbejdere"})`});
+        // STOP kæden for denne patient — efterfølgende opgaver afhænger af denne
+        break;
       }
-    });
+    }
   });
 
   // Synkroniser klonede patienter tilbage til original ordre
