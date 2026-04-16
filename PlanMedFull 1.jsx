@@ -4149,7 +4149,25 @@ function IndsatsForm({indsats, onSave, onClose, lokaler=ALLE_LOK}) {
     eBoksAktiv:false, eBoksDokNavn:null, eBoksTid:"lås",
   });
   const blank = { id:`ins_${uid()}`, navn:"", elementer:[blankEl(0)] };
-  const [f, setF] = useState(indsats ? structuredClone(indsats) : blank);
+  const initIndsats = (src) => {
+    if(!src) return blank;
+    const c = structuredClone(src);
+    // Flat format (fra Excel): ingen elementer, har opgave/muligeMed
+    if(!c.elementer && (c.opgave||c.muligeMed)){
+      return {
+        id:c.id, navn:c.indsatsGruppe||c.navn||c.opgave||"",
+        elementer:[{...blankEl(0), id:c.id+"_e0", navn:c.opgave||c.navn||"",
+          minutter:c.minutter||60, patInv:c.patInv||false,
+          tidligst:c.tidligst||"08:00", senest:c.senest||"17:00",
+          lokaler:c.muligeLok||["Kontor"], certifikat:c.certifikat||""}]
+      };
+    }
+    // Ensure navn and elementer exist
+    c.navn = c.navn || c.indsatsGruppe || c.opgave || "";
+    c.elementer = (c.elementer||[]).map(e=>({...e, navn:e.navn||e.opgave||"", lokaler:e.lokaler||e.muligeLok||["Kontor"]}));
+    return c;
+  };
+  const [f, setF] = useState(()=>initIndsats(indsats));
   const [grpFejl, setGrpFejl] = useState("");
   const [collapsed, setCollapsed] = useState({}); // {elIndex: true/false}
   const toggleCollapse = i => setCollapsed(p=>({...p,[i]:!p[i]}));
@@ -4169,8 +4187,8 @@ function IndsatsForm({indsats, onSave, onClose, lokaler=ALLE_LOK}) {
   });
 
   const certOpts = ["(Intet krav)", ...ALLE_K];
-  const isValid  = f.navn.trim().length>0 && f.elementer.length>0 &&
-                   f.elementer.every(e=>e.navn.trim().length>0 && e.lokaler.length>0);
+  const isValid  = (f.navn||"").trim().length>0 && (f.elementer||[]).length>0 &&
+                   (f.elementer||[]).every(e=>(e.navn||"").trim().length>0 && (e.lokaler||[]).length>0);
 
   return (
     <div style={{display:"flex",flexDirection:"column",gap:14}}>
@@ -13084,11 +13102,55 @@ function runPlanner(patienter, config={}) {
     }
   };
 
-  // ── Hjælper: beregn deadline for patient ──
+  // ── Hjælper: afregistrer en booking (reverse af registrerBooking) ──
+  const afregistrerBooking = (medNavn, dato, patId, erPatInv) => {
+    if(erPatInv && medNavn) {
+      const uk=getUgeKey(dato);
+      if(medVisitsPerUge[medNavn]&&medVisitsPerUge[medNavn][uk]>0)
+        medVisitsPerUge[medNavn][uk]--;
+    }
+  };
+
+  // ── Hjælper: fjern en booking fra alle registre, returnér saved-objekt ──
+  const fjernBooking = (opg, patId) => {
+    if(opg.status!=="planlagt"||!opg.dato) return null;
+    const startMin=toMin2(opg.startKl);
+    const slutMin=toMin2(opg.slutKl)+pause;
+    if(opg.medarbejder && medBooket[opg.medarbejder]?.[opg.dato])
+      medBooket[opg.medarbejder][opg.dato]=medBooket[opg.medarbejder][opg.dato].filter(b=>!(b.start===startMin&&b.slut===slutMin));
+    if(opg.lokale && lokBooket[opg.lokale]?.[opg.dato])
+      lokBooket[opg.lokale][opg.dato]=lokBooket[opg.lokale][opg.dato].filter(b=>!(b.start===startMin&&b.slut===slutMin));
+    afregistrerBooking(opg.medarbejder, opg.dato, patId, opg.patInv);
+    const saved={dato:opg.dato,startKl:opg.startKl,slutKl:opg.slutKl,medarbejder:opg.medarbejder,lokale:opg.lokale,status:opg.status};
+    opg.status="afventer"; opg.dato=null; opg.startKl=null; opg.slutKl=null; opg.medarbejder=null; opg.lokale=null;
+    return saved;
+  };
+
+  // ── Hjælper: gendanner en fjernet booking fra saved-objekt ──
+  const genindførBooking = (opg, saved, patId) => {
+    if(!saved) return;
+    opg.status=saved.status; opg.dato=saved.dato; opg.startKl=saved.startKl; opg.slutKl=saved.slutKl;
+    opg.medarbejder=saved.medarbejder; opg.lokale=saved.lokale;
+    const startMin=toMin2(saved.startKl), slutMin=toMin2(saved.slutKl)+pause;
+    if(saved.medarbejder){
+      if(!medBooket[saved.medarbejder]) medBooket[saved.medarbejder]={};
+      if(!medBooket[saved.medarbejder][saved.dato]) medBooket[saved.medarbejder][saved.dato]=[];
+      medBooket[saved.medarbejder][saved.dato].push({start:startMin,slut:slutMin});
+    }
+    if(saved.lokale){
+      if(!lokBooket[saved.lokale]) lokBooket[saved.lokale]={};
+      if(!lokBooket[saved.lokale][saved.dato]) lokBooket[saved.lokale][saved.dato]=[];
+      lokBooket[saved.lokale][saved.dato].push({start:startMin,slut:slutMin});
+    }
+    registrerBooking(saved.medarbejder, saved.dato, patId, opg.patInv);
+  };
+
+  // ── Hjælper: beregn deadline for patient (per-patient eller global) ──
   const beregnDeadline = (pat) => {
-    if(maxDageForlob<=0) return null;
+    const effMaxDage = pat.maxDageForlob || maxDageForlob;
+    if(effMaxDage<=0) return null;
     const base = deadlineMode==="indsatsDato" && indsatsDato ? indsatsDato : (pat.henvDato||startDato);
-    return addDays2(base, maxDageForlob);
+    return addDays2(base, effMaxDage);
   };
 
   const findLedigTid = (medNavn, lokNavn, dato, varMin) => {
@@ -13253,20 +13315,34 @@ function runPlanner(patienter, config={}) {
   const samletFlaskehals = lokMaxRatio>maxRatio ? `Lokale: ${lokFlaskehals}` : `Titel: ${flaskehals}`;
   planLog.push({type:"warn",msg:`── Primær flaskehals: ${samletFlaskehals} ──`});
 
-  // Sorter patienter: prioritér dem der bruger flaskehalsen mest (de er sværest at planlægge)
-  const sorterede = [...klonPat].sort((a,b)=>{
-    if(prioritering==="haste") {
-      if(a.haste&&!b.haste) return -1;
-      if(!a.haste&&b.haste) return 1;
+  // ── Prioritetsscore: lavere = planlægges først ──
+  // Kombinerer haste-flag, deadline-urgency, flaskehals-relevans og henvisningsdato
+  const beregnPrioritet = (pat) => {
+    let score = 0;
+    // 1. Haste-flag (dominerer)
+    if(prioritering==="haste" && pat.haste) score -= 10000;
+    // 2. Deadline-urgency: resterende minutter / hverdage til deadline
+    const effMaxDage = pat.maxDageForlob || maxDageForlob;
+    if(effMaxDage > 0) {
+      const base = deadlineMode==="indsatsDato" && indsatsDato ? indsatsDato : (pat.henvDato||startDato);
+      const deadlineStr = addDays2(base, effMaxDage);
+      let daysLeft = 0;
+      let d = startDato;
+      while(d <= deadlineStr && daysLeft < 200) { if(!isWeekend2(d)) daysLeft++; d = addDays2(d,1); }
+      const remainingMin = pat.opgaver.filter(o=>o.status!=="planlagt"&&!o.låst).reduce((s,o)=>s+(o.minutter||60),0);
+      score -= (remainingMin / Math.max(daysLeft,1)) * 10;
     }
-    // Patienter med flaskehals-opgaver planlægges først
+    // 3. Flaskehals-opgaver
     if(flaskehals) {
-      const aFlask = a.opgaver.filter(o=>o.status!=="planlagt"&&!o.låst&&o.opgave?.includes(flaskehals)).length;
-      const bFlask = b.opgaver.filter(o=>o.status!=="planlagt"&&!o.låst&&o.opgave?.includes(flaskehals)).length;
-      if(aFlask!==bFlask) return bFlask-aFlask; // Flest flaskehals-opgaver først
+      score -= pat.opgaver.filter(o=>o.status!=="planlagt"&&!o.låst&&o.opgave?.includes(flaskehals)).length * 50;
     }
-    return (a.henvDato||"").localeCompare(b.henvDato||"");
-  });
+    // 4. Henvisningsdato (tiebreaker — tidligere = lavere score)
+    if(pat.henvDato) score += Math.round((new Date(pat.henvDato)-new Date(startDato))/86400000);
+    return score;
+  };
+
+  // Sorter patienter: laveste prioritetsscore først (mest kritisk)
+  const sorterede = [...klonPat].sort((a,b)=>beregnPrioritet(a)-beregnPrioritet(b));
 
   // ── Hjælper: byg kandidatliste for en opgave ──
   const bygKandidater = (opg) => {
@@ -13497,86 +13573,190 @@ function runPlanner(patienter, config={}) {
     return false;
   };
 
-  sorterede.forEach(pat => {
+  // ══════════════════════════════════════════════════════════════
+  // FASE 1: GRÅDIG PLANLÆGNING MED TRACKING
+  // ══════════════════════════════════════════════════════════════
+  const bookingEjere = [];   // [{patId, patPrioritet, opg, medNavn, lokNavn, dato}]
+  const fejledePatienter = []; // [{pat, ventende}] — til fase 2
+  const patPrioritetMap = {};
+  sorterede.forEach(p=>{ patPrioritetMap[p.id]=beregnPrioritet(p); });
+
+  // Hjælper: planlæg en patients ventende opgaver sekventielt
+  const planlaegPatient = (pat, ventende, deadline, trackEjere=true) => {
     const planlagteIds = new Set(pat.opgaver.filter(o=>o.status==="planlagt").map(o=>o.id));
-    const deadline = beregnDeadline(pat);
-
-    // Streng sekvens-rækkefølge: sortér ALLE ventende opgaver efter sekvens
-    const ventende = pat.opgaver
-      .filter(o=>{
-        if(o.status==="planlagt" || planlagteIds.has(o.id)) return false;
-        if(o.låst && !tilladOverstigLåste) return false;
-        return true;
-      })
-      .sort((a,b)=>(a.sekvens||0)-(b.sekvens||0));
-
-    // Track medarbejder per indsatsGruppe (underopgaver deler medarbejder)
-    const gruppeMed = {}; // {grpId: medNavn}
-
-    // Næste opgave kan tidligst starte efter forrige er afsluttet
+    const gruppeMed = {};
     let tidligstDato = [startDato, pat.henvDato||startDato].reduce((a,b)=>a>b?a:b);
     let tidligstMin = 0;
-    // Track seneste patientbesøgs dato for minGapDays
     let sidstePatBesøgDato = null;
+    let ok_count = 0;
 
-    // Planlæg hver opgave strengt sekventielt
     for(const opg of ventende) {
       if(planlagteIds.has(opg.id)) continue;
-
       let kandidater = bygKandidater(opg);
-
-      // Hvis opgaven tilhører en gruppe, lås til gruppens medarbejder
       if(opg.indsatsGruppe && gruppeMed[opg.indsatsGruppe]) {
         const låstMed = gruppeMed[opg.indsatsGruppe];
         kandidater = [låstMed, ...kandidater.filter(k=>k!==låstMed)];
       }
-
-      // minGapDays: hvis denne opgave har patientbesøg, tjek afstand til seneste
       let effTidligstDato = tidligstDato;
       let effTidligstMinVal = tidligstMin;
       if(opg.patInv && sidstePatBesøgDato && minGapDays>0) {
         const gapDato = addDays2(sidstePatBesøgDato, minGapDays);
-        if(gapDato > effTidligstDato) {
-          effTidligstDato = gapDato;
-          effTidligstMinVal = 0;
-        }
+        if(gapDato > effTidligstDato) { effTidligstDato = gapDato; effTidligstMinVal = 0; }
       }
-
-      // Respektér opgavens eget tidsvindue (tidligst/senest)
       const opgTidligst = opg.tidligst ? toMin2(opg.tidligst) : 0;
       const effTidligstMin = Math.max(effTidligstMinVal, opgTidligst);
 
       const ok = bookOpgave(opg, kandidater, effTidligstDato, effTidligstMin, pat.id, deadline);
       if(ok) {
-        planned++;
+        ok_count++;
         planlagteIds.add(opg.id);
-        if(opg.indsatsGruppe && !gruppeMed[opg.indsatsGruppe]) {
-          gruppeMed[opg.indsatsGruppe] = opg.medarbejder;
-        }
-        // Opdater tidligst for næste opgave
+        if(opg.indsatsGruppe && !gruppeMed[opg.indsatsGruppe]) gruppeMed[opg.indsatsGruppe] = opg.medarbejder;
         tidligstDato = opg.dato;
         tidligstMin = toMin2(opg.slutKl) + pause;
-        // Track seneste patientbesøg
         if(opg.patInv) sidstePatBesøgDato = opg.dato;
-        planLog.push({type:"info",msg:`[${pat.navn}] #${opg.sekvens} ${opg.opgave} → ${opg.dato} ${opg.startKl}-${opg.slutKl} (${opg.medarbejder}) [næste fra: ${tidligstDato} ${fromMin2(tidligstMin)}]`});
+        if(trackEjere) bookingEjere.push({patId:pat.id,patPrioritet:patPrioritetMap[pat.id],opg,medNavn:opg.medarbejder,lokNavn:opg.lokale,dato:opg.dato});
       } else {
-        failed++;
-        const deadlineMsg = deadline ? ` (deadline: ${deadline})` : "";
-        planLog.push({type:"error",patId:pat.id,patNavn:pat.navn,opgave:opg.opgave,
-          msg:`[${pat.navn}] #${opg.sekvens} ${opg.opgave} — FEJL: ingen ledig tid${deadlineMsg} [søgte fra: ${effTidligstDato} ${fromMin2(effTidligstMin)}]`,
-          fejl:`Sekvens #${opg.sekvens}: Ingen ledig tid fundet${deadlineMsg} (${kandidater.length} kandidater)`});
-        // Stop kæden: efterfølgende opgaver afhænger af denne
-        const rest = ventende.slice(ventende.indexOf(opg)+1);
-        rest.forEach(r=>{
-          failed++;
-          planLog.push({type:"error",patId:pat.id,patNavn:pat.navn,opgave:r.opgave,
-            msg:`[${pat.navn}] #${r.sekvens} ${r.opgave} — SPRUNGET OVER (afventer #${opg.sekvens})`,
-            fejl:`Afventer forrige opgave`});
-        });
-        break;
+        return {ok:false, planned:ok_count, fejlOpg:opg, effTidligstDato, effTidligstMin, kandidater};
       }
     }
+    return {ok:true, planned:ok_count};
+  };
+
+  sorterede.forEach(pat => {
+    const deadline = beregnDeadline(pat);
+    const ventende = pat.opgaver
+      .filter(o=>{
+        if(o.status==="planlagt") return false;
+        if(o.låst && !tilladOverstigLåste) return false;
+        return true;
+      })
+      .sort((a,b)=>(a.sekvens||0)-(b.sekvens||0));
+
+    const res = planlaegPatient(pat, ventende, deadline);
+    planned += res.planned;
+
+    if(res.ok) {
+      // Log alle planlagte opgaver
+      ventende.filter(o=>o.status==="planlagt").forEach(o=>{
+        planLog.push({type:"info",msg:`[${pat.navn}] #${o.sekvens} ${o.opgave} → ${o.dato} ${o.startKl}-${o.slutKl} (${o.medarbejder})`});
+      });
+    } else {
+      // Registrer fejl for denne opgave
+      const {fejlOpg, effTidligstDato, effTidligstMin, kandidater} = res;
+      failed++;
+      const deadlineMsg = deadline ? ` (deadline: ${deadline})` : "";
+      planLog.push({type:"error",patId:pat.id,patNavn:pat.navn,opgave:fejlOpg.opgave,
+        msg:`[${pat.navn}] #${fejlOpg.sekvens} ${fejlOpg.opgave} — FEJL: ingen ledig tid${deadlineMsg} [søgte fra: ${effTidligstDato} ${fromMin2(effTidligstMin)}]`,
+        fejl:`Sekvens #${fejlOpg.sekvens}: Ingen ledig tid fundet${deadlineMsg} (${(kandidater||[]).length} kandidater)`});
+      // Registrer resterende som fejlede (men potentielt løsbare via bump)
+      const rest = ventende.slice(ventende.indexOf(fejlOpg)+1);
+      rest.forEach(r=>{
+        failed++;
+        planLog.push({type:"error",patId:pat.id,patNavn:pat.navn,opgave:r.opgave,
+          msg:`[${pat.navn}] #${r.sekvens} ${r.opgave} — AFVENTER (kræver #${fejlOpg.sekvens})`,
+          fejl:`Afventer forrige opgave`});
+      });
+      // Gem til fase 2: alle ventende opgaver der endnu ikke er planlagt
+      const uplanlagte = ventende.filter(o=>o.status!=="planlagt");
+      if(uplanlagte.length>0) fejledePatienter.push({pat, ventende:uplanlagte});
+    }
   });
+
+  // ══════════════════════════════════════════════════════════════
+  // FASE 2: BUMP-OG-GENPLANLÆG — forsøg at finde plads til fejlede patienter
+  // ══════════════════════════════════════════════════════════════
+  const MAX_BUMP_ATTEMPTS = 3;
+  const bumpedPatIds = new Set();
+  let bumpSucces = 0, bumpForsøg = 0;
+
+  if(fejledePatienter.length>0){
+    planLog.push({type:"info",msg:`── FASE 2: BUMP — ${fejledePatienter.length} patienter søger omfordeling ──`});
+  }
+
+  for(const {pat:fejlPat, ventende:fejlVentende} of fejledePatienter) {
+    const fejlPrioritet = patPrioritetMap[fejlPat.id];
+    const deadline = beregnDeadline(fejlPat);
+    const blokeretOpg = fejlVentende[0];
+    const blokeretKandidater = bygKandidater(blokeretOpg);
+    const blokeretLokaler = ekspanderLokaler(blokeretOpg.muligeLok||[]);
+
+    // Find bumpable bookinger fra lavere-prioritets patienter
+    const bumpKandidater = bookingEjere.filter(be=>{
+      if(be.patPrioritet<=fejlPrioritet) return false;
+      if(bumpedPatIds.has(be.patId)) return false;
+      const sharesWorker = blokeretKandidater.includes(be.medNavn);
+      const sharesLokale = blokeretLokaler.length===0 || blokeretLokaler.includes(be.lokNavn);
+      return sharesWorker || sharesLokale;
+    });
+    // Dedupliker til unikke patient-IDs, sortér laveste prioritet først
+    const seenPatIds = new Set();
+    const unikkeBumpPat = bumpKandidater.filter(be=>{
+      if(seenPatIds.has(be.patId)) return false;
+      seenPatIds.add(be.patId); return true;
+    }).sort((a,b)=>b.patPrioritet-a.patPrioritet);
+
+    let løst = false;
+    let forsøgtHer = 0;
+
+    for(const bumpTarget of unikkeBumpPat) {
+      if(forsøgtHer>=MAX_BUMP_ATTEMPTS) break;
+      forsøgtHer++; bumpForsøg++;
+
+      const bumpPat = klonPat.find(p=>p.id===bumpTarget.patId);
+      if(!bumpPat) continue;
+
+      // Gem og fjern alle bump-patientens planlagte, ulåste opgaver
+      const bumpOpgaver = bumpPat.opgaver.filter(o=>o.status==="planlagt"&&!o.låst);
+      if(bumpOpgaver.length===0) continue;
+      const savedBookings = bumpOpgaver.map(o=>({opg:o,saved:fjernBooking(o,bumpPat.id)})).filter(x=>x.saved);
+
+      // Forsøg at planlægge fejlPat
+      const fejlRes = planlaegPatient(fejlPat, fejlVentende, deadline, false);
+
+      if(fejlRes.ok) {
+        // Forsøg at genplanlægge bumpPat
+        bumpedPatIds.add(bumpTarget.patId);
+        const bumpDeadline = beregnDeadline(bumpPat);
+        const bumpVentende = bumpOpgaver.sort((a,b)=>(a.sekvens||0)-(b.sekvens||0));
+        const bumpRes = planlaegPatient(bumpPat, bumpVentende, bumpDeadline, false);
+
+        if(bumpRes.ok) {
+          // Begge planlagt! Opdater tællere.
+          const fejlAntal = fejlVentende.length;
+          planned += fejlAntal;
+          failed -= fejlAntal;
+          bumpSucces++;
+          planLog.push({type:"info",msg:`[BUMP] ${fejlPat.navn} planlagt efter omfordeling af ${bumpPat.navn}`});
+          fejlVentende.filter(o=>o.status==="planlagt").forEach(o=>{
+            planLog.push({type:"info",msg:`[BUMP] [${fejlPat.navn}] #${o.sekvens} ${o.opgave} → ${o.dato} ${o.startKl}-${o.slutKl} (${o.medarbejder})`});
+          });
+          løst = true;
+          break;
+        } else {
+          // BumpPat kan ikke genplanlægges → fuld rollback
+          // 1. Fjern fejlPats nye bookinger
+          fejlVentende.filter(o=>o.status==="planlagt").forEach(o=>fjernBooking(o,fejlPat.id));
+          // 2. Fjern bumpPats evt. delvise nye bookinger
+          bumpVentende.filter(o=>o.status==="planlagt").forEach(o=>fjernBooking(o,bumpPat.id));
+          // 3. Gendan bumpPats originale bookinger
+          savedBookings.forEach(({opg,saved})=>genindførBooking(opg,saved,bumpPat.id));
+          bumpedPatIds.delete(bumpTarget.patId);
+        }
+      } else {
+        // FejlPat kan stadig ikke planlægges → rollback
+        fejlVentende.filter(o=>o.status==="planlagt").forEach(o=>fjernBooking(o,fejlPat.id));
+        savedBookings.forEach(({opg,saved})=>genindførBooking(opg,saved,bumpPat.id));
+      }
+    }
+
+    if(!løst) {
+      planLog.push({type:"warn",msg:`[BUMP] ${fejlPat.navn} — kunne ikke løses via omfordeling (${forsøgtHer} forsøg)`});
+    }
+  }
+
+  if(bumpForsøg>0){
+    planLog.push({type:"info",msg:`── BUMP-RESULTAT: ${bumpSucces} løst / ${bumpForsøg} forsøg ──`});
+  }
 
   // ══════════════════════════════════════════════════════════════
   // OPSUMMERING — udnyttelsesstatistik efter planlægning
