@@ -5715,7 +5715,7 @@ function HjaelpTab(){
       punkter:[
         {
           titel:"Adgang til Ejer-konsollen",
-          tekst:`Ejer-konsollen er kun tilgængelig for ejerkontoen.\n\nLogin: andersthaysen@hotmail.com\nEjer-kode: Konfigureres under Ejer → Ejer-konto\n\nKonsollen giver adgang til systemets øverste administrative niveau — uanset afdeling og scope.`
+          tekst:`Ejer-konsollen er kun tilgængelig for ejerkontoen.\n\nLogin: Den email der blev valgt ved førstegangs-opsætning\nEjer-kode: Konfigureres under Ejer → Ejer-konto\n\nKonsollen giver adgang til systemets øverste administrative niveau — uanset afdeling og scope.`
         },
         {
           titel:"Lejere (SaaS-styring)",
@@ -5898,7 +5898,7 @@ function HjaelpTab(){
 
       <div style={{marginTop:20,padding:"12px 14px",background:C.s3,borderRadius:9,
         border:"1px solid "+C.brd,fontSize:11,color:C.txtM,textAlign:"center"}}>
-        PlanMed v0.9 — Prototype · Spørgsmål? Kontakt: andersthaysen@hotmail.com
+        PlanMed v0.9 — Prototype
       </div>
     </div>
   );
@@ -6542,6 +6542,8 @@ function AuthFlow({stage, setStage, data, setData}){
   const [err,setErr]=useState("");
   const [loading,setLoading]=useState(false);
   const [nyAfdNavn,setNyAfdNavn]=useState("");
+  const _ejerKonto=(()=>{try{return JSON.parse(localStorage.getItem("planmed_ejerKonto")||"null");}catch{return null;}})();
+  const _ejerEmail=_ejerKonto?.email||"";
   const [visNyAfd,setVisNyAfd]=useState(true);
   const upd=(k,v)=>setData(d=>({...d,[k]:v}));
 
@@ -6879,7 +6881,7 @@ function AuthFlow({stage, setStage, data, setData}){
                     cursor:"pointer",display:"flex",alignItems:"center",gap:12,color:C.txt,
                     fontSize:14,fontWeight:600,transition:"all .15s",textAlign:"left",width:"100%"}}
   
-                  onClick={()=>{upd("afdeling",af.navn);if(data.email==="andersthaysen@hotmail.com")upd("rolle","ejer");setStage("app");}}>
+                  onClick={()=>{upd("afdeling",af.navn);if(_ejerEmail&&data.email===_ejerEmail)upd("rolle","ejer");setStage("app");}}>
                   <span style={{fontSize:20}}>{af.ikon}</span>
                   <span>{af.navn}</span>
                 </button>
@@ -6901,11 +6903,11 @@ function AuthFlow({stage, setStage, data, setData}){
               <label style={S.label}>Afdelingsnavn</label>
               <input type="text" value={nyAfdNavn} placeholder="f.eks. Neurologi"
                 onChange={e=>setNyAfdNavn(e.target.value)}
-                onKeyDown={e=>{ if(e.key==="Enter"&&nyAfdNavn.trim()){upd("afdeling",nyAfdNavn.trim());if(data.email==="andersthaysen@hotmail.com")upd("rolle","ejer");setStage("app");} }}
+                onKeyDown={e=>{ if(e.key==="Enter"&&nyAfdNavn.trim()){upd("afdeling",nyAfdNavn.trim());if(_ejerEmail&&data.email===_ejerEmail)upd("rolle","ejer");setStage("app");} }}
                 className="auth-input" style={{...S.input,marginBottom:8}}/>
               <button style={{...S.btn,marginTop:0,opacity:nyAfdNavn.trim()?1:.5}}
                 disabled={!nyAfdNavn.trim()}
-                onClick={()=>{upd("afdeling",nyAfdNavn.trim());if(data.email==="andersthaysen@hotmail.com")upd("rolle","ejer");setStage("app");}}>
+                onClick={()=>{upd("afdeling",nyAfdNavn.trim());if(_ejerEmail&&data.email===_ejerEmail)upd("rolle","ejer");setStage("app");}}>
                 Start med denne afdeling {">"}
               </button>
             </div>
@@ -9619,9 +9621,9 @@ class ErrorBoundary extends React.Component {
 
 
 // ===============================================
-// EJER VIEW - kun andersthaysen@hotmail.com
+// EJER VIEW
 // ===============================================
-function EjerView({patienter,medarbejdere,adminData,setAdminData,authData,isUnlocked,setEjerUnlocked,ejerKode,lokaler=[],lokMeta={},showToast=()=>{},certifikater=[],config={}}){
+function EjerView({patienter,medarbejdere,adminData,setAdminData,authData,isUnlocked,setEjerUnlocked,ejerKode,ejerKonto,setEjerKonto,lokaler=[],lokMeta={},showToast=()=>{},certifikater=[],config={}}){
   const [kodeInput,setKodeInput]=useState("");
   const [fejl,setFejl]=useState("");
   const [aktivTab,setAktivTab]=useState("lejere");
@@ -9981,24 +9983,33 @@ function EjerView({patienter,medarbejdere,adminData,setAdminData,authData,isUnlo
         <div style={{maxWidth:480}}>
           <div style={{fontWeight:700,fontSize:15,marginBottom:16,color:C.txt}}>Ejer-konto indstillinger</div>
           <div style={{background:C.s1,border:"1px solid "+C.brd,borderRadius:12,padding:20}}>
-            <div style={{fontSize:12,color:C.txtM,marginBottom:16}}>Ændringer træder i kraft næste gang du åbner appen</div>
             <FRow label="Nuværende ejer-email">
-              <div style={{padding:"8px 12px",background:C.bg,borderRadius:7,border:"1px solid "+C.brd,fontSize:13,color:C.txtD}}>{authData.email}</div>
+              <div style={{padding:"8px 12px",background:C.bg,borderRadius:7,border:"1px solid "+C.brd,fontSize:13,color:C.txtD}}>{ejerKonto?.email||"(ikke sat)"}</div>
             </FRow>
-            <FRow label="Ny ejer-email">
-              <Input value={nyEjerEmail} onChange={v=>setNyEjerEmail(v)} placeholder="ny@email.dk"/>
+            <FRow label="Skift ejer-email">
+              <div style={{display:"flex",gap:8}}>
+                <Input value={nyEjerEmail} onChange={v=>setNyEjerEmail(v)} placeholder="ny@email.dk"/>
+                <Btn v="outline" small onClick={()=>{
+                  if(!nyEjerEmail.trim()||!nyEjerEmail.includes("@")){setGemtMsg("Indtast en gyldig email");return;}
+                  setEjerKonto({...ejerKonto,email:nyEjerEmail.trim()});
+                  setGemtMsg("Ejer-email opdateret");setNyEjerEmail("");
+                }}>Gem</Btn>
+              </div>
             </FRow>
-            <FRow label="Ny ejer-kode (4+ tegn)">
-              <Input value={nyEjerKode} onChange={v=>setNyEjerKode(v)} placeholder="Ny kode"/>
+            <FRow label="Skift ejer-kode (mindst 4 tegn)">
+              <div style={{display:"flex",gap:8}}>
+                <Input value={nyEjerKode} onChange={v=>setNyEjerKode(v)} placeholder="Ny kode"/>
+                <Btn v="outline" small onClick={()=>{
+                  if(!nyEjerKode||nyEjerKode.length<4){setGemtMsg("Kode skal være mindst 4 tegn");return;}
+                  setEjerKonto({...ejerKonto,kode:nyEjerKode});
+                  setGemtMsg("Ejer-kode opdateret");setNyEjerKode("");
+                }}>Gem</Btn>
+              </div>
             </FRow>
             <div style={{marginTop:16,padding:"12px 14px",background:C.ambM,border:"1px solid "+C.amb,borderRadius:8,fontSize:12,color:C.amb,fontWeight:500,marginBottom:12}}>
-              Obs: Email og kode gemmes kun lokalt i denne prototype. I produktion krypteres og gemmes dette server-side.
+              Advarsel: Email og kode gemmes ukrypteret i localStorage. I produktion bør dette erstattes af en server-side løsning med hashing (bcrypt/Argon2).
             </div>
-            <Btn v="primary" onClick={()=>{
-              if(nyEjerKode&&nyEjerKode.length<4){setGemtMsg("Kode skal være mindst 4 tegn");return;}
-              setGemtMsg("Ændringer gemt (lokal prototype)");
-            }}>Gem ændringer</Btn>
-            {gemtMsg&&<div style={{color:C.grn,fontSize:12,marginTop:10}}>{gemtMsg}</div>}
+            {gemtMsg&&<div style={{color:C.grn,fontSize:12,marginTop:10,fontWeight:600}}>{gemtMsg}</div>}
           </div>
         </div>
       )}
@@ -10018,14 +10029,66 @@ function EjerView({patienter,medarbejdere,adminData,setAdminData,authData,isUnlo
   );
 }
 
+// ── Ejer-opsætningsdialog (førstegangs-opstart) ──
+function EjerSetupDialog({onSave}){
+  const [email,setEmail]=useState("");
+  const [kode,setKode]=useState("");
+  const [kode2,setKode2]=useState("");
+  const [fejl,setFejl]=useState("");
+  const submit=()=>{
+    if(!email.trim()||!email.includes("@")){setFejl("Indtast en gyldig email-adresse");return;}
+    if(kode.length<4){setFejl("Ejer-kode skal være mindst 4 tegn");return;}
+    if(kode!==kode2){setFejl("Koderne matcher ikke");return;}
+    onSave(email.trim(),kode);
+  };
+  return(
+    <div style={{minHeight:"100vh",display:"flex",alignItems:"center",justifyContent:"center",background:C.bg,fontFamily:"'DM Sans','Segoe UI',sans-serif"}}>
+      <div style={{maxWidth:420,width:"100%",background:C.s1,borderRadius:16,padding:32,border:"1.5px solid "+C.brd,boxShadow:"0 4px 24px rgba(0,0,0,0.06)"}}>
+        <div style={{textAlign:"center",marginBottom:24}}>
+          <div style={{fontSize:28,marginBottom:6}}>PlanMed</div>
+          <div style={{fontWeight:800,fontSize:18,color:C.txt}}>Velkommen — Opsæt ejer-konto</div>
+          <div style={{color:C.txtM,fontSize:12,marginTop:6,lineHeight:1.5}}>
+            Dette er første opstart. Opret en ejer-konto for at administrere systemet.
+            Email og kode gemmes lokalt i browseren.
+          </div>
+        </div>
+        <FRow label="Ejer-email">
+          <Input value={email} onChange={v=>setEmail(v)} placeholder="din@email.dk"/>
+        </FRow>
+        <FRow label="Ejer-kode (mindst 4 tegn)">
+          <input type="password" value={kode} onChange={e=>setKode(e.target.value)} placeholder="Vælg en kode"
+            style={{width:"100%",padding:"7px 11px",borderRadius:8,border:"1px solid "+C.brd,fontSize:13,fontFamily:"inherit",outline:"none",background:C.s1,color:C.txt,boxSizing:"border-box"}}/>
+        </FRow>
+        <FRow label="Gentag kode">
+          <input type="password" value={kode2} onChange={e=>setKode2(e.target.value)} placeholder="Gentag koden"
+            onKeyDown={e=>{if(e.key==="Enter")submit();}}
+            style={{width:"100%",padding:"7px 11px",borderRadius:8,border:"1px solid "+C.brd,fontSize:13,fontFamily:"inherit",outline:"none",background:C.s1,color:C.txt,boxSizing:"border-box"}}/>
+        </FRow>
+        {fejl&&<div style={{color:C.red,fontSize:12,marginBottom:10}}>{fejl}</div>}
+        <div style={{marginTop:8,padding:"10px 14px",background:C.ambM,border:"1px solid "+C.amb,borderRadius:8,fontSize:11,color:C.amb,fontWeight:500,marginBottom:14}}>
+          Advarsel: Email og kode gemmes ukrypteret i localStorage. I produktion bør dette erstattes af en server-side løsning med hashing (bcrypt/Argon2).
+        </div>
+        <button onClick={submit} style={{width:"100%",padding:"10px 0",background:C.acc,color:"#fff",border:"none",borderRadius:8,fontWeight:700,fontSize:14,cursor:"pointer",fontFamily:"inherit"}}>
+          Opret ejer-konto
+        </button>
+      </div>
+    </div>
+  );
+}
+
 export default function App(){
   const [authStage,setAuthStage]=useState("app");
   const [authData,setAuthData]=useState({email:"admin@psykiatri.rm.dk",password:"",navn:"Systemadministrator",selskab:"Psykiatri Region Midtjylland",afdeling:"Alle afdelinger",rolle:"admin"});
   const isAdmin = authData.rolle==="admin" || authData.rolle==="superadmin" || authData.rolle==="ejer";
-  const EJER_EMAIL="andersthaysen@hotmail.com";
-  const EJER_KODE="8680";
+  // Ejer-konto fra localStorage (oprettes ved førstegangs-opstart)
+  const [ejerKonto,setEjerKontoState]=useState(()=>{
+    try{return JSON.parse(localStorage.getItem("planmed_ejerKonto")||"null");}catch{return null;}
+  });
+  const setEjerKonto=(v)=>{setEjerKontoState(v);try{localStorage.setItem("planmed_ejerKonto",JSON.stringify(v));}catch(e){}};
+  const EJER_EMAIL=ejerKonto?.email||"";
+  const EJER_KODE=ejerKonto?.kode||"";
   const [ejerUnlocked,setEjerUnlocked]=useState(false);
-  const isEjer = (authData.email===EJER_EMAIL || authData.rolle==="ejer") && ejerUnlocked;
+  const isEjer = (ejerKonto && (authData.email===EJER_EMAIL || authData.rolle==="ejer")) && ejerUnlocked;
   const [visTester,setVisTester]=useState(false);
   const [aktivLog,setAktivLog]=useState(()=>{
     try{return JSON.parse(localStorage.getItem("planmed_aktivlog")||"[]");}catch{return [];}
@@ -10317,6 +10380,15 @@ return [];}},[scopedPatienter,lokTider]);
 
   if(authStage !== "app") return <ErrorBoundary><AuthFlow stage={authStage} setStage={setAuthStage} data={authData} setData={setAuthData}/></ErrorBoundary>;
 
+  // Førstegangs-opstart: vis ejer-opsætning hvis ingen ejerKonto er gemt
+  if(!ejerKonto){
+    return(
+      <EjerSetupDialog onSave={(email,kode)=>{
+        setEjerKonto({email,kode});
+      }}/>
+    );
+  }
+
   return(
     <div style={{display:"flex",minHeight:"100vh",background:C.bg,fontFamily:"'DM Sans','Segoe UI',sans-serif",color:C.txt}}>
       <style>{`
@@ -10448,7 +10520,7 @@ return [];}},[scopedPatienter,lokTider]);
           {view==="forlob"&&<ErrorBoundary><ForlobView forlob={forlob} setForlob={setForlob} medarbejdere={scopedMed} setMedarbejdere={setMedarbejdere} indsatser={indsatser} setIndsatser={setIndsatser} certifikater={certifikater} setCertifikater={setCertifikater} lokaler={lokaler} setPatienter={setPatienter}/></ErrorBoundary>}
           {view==="planlog"&&<ErrorBoundary><PlanLogView patienter={scopedPatienter} planLog={planLog} medarbejdere={scopedMed} setPatienter={setPatienter} setMedarbejdere={setMedarbejdere} onPlan={handlePlan} running={running} progress={progress} planFraDato={planFraDato} setPlanFraDato={setPlanFraDato} afdScope={afdScope} alleAfdelinger={alleAfdelinger} toggleAktiv={toggleAktiv} toggleRes={toggleRes} lokaler={lokaler} certifikater={certifikater} planDebug={planDebug} config={config} setConfig={setConfig} setForlob={setForlob} forlob={forlob} lokTider={lokTider} setLokTider={setLokTider} lokMeta={lokMeta} setLokMeta={setLokMeta} saveLokaler={saveLokaler} setIndsatser={setIndsatser} indsatser={indsatser}/></ErrorBoundary>}
           {view==="admin"&&isAdmin&&<ErrorBoundary><AdminView adminData={adminData} setAdminData={setAdminData} authData={authData} anmodninger={anmodninger} setAnmodninger={setAnmodninger} medarbejdere={medarbejdere} setMedarbejdere={setMedarbejdere} rulNotif={rulNotif} setRulNotif={setRulNotif} patienter={patienter} setPatienter={setPatienter} aktivLog={aktivLog} setAktivLog={setAktivLog} gemLog={gemAktivLog} lokMeta={lokMeta} config={config} setConfig={setConfig} setForlob={setForlob} forlob={forlob} setLokTider={setLokTider} setLokMeta={setLokMeta} lokaler={lokaler} saveLokaler={saveLokaler} indsatser={indsatser} setIndsatser={setIndsatser}/></ErrorBoundary>}
-          {view==="ejer"&&(authData.email===EJER_EMAIL||authData.rolle==="ejer")&&<ErrorBoundary><EjerView patienter={patienter} medarbejdere={medarbejdere} adminData={adminData} setAdminData={setAdminData} authData={authData} isUnlocked={isEjer} setEjerUnlocked={setEjerUnlocked} ejerKode={EJER_KODE} lokaler={lokaler} lokMeta={lokMeta} showToast={showToast} certifikater={certifikater} config={config}/></ErrorBoundary>}
+          {view==="ejer"&&(authData.email===EJER_EMAIL||authData.rolle==="ejer")&&<ErrorBoundary><EjerView patienter={patienter} medarbejdere={medarbejdere} adminData={adminData} setAdminData={setAdminData} authData={authData} isUnlocked={isEjer} setEjerUnlocked={setEjerUnlocked} ejerKode={EJER_KODE} ejerKonto={ejerKonto} setEjerKonto={setEjerKonto} lokaler={lokaler} lokMeta={lokMeta} showToast={showToast} certifikater={certifikater} config={config}/></ErrorBoundary>}
           </ErrorBoundary>
         </div>
       </div>
