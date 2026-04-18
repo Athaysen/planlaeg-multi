@@ -1,4 +1,6 @@
 import React, { useState, useEffect, useCallback, useMemo, useRef } from "react";
+import { useTranslation } from "react-i18next";
+import i18n, { SPROG } from "./src/i18n.js";
 
 // ===============================================
 // DESIGN TOKENS
@@ -319,6 +321,31 @@ function FRow({label,children,hint}){
       <div style={{color:C.txtD,fontSize:12,marginBottom:5,fontWeight:600}}>{label}</div>
       {children}
       {hint&&<div style={{color:C.txtM,fontSize:11,marginTop:4}}>{hint}</div>}
+    </div>
+  );
+}
+
+// Sprogvælger med flag-ikoner. Bruger i18n.changeLanguage som persisterer til localStorage.
+function LanguageSwitcher({inline=false}){
+  const {i18n:i18nInst, t} = useTranslation();
+  const aktiv = i18nInst.language || "da";
+  return(
+    <div style={{display:"inline-flex",gap:4,background:inline?"transparent":C.s2,
+      border:inline?"none":`1px solid ${C.brd}`,borderRadius:8,padding:inline?0:3}}>
+      {SPROG.map(s=>{
+        const er = aktiv.startsWith(s.kode);
+        return(
+          <button key={s.kode} onClick={()=>i18nInst.changeLanguage(s.kode)}
+            title={t("lang.switchTo",{lang:s.navn})}
+            aria-label={t("lang.switchTo",{lang:s.navn})}
+            style={{background:er?C.accM:"transparent",border:er?`1px solid ${C.acc}`:"1px solid transparent",
+              borderRadius:6,padding:"4px 10px",cursor:"pointer",fontFamily:"inherit",fontSize:13,
+              color:er?C.acc:C.txtM,fontWeight:er?700:400,display:"inline-flex",alignItems:"center",gap:5}}>
+            <span style={{fontSize:15,lineHeight:1}}>{s.flag}</span>
+            <span style={{fontSize:11,letterSpacing:".05em"}}>{s.kode.toUpperCase()}</span>
+          </button>
+        );
+      })}
     </div>
   );
 }
@@ -6576,18 +6603,19 @@ function OutlookKalenderPanel({medarbejdere,setMedarbejdere}){
 // Miller's lov: 7±2 - grupper navigation i to blokke med visuel separator
 // Blok 1 (klinisk arbejde): 6 punkter - under 7-grænsen
 // Blok 2 (system): 2 punkter - tydeligt adskilt
+// label-feltet er en i18n-nøgle. Brug t(item.label) ved rendering.
 const NAV_ITEMS = [
-  {id:"dashboard",    label:"Dashboard"},
-  {id:"patienter",    label:"Patienter"},
-  {id:"kalender",     label:"Kalender"},
-  {id:"medarbejdere", label:"Medarbejdere"},
-  {id:"lokaler",      label:"Lokaler & Udstyr"},
-  {id:"forlob",       label:"Opgaver"},
+  {id:"dashboard",    label:"nav.dashboard"},
+  {id:"patienter",    label:"nav.patienter"},
+  {id:"kalender",     label:"nav.kalender"},
+  {id:"medarbejdere", label:"nav.medarbejdere"},
+  {id:"lokaler",      label:"nav.lokaler"},
+  {id:"forlob",       label:"nav.forlob"},
   {sep:true},
-  {id:"planlog",      label:"Planlæg"},
+  {id:"planlog",      label:"nav.planlog"},
   {sep:true},
-  {id:"admin",        label:"Admin", adminOnly:true},
-  {id:"ejer",         label:"Ejer",  ejOnly:true},
+  {id:"admin",        label:"nav.admin", adminOnly:true},
+  {id:"ejer",         label:"nav.ejer",  ejOnly:true},
 ];
 
 
@@ -6595,6 +6623,7 @@ const NAV_ITEMS = [
 // AUTH FLOW - Velkomst > Login/Opret > Afdeling
 // ===============================================
 function AuthFlow({stage, setStage, data, setData}){
+  const {t} = useTranslation();
   const [mode,setMode]=useState("login"); // "login"|"signup"
   const [err,setErr]=useState("");
   const [loading,setLoading]=useState(false);
@@ -6827,35 +6856,36 @@ function AuthFlow({stage, setStage, data, setData}){
       </div>
 
       {/* Højre - login/signup formular */}
-      <div style={{flex:1,display:"flex",alignItems:"center",justifyContent:"center",padding:"40px 5%"}}>
+      <div style={{flex:1,display:"flex",alignItems:"center",justifyContent:"center",padding:"40px 5%",position:"relative"}}>
+        <div style={{position:"absolute",top:18,right:22}}><LanguageSwitcher/></div>
         <div style={{width:"100%",maxWidth:420,animation:"fadeUp .4s ease"}}>
-          <button onClick={()=>setStage("welcome")} style={{background:"transparent",border:"none",color:C.txtM,fontSize:12,cursor:"pointer",fontFamily:"inherit",marginBottom:32,display:"flex",alignItems:"center",gap:6}}>&lt; Tilbage til forsiden</button>
+          <button onClick={()=>setStage("welcome")} style={{background:"transparent",border:"none",color:C.txtM,fontSize:12,cursor:"pointer",fontFamily:"inherit",marginBottom:32,display:"flex",alignItems:"center",gap:6}}>{t("auth.backToFront")}</button>
 
           <div style={{color:C.txt,fontWeight:800,fontSize:26,letterSpacing:"-0.02em",marginBottom:6}}>
-            {mode==="login"?"Velkommen tilbage ":"Opret din konto"}
+            {mode==="login"?t("auth.welcomeBack"):t("auth.createAccount")}
           </div>
           <div style={{color:C.txtD,fontSize:13,marginBottom:32}}>
-            {mode==="login"?"Log ind på dit PlanMed-system":"Kom i gang på under 2 minutter"}
+            {mode==="login"?t("auth.loginSubtitle"):t("auth.signupSubtitle")}
           </div>
 
           {mode==="signup"&&(
             <div style={{marginBottom:16}}>
-              <label style={{color:C.txtM,fontSize:12,fontWeight:600,display:"block",marginBottom:6}}>Dit navn</label>
+              <label style={{color:C.txtM,fontSize:12,fontWeight:600,display:"block",marginBottom:6}}>{t("auth.yourName")}</label>
               <input className="auth-input" value={data.navn||""} onChange={e=>upd("navn",e.target.value)}
-                placeholder="Anders Jensen" style={{width:"100%",background:"#ffffff",border:"1px solid "+C.brd,borderRadius:10,padding:"12px 16px",color:C.txt,fontSize:14,fontFamily:"inherit"}}/>
+                placeholder={t("auth.yourNamePlaceholder")} style={{width:"100%",background:"#ffffff",border:"1px solid "+C.brd,borderRadius:10,padding:"12px 16px",color:C.txt,fontSize:14,fontFamily:"inherit"}}/>
             </div>
           )}
 
           <div style={{marginBottom:16}}>
-            <label style={{color:C.txtM,fontSize:12,fontWeight:600,display:"block",marginBottom:6}}>E-mail</label>
+            <label style={{color:C.txtM,fontSize:12,fontWeight:600,display:"block",marginBottom:6}}>{t("auth.email")}</label>
             <input className="auth-input" type="email" value={data.email||""} onChange={e=>upd("email",e.target.value)}
-              placeholder="din@email.dk" style={{width:"100%",background:"#ffffff",border:"1px solid "+C.brd,borderRadius:10,padding:"12px 16px",color:C.txt,fontSize:14,fontFamily:"inherit"}}/>
+              placeholder={t("auth.emailPlaceholder")} style={{width:"100%",background:"#ffffff",border:"1px solid "+C.brd,borderRadius:10,padding:"12px 16px",color:C.txt,fontSize:14,fontFamily:"inherit"}}/>
           </div>
 
           <div style={{marginBottom:mode==="login"?8:16}}>
-            <label style={{color:C.txtM,fontSize:12,fontWeight:600,display:"block",marginBottom:6}}>Adgangskode</label>
+            <label style={{color:C.txtM,fontSize:12,fontWeight:600,display:"block",marginBottom:6}}>{t("auth.password")}</label>
             <input className="auth-input" type="password" value={data.password||""} onChange={e=>upd("password",e.target.value)}
-              placeholder={mode==="login"?"--------":"Min. 8 tegn"} style={{width:"100%",background:"#ffffff",border:"1px solid "+C.brd,borderRadius:10,padding:"12px 16px",color:C.txt,fontSize:14,fontFamily:"inherit"}}/>
+              placeholder={mode==="login"?t("auth.passwordPlaceholderLogin"):t("auth.passwordPlaceholderSignup")} style={{width:"100%",background:"#ffffff",border:"1px solid "+C.brd,borderRadius:10,padding:"12px 16px",color:C.txt,fontSize:14,fontFamily:"inherit"}}/>
           </div>
 
           {mode==="login"&&(
@@ -6869,17 +6899,17 @@ function AuthFlow({stage, setStage, data, setData}){
                     try{localStorage.removeItem("pm_email");localStorage.removeItem("pm_pw");}catch(ex){}
                   }
                 }} style={{accentColor:"#0050b3"}}/>
-                <span style={{color:C.txtD,fontSize:12}}>Husk mig</span>
+                <span style={{color:C.txtD,fontSize:12}}>{t("auth.rememberMe")}</span>
               </label>
-              <span style={{color:C.acc,fontSize:12,cursor:"pointer"}}>Glemt adgangskode?</span>
+              <span style={{color:C.acc,fontSize:12,cursor:"pointer"}}>{t("auth.forgotPassword")}</span>
             </div>
           )}
 
           {mode==="signup"&&(
             <div style={{marginBottom:16}}>
-              <label style={{color:C.txtM,fontSize:12,fontWeight:600,display:"block",marginBottom:6}}>Selskabsnavn</label>
+              <label style={{color:C.txtM,fontSize:12,fontWeight:600,display:"block",marginBottom:6}}>{t("auth.companyName")}</label>
               <input className="auth-input" value={data.selskab||""} onChange={e=>upd("selskab",e.target.value)}
-                placeholder="f.eks. Region Sjælland" style={{width:"100%",background:"#ffffff",border:"1px solid "+C.brd,borderRadius:10,padding:"12px 16px",color:C.txt,fontSize:14,fontFamily:"inherit"}}/>
+                placeholder={t("auth.companyPlaceholder")} style={{width:"100%",background:"#ffffff",border:"1px solid "+C.brd,borderRadius:10,padding:"12px 16px",color:C.txt,fontSize:14,fontFamily:"inherit"}}/>
             </div>
           )}
 
@@ -6887,18 +6917,18 @@ function AuthFlow({stage, setStage, data, setData}){
 
           <button className="lp-btn-pri" style={{width:"100%",marginBottom:16}}
             disabled={loading} onClick={()=>fakeLoad(()=>{
-              if(!data.email||!data.password){setErr("Udfyld venligst alle felter");setLoading(false);return;}
-              if(mode==="signup"&&!data.selskab){setErr("Angiv et selskabsnavn");setLoading(false);return;}
+              if(!data.email||!data.password){setErr(t("auth.errFillFields"));setLoading(false);return;}
+              if(mode==="signup"&&!data.selskab){setErr(t("auth.errCompany"));setLoading(false);return;}
               if(data.huskMig){try{localStorage.setItem("pm_email",data.email);localStorage.setItem("pm_pw",data.password);}catch(ex){}}
               setStage("dept");
             })}>
-            {loading?"Logger ind...":(mode==="login"?"Log ind >":"Opret konto >")}
+            {loading?t("auth.loggingIn"):(mode==="login"?t("auth.logIn")+" >":t("auth.createAccountBtn")+" >")}
           </button>
 
           <div style={{textAlign:"center",fontSize:13,color:C.txtM}}>
             {mode==="login"
-              ?<>Ingen konto? <span style={{color:C.acc,cursor:"pointer"}} onClick={()=>{setMode("signup");setErr("");}}>Opret gratis</span></>
-              :<>Har du allerede en konto? <span style={{color:C.acc,cursor:"pointer"}} onClick={()=>{setMode("login");setErr("");}}>Log ind</span></>
+              ?<>{t("auth.noAccount")} <span style={{color:C.acc,cursor:"pointer"}} onClick={()=>{setMode("signup");setErr("");}}>{t("auth.createFree")}</span></>
+              :<>{t("auth.haveAccount")} <span style={{color:C.acc,cursor:"pointer"}} onClick={()=>{setMode("login");setErr("");}}>{t("auth.logInLink")}</span></>
             }
           </div>
 
@@ -6921,12 +6951,13 @@ function AuthFlow({stage, setStage, data, setData}){
     return(
       <div style={S.wrap}>
         <style>{`*{box-sizing:border-box}@keyframes fadeUp{from{opacity:0;transform:translateY(20px)}to{opacity:1;transform:none}}input:focus{border-color:${C.acc}!important}`}</style>
+        <div style={{position:"absolute",top:18,right:22}}><LanguageSwitcher/></div>
         <div style={{...S.card,maxWidth:500,animation:"fadeUp .4s ease"}}>
-          <div style={S.logo}>PlanMed</div>
+          <div style={S.logo}>{t("common.appName")}</div>
           <div style={S.sub}>
             {data.selskab
-              ? <>Opsætning af <strong style={{color:C.txt}}>{data.selskab}</strong> - opret din første afdeling</>
-              : <>Vælg afdeling, {data.navn||data.email}</>
+              ? <span dangerouslySetInnerHTML={{__html:t("auth.dept.setupCompany",{selskab:data.selskab})}}/>
+              : t("auth.dept.chooseDept",{name:data.navn||data.email})
             }
           </div>
 
@@ -6937,7 +6968,7 @@ function AuthFlow({stage, setStage, data, setData}){
                   style={{background:C.s2,border:`1px solid ${C.brd}`,borderRadius:10,padding:"14px 18px",
                     cursor:"pointer",display:"flex",alignItems:"center",gap:12,color:C.txt,
                     fontSize:14,fontWeight:600,transition:"all .15s",textAlign:"left",width:"100%"}}
-  
+
                   onClick={()=>{upd("afdeling",af.navn);if(_ejerEmail&&data.email===_ejerEmail)upd("rolle","ejer");setStage("app");}}>
                   <span style={{fontSize:20}}>{af.ikon}</span>
                   <span>{af.navn}</span>
@@ -6949,29 +6980,29 @@ function AuthFlow({stage, setStage, data, setData}){
           {/* Opret ny afdeling inline */}
           {!visNyAfd&&afdelinger.length>0&&(
             <button style={{...S.btnSec,marginTop:4}}
-  
+
               onClick={()=>setVisNyAfd(true)}>
-              + Opret ny afdeling
+              {t("auth.dept.createNewDept")}
             </button>
           )}
 
           {visNyAfd&&(
             <div style={{marginTop:afdelinger.length>0?12:0}}>
-              <label style={S.label}>Afdelingsnavn</label>
-              <input type="text" value={nyAfdNavn} placeholder="f.eks. Neurologi"
+              <label style={S.label}>{t("auth.dept.deptName")}</label>
+              <input type="text" value={nyAfdNavn} placeholder={t("auth.dept.deptPlaceholder")}
                 onChange={e=>setNyAfdNavn(e.target.value)}
                 onKeyDown={e=>{ if(e.key==="Enter"&&nyAfdNavn.trim()){upd("afdeling",nyAfdNavn.trim());if(_ejerEmail&&data.email===_ejerEmail)upd("rolle","ejer");setStage("app");} }}
                 className="auth-input" style={{...S.input,marginBottom:8}}/>
               <button style={{...S.btn,marginTop:0,opacity:nyAfdNavn.trim()?1:.5}}
                 disabled={!nyAfdNavn.trim()}
                 onClick={()=>{upd("afdeling",nyAfdNavn.trim());if(_ejerEmail&&data.email===_ejerEmail)upd("rolle","ejer");setStage("app");}}>
-                Start med denne afdeling {">"}
+                {t("auth.dept.startWithDept")}
               </button>
             </div>
           )}
 
           <div style={{textAlign:"center",marginTop:16}}>
-            <span style={{...S.link,color:C.txtM,textDecoration:"none",opacity:.7,fontSize:13,cursor:"pointer"}} onClick={()=>setStage("login")}>&lt; Tilbage</span>
+            <span style={{...S.link,color:C.txtM,textDecoration:"none",opacity:.7,fontSize:13,cursor:"pointer"}} onClick={()=>setStage("login")}>&lt; {t("common.back")}</span>
           </div>
         </div>
       </div>
@@ -10597,45 +10628,46 @@ function EjerView({patienter,medarbejdere,adminData,setAdminData,authData,isUnlo
 
 // ── Ejer-opsætningsdialog (førstegangs-opstart) ──
 function EjerSetupDialog({onSave}){
+  const {t} = useTranslation();
   const [email,setEmail]=useState("");
   const [kode,setKode]=useState("");
   const [kode2,setKode2]=useState("");
   const [fejl,setFejl]=useState("");
   const submit=()=>{
-    if(!email.trim()||!email.includes("@")){setFejl("Indtast en gyldig email-adresse");return;}
-    if(kode.length<4){setFejl("Ejer-kode skal være mindst 4 tegn");return;}
-    if(kode!==kode2){setFejl("Koderne matcher ikke");return;}
+    if(!email.trim()||!email.includes("@")){setFejl(t("auth.ownerSetup.errEmail"));return;}
+    if(kode.length<4){setFejl(t("auth.ownerSetup.errCodeShort"));return;}
+    if(kode!==kode2){setFejl(t("auth.ownerSetup.errCodeMatch"));return;}
     onSave(email.trim(),kode);
   };
   return(
     <div style={{minHeight:"100vh",display:"flex",alignItems:"center",justifyContent:"center",background:C.bg,fontFamily:"'DM Sans','Segoe UI',sans-serif"}}>
+      <div style={{position:"absolute",top:18,right:22}}><LanguageSwitcher/></div>
       <div style={{maxWidth:420,width:"100%",background:C.s1,borderRadius:16,padding:32,border:"1.5px solid "+C.brd,boxShadow:"0 4px 24px rgba(0,0,0,0.06)"}}>
         <div style={{textAlign:"center",marginBottom:24}}>
-          <div style={{fontSize:28,marginBottom:6}}>PlanMed</div>
-          <div style={{fontWeight:800,fontSize:18,color:C.txt}}>Velkommen — Opsæt ejer-konto</div>
+          <div style={{fontSize:28,marginBottom:6}}>{t("common.appName")}</div>
+          <div style={{fontWeight:800,fontSize:18,color:C.txt}}>{t("auth.ownerSetup.title")}</div>
           <div style={{color:C.txtM,fontSize:12,marginTop:6,lineHeight:1.5}}>
-            Dette er første opstart. Opret en ejer-konto for at administrere systemet.
-            Email og kode gemmes lokalt i browseren.
+            {t("auth.ownerSetup.intro")}
           </div>
         </div>
-        <FRow label="Ejer-email">
-          <Input value={email} onChange={v=>setEmail(v)} placeholder="din@email.dk"/>
+        <FRow label={t("auth.ownerSetup.ownerEmail")}>
+          <Input value={email} onChange={v=>setEmail(v)} placeholder={t("auth.emailPlaceholder")}/>
         </FRow>
-        <FRow label="Ejer-kode (mindst 4 tegn)">
-          <input type="password" value={kode} onChange={e=>setKode(e.target.value)} placeholder="Vælg en kode"
+        <FRow label={t("auth.ownerSetup.ownerCode")}>
+          <input type="password" value={kode} onChange={e=>setKode(e.target.value)} placeholder={t("auth.ownerSetup.ownerCodePlaceholder")}
             style={{width:"100%",padding:"7px 11px",borderRadius:8,border:"1px solid "+C.brd,fontSize:13,fontFamily:"inherit",outline:"none",background:C.s1,color:C.txt,boxSizing:"border-box"}}/>
         </FRow>
-        <FRow label="Gentag kode">
-          <input type="password" value={kode2} onChange={e=>setKode2(e.target.value)} placeholder="Gentag koden"
+        <FRow label={t("auth.ownerSetup.repeatCode")}>
+          <input type="password" value={kode2} onChange={e=>setKode2(e.target.value)} placeholder={t("auth.ownerSetup.repeatCodePlaceholder")}
             onKeyDown={e=>{if(e.key==="Enter")submit();}}
             style={{width:"100%",padding:"7px 11px",borderRadius:8,border:"1px solid "+C.brd,fontSize:13,fontFamily:"inherit",outline:"none",background:C.s1,color:C.txt,boxSizing:"border-box"}}/>
         </FRow>
         {fejl&&<div style={{color:C.red,fontSize:12,marginBottom:10}}>{fejl}</div>}
         <div style={{marginTop:8,padding:"10px 14px",background:C.ambM,border:"1px solid "+C.amb,borderRadius:8,fontSize:11,color:C.amb,fontWeight:500,marginBottom:14}}>
-          Advarsel: Email og kode gemmes ukrypteret i localStorage. I produktion bør dette erstattes af en server-side løsning med hashing (bcrypt/Argon2).
+          {t("auth.ownerSetup.warning")}
         </div>
         <button onClick={submit} style={{width:"100%",padding:"10px 0",background:C.acc,color:"#fff",border:"none",borderRadius:8,fontWeight:700,fontSize:14,cursor:"pointer",fontFamily:"inherit"}}>
-          Opret ejer-konto
+          {t("auth.ownerSetup.createBtn")}
         </button>
       </div>
     </div>
@@ -10853,6 +10885,7 @@ function SelskabSetupWizard({onSave}){
 }
 
 export default function App(){
+  const {t} = useTranslation();
   const [authStage,setAuthStage]=useState("app");
   const [authData,setAuthData]=useState({email:"admin@psykiatri.rm.dk",password:"",navn:"Systemadministrator",selskab:"Psykiatri Region Midtjylland",afdeling:"Alle afdelinger",rolle:"admin"});
   const isAdmin = authData.rolle==="admin" || authData.rolle==="superadmin" || authData.rolle==="ejer";
@@ -11269,6 +11302,7 @@ return [];}},[scopedPatienter,lokTider]);
     <div style={{display:"flex",minHeight:"100vh",background:C.bg,fontFamily:"'DM Sans','Segoe UI',sans-serif",color:C.txt}}>
       <style>{`
         *{box-sizing:border-box}
+        body{font-family:'DM Sans','Segoe UI',system-ui,sans-serif}
         ::-webkit-scrollbar{width:5px;height:5px}
         ::-webkit-scrollbar-track{background:transparent}
         ::-webkit-scrollbar-thumb{background:${C.brd};border-radius:3px}
@@ -11292,8 +11326,8 @@ return [];}},[scopedPatienter,lokTider]);
       {/* Sidebar */}
       <div style={{width:220,flexShrink:0,background:C.s1,borderRight:`1px solid ${C.brd}`,display:"flex",flexDirection:"column",position:"sticky",top:0,height:"100vh"}}>
         <div style={{padding:"20px 18px 16px",borderBottom:`1px solid ${C.brd}`}}>
-          <div style={{color:C.acc,fontWeight:900,fontSize:22,letterSpacing:"-0.02em"}}>PlanMed</div>
-          <div style={{color:C.txtM,fontSize:11,marginTop:2}}>Planlægningssystem</div>
+          <div style={{color:C.acc,fontWeight:900,fontSize:22,letterSpacing:"-0.02em"}}>{t("common.appName")}</div>
+          <div style={{color:C.txtM,fontSize:11,marginTop:2}}>{t("nav.subtitle")}</div>
         </div>
         <div style={{padding:"8px 10px",borderBottom:`1px solid ${C.brd}`}}>
           <button onClick={()=>{setGsOpen(true);setGsQuery("");}}
@@ -11301,7 +11335,7 @@ return [];}},[scopedPatienter,lokTider]);
             onMouseEnter={e=>e.currentTarget.style.borderColor=C.acc}
             onMouseLeave={e=>e.currentTarget.style.borderColor=C.brd}>
             <svg width="13" height="13" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2.5" strokeLinecap="round"><circle cx="11" cy="11" r="8"/><line x1="21" y1="21" x2="16.65" y2="16.65"/></svg>
-            <span style={{flex:1,textAlign:"left"}}>Søg...</span>
+            <span style={{flex:1,textAlign:"left"}}>{t("nav.searchHint")}</span>
             <kbd style={{background:C.s3,border:`1px solid ${C.brd}`,borderRadius:4,padding:"1px 5px",fontSize:10}}>Ctrl+K</kbd>
           </button>
         </div>
@@ -11318,7 +11352,7 @@ return [];}},[scopedPatienter,lokTider]);
               <button key={item.id} onClick={()=>setView(item.id)}
                 style={{width:"100%",display:"flex",alignItems:"center",gap:9,padding:"8px 10px",borderRadius:8,border:"none",background:act?C.accM:"transparent",color:act?C.acc:C.txtD,cursor:"pointer",fontFamily:"inherit",fontSize:13,fontWeight:act?700:400,marginBottom:2,textAlign:"left",transition:"background .12s,color .12s",position:"relative"}}
                 className={act?"":"pm-nav-hover"}>
-                <span style={{flex:1}}>{item.label}</span>
+                <span style={{flex:1}}>{t(item.label)}</span>
                 {badge&&<span style={{background:act?C.acc:C.red,color:act?C.bg:"#fff",borderRadius:10,fontSize:10,fontWeight:700,padding:"1px 6px",minWidth:18,textAlign:"center"}}>{badge}</span>}
                 {/* Aktiv indikator - Fitts: tydelig markering */}
                 {act&&<div style={{position:"absolute",left:0,top:"50%",transform:"translateY(-50%)",width:3,height:18,background:C.acc,borderRadius:"0 2px 2px 0"}}/>}
@@ -11329,9 +11363,9 @@ return [];}},[scopedPatienter,lokTider]);
 
         <div style={{padding:"12px 12px",borderTop:"1px solid "+C.brd}}>
           <div style={{background:C.accM,borderRadius:8,padding:"10px 12px"}}>
-            <div style={{color:C.acc,fontSize:12,fontWeight:700,marginBottom:4}}>Afventer planlægning</div>
+            <div style={{color:C.acc,fontSize:12,fontWeight:700,marginBottom:4}}>{t("nav.afventer")}</div>
             <div style={{color:C.txt,fontSize:20,fontWeight:900,fontVariantNumeric:"tabular-nums"}}>{afventer}</div>
-            <div style={{color:C.txtM,fontSize:11}}>opgaver klar</div>
+            <div style={{color:C.txtM,fontSize:11}}>{t("nav.afventerTasks")}</div>
           </div>
         </div>
       </div>
@@ -11341,7 +11375,7 @@ return [];}},[scopedPatienter,lokTider]);
         {/* Header */}
         <div style={{padding:"16px 24px",borderBottom:`1px solid ${C.brd}`,display:"flex",justifyContent:"space-between",alignItems:"center",background:C.s1,flexShrink:0}}>
           <div>
-            <div style={{color:C.txt,fontWeight:800,fontSize:18}}>{NAV_ITEMS.find(n=>n.id===view)?.label}</div>
+            <div style={{color:C.txt,fontWeight:800,fontSize:18}}>{(()=>{const it=NAV_ITEMS.find(n=>n.id===view);return it?t(it.label):"";})()}</div>
             {/* Aktive afdelinger i header */}
             {(()=>{
               const aktiveAfd=alleAfdelinger.filter(af=>afdScope[af.id]?.aktiv);
@@ -11350,19 +11384,19 @@ return [];}},[scopedPatienter,lokTider]);
                 <div style={{display:"flex",alignItems:"center",gap:6,flexWrap:"wrap",marginTop:3}}>
                   {harScope?(
                     <>
-                      <span style={{color:C.txtM,fontSize:11,fontWeight:500}}>Viser:</span>
+                      <span style={{color:C.txtM,fontSize:11,fontWeight:500}}>{t("nav.viewing")}</span>
                       {aktiveAfd.map(af=>(
                         <span key={af.id} style={{background:C.accM,color:C.acc,fontSize:11,fontWeight:700,borderRadius:5,padding:"2px 8px",display:"inline-flex",alignItems:"center",gap:4,border:"1px solid "+C.acc+"44"}}>
                           {af.navn}
                         </span>
                       ))}
                       <span style={{color:C.txtM,fontSize:11,marginLeft:2}}>
-                        · {scopedPatienter.length} pat · {scopedMed.length} med
+                        · {scopedPatienter.length} {t("nav.patients")} · {scopedMed.length} {t("nav.employees")}
                       </span>
                     </>
                   ):(
                     <span style={{color:C.txtM,fontSize:11}}>
-                      Alle afdelinger · {alleAfdelinger.length} afd. · {scopedPatienter.length} pat · {scopedMed.length} med
+                      {t("nav.allDepartments")} · {alleAfdelinger.length} {t("nav.departments")} · {scopedPatienter.length} {t("nav.patients")} · {scopedMed.length} {t("nav.employees")}
                     </span>
                   )}
                 </div>
@@ -11372,6 +11406,7 @@ return [];}},[scopedPatienter,lokTider]);
             {isEjer&&<span style={{background:C.redM,color:C.red,fontSize:10,borderRadius:4,padding:"2px 7px",fontWeight:700,marginLeft:6}}>EJER</span>}
           </div>
           <div style={{display:"flex",gap:8,alignItems:"center"}}>
+            <LanguageSwitcher/>
             {errors>0&&<Pill color={C.red} bg={C.redM}>{errors} regelfejl</Pill>}
             <Pill color={C.acc} bg={C.accM}>{patienter.reduce((a,p)=>a+p.opgaver.filter(o=>o.status==="planlagt").length,0)} planlagt</Pill>
             <button onClick={()=>setVisScope(true)}
@@ -14142,8 +14177,11 @@ function runPlanner(patienter, config={}) {
 
     // Tjek lokale åbent denne dag
     let lokStart=medStart, lokSlut=medSlut;
-    if(lokNavn && lokTider[dag]?.[lokNavn]) {
-      const lt = lokTider[dag][lokNavn];
+    if(lokNavn) {
+      // Hvis et specifikt lokale kræves, men ingen åbningstid findes for dagen,
+      // betragtes lokalet som lukket (ikke "ingen begrænsning").
+      const lt = lokTider[dag]?.[lokNavn];
+      if(!lt) return null;
       const ls=toMin2(lt.å||lt.åben||"08:00"), le=toMin2(lt.l||lt.lukket||"16:00");
       if(ls===0&&le===0) return null; // Lukket
       lokStart=Math.max(medStart,ls);
@@ -14348,12 +14386,15 @@ function runPlanner(patienter, config={}) {
         k.toLowerCase().includes(opg.opgave.toLowerCase())
       );
     };
-    const opgaveErRegistreretSomKomp = effKandidater.some(navn=>{
+    // Hvis mindst én kandidat har registrerede kompetencer, så filtrér strikt
+    // efter kompetencen — også hvis ingen i listen matcher (giver tom liste).
+    // Falder kun tilbage til ufiltreret hvis INGEN kandidater har kompetencer
+    // overhovedet (legacy-data uden kompetence-opsætning).
+    const nogenHarKompetencer = effKandidater.some(navn=>{
       const m=medarbejdere.find(mm=>mm.navn===navn);
-      if(!m||(m.kompetencer||[]).length===0) return false;
-      return harKompetence(navn);
+      return m && (m.kompetencer||[]).length>0;
     });
-    if(opgaveErRegistreretSomKomp) effKandidater = effKandidater.filter(harKompetence);
+    if(nogenHarKompetencer) effKandidater = effKandidater.filter(harKompetence);
     return effKandidater;
   };
 
@@ -14462,8 +14503,10 @@ function runPlanner(patienter, config={}) {
     const medStart = toMin2(dagInfo?.start||"08:00");
     const medSlut  = toMin2(dagInfo?.slut||"16:00");
     let lokStart=medStart, lokSlut=medSlut;
-    if(lokNavn && lokTider[dag]?.[lokNavn]) {
-      const lt = lokTider[dag][lokNavn];
+    if(lokNavn) {
+      // Krævet lokale uden åbningstid for dagen = lukket
+      const lt = lokTider[dag]?.[lokNavn];
+      if(!lt) return null;
       const ls=toMin2(lt.å||lt.åben||"08:00"), le=toMin2(lt.l||lt.lukket||"16:00");
       if(ls===0&&le===0) return null;
       lokStart=Math.max(medStart,ls);
