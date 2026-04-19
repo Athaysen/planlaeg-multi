@@ -810,7 +810,7 @@ function AdminView({adminData,setAdminData,anmodninger=[],setAnmodninger,medarbe
 // 
 // RULLEPLAN NOTIFIKATIONER - mail-log + beslutningsstyring
 // 
-function RulleplanNotifView({rulNotif,setRulNotif,medarbejdere=[]}){
+export function RulleplanNotifView({rulNotif,setRulNotif,medarbejdere=[]}){
   const [valgt,setValgt]=useState(null);
   const today=new Date().toISOString().slice(0,10);
 
