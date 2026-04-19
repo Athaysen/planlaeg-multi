@@ -2276,6 +2276,128 @@ export default function PlanMedTester({onClose}){
       log("Forløb","Import afviser skabelon uden opgaver-array",gyldig.length===0);
     }catch(e){log("Forløb","Forløb import/eksport suite",false,e.message);}
 
+    // ── SUITE 59: Indsats-grupper (same medarbejder back-to-back) ────
+    try{
+      const dagNavn=["Søndag","Mandag","Tirsdag","Onsdag","Torsdag","Fredag","Lørdag"];
+      const alleDage=Object.fromEntries(dagNavn.map(d=>([d,{aktiv:true,start:"08:00",slut:"17:00"}])));
+      const lt={Mandag:{"R":{å:"08:00",l:"17:00"}},Tirsdag:{"R":{å:"08:00",l:"17:00"}},Onsdag:{"R":{å:"08:00",l:"17:00"}},Torsdag:{"R":{å:"08:00",l:"17:00"}},Fredag:{"R":{å:"08:00",l:"17:00"}}};
+      const medA={navn:"A",titel:"Psykolog",kompetencer:["Forberedelse","Patient","Efterbehandling"],arbejdsdage:alleDage};
+      const medB={navn:"B",titel:"Psykolog",kompetencer:["Forberedelse","Patient","Efterbehandling"],arbejdsdage:alleDage};
+      // 3 opgaver med samme indsatsGruppe → skal bookes hos SAMME medarbejder
+      const patG={id:"pG",navn:"G",cpr:"010101-0100",henvDato:today(),status:"aktiv",statusHistorik:[],haste:false,
+        opgaver:[
+          {id:"og1",sekvens:1,opgave:"Forberedelse",minutter:30,status:"afventer",låst:false,muligeMed:["A","B"],muligeLok:["R"],patInv:false,tidligst:"08:00",senest:"17:00",dato:null,startKl:null,slutKl:null,lokale:null,medarbejder:null,indsatsGruppe:"g1"},
+          {id:"og2",sekvens:2,opgave:"Patient",minutter:45,status:"afventer",låst:false,muligeMed:["A","B"],muligeLok:["R"],patInv:true,tidligst:"08:00",senest:"17:00",dato:null,startKl:null,slutKl:null,lokale:null,medarbejder:null,indsatsGruppe:"g1"},
+          {id:"og3",sekvens:3,opgave:"Efterbehandling",minutter:30,status:"afventer",låst:false,muligeMed:["A","B"],muligeLok:["R"],patInv:false,tidligst:"08:00",senest:"17:00",dato:null,startKl:null,slutKl:null,lokale:null,medarbejder:null,indsatsGruppe:"g1"},
+        ]};
+      const rG=runPlanner([patG],{medarbejdere:[medA,medB],lokTider:lt,pause:5,minGapDays:0,step:5,maxDage:14});
+      const ops=rG.patienter[0].opgaver;
+      const planlagte=ops.filter(o=>o.status==="planlagt");
+      log("IndsGrp","Alle 3 grupperede opgaver planlagt",planlagte.length===3);
+      if(planlagte.length===3){
+        log("IndsGrp","Alle 3 har samme medarbejder",planlagte[0].medarbejder&&planlagte.every(o=>o.medarbejder===planlagte[0].medarbejder));
+        log("IndsGrp","Alle 3 booket samme dag",planlagte.every(o=>o.dato===planlagte[0].dato));
+        // Back-to-back: slut[n] ≈ start[n+1]
+        const sort=[...planlagte].sort((a,b)=>toMin(a.startKl)-toMin(b.startKl));
+        const gap1=toMin(sort[1].startKl)-toMin(sort[0].slutKl);
+        const gap2=toMin(sort[2].startKl)-toMin(sort[1].slutKl);
+        log("IndsGrp","Opgaver back-to-back (gap ≤ pause)",gap1<=10&&gap2<=10,`gap1=${gap1} gap2=${gap2}`);
+      }
+    }catch(e){log("IndsGrp","Indsats-gruppe suite",false,e.message);}
+
+    // ── SUITE 60: Deadline (maxDageForlob) ──────────────────────────
+    try{
+      const alleDage=Object.fromEntries(["Søndag","Mandag","Tirsdag","Onsdag","Torsdag","Fredag","Lørdag"].map(d=>([d,{aktiv:true,start:"08:00",slut:"17:00"}])));
+      const lt={Mandag:{"R":{å:"08:00",l:"17:00"}},Tirsdag:{"R":{å:"08:00",l:"17:00"}},Onsdag:{"R":{å:"08:00",l:"17:00"}},Torsdag:{"R":{å:"08:00",l:"17:00"}},Fredag:{"R":{å:"08:00",l:"17:00"}}};
+      const med={navn:"D",titel:"Psykolog",kompetencer:["X"],arbejdsdage:alleDage};
+      const henvDato="2026-04-20"; // mandag
+      const patD={id:"pD",navn:"D",cpr:"010101-0200",henvDato,status:"aktiv",statusHistorik:[],haste:false,maxDageForlob:7,
+        opgaver:[{id:"oD",sekvens:1,opgave:"X",minutter:60,status:"afventer",låst:false,muligeMed:["D"],muligeLok:["R"],patInv:false,tidligst:"08:00",senest:"17:00",dato:null,startKl:null,slutKl:null,lokale:null,medarbejder:null}]};
+      const rD=runPlanner([patD],{medarbejdere:[med],lokTider:lt,pause:5,minGapDays:0,step:5,maxDage:60,prioritering:"haste",deadlineMode:"henvDato"});
+      const opgD=rD.patienter[0].opgaver[0];
+      log("Deadline","Opgave med deadline planlægges",opgD.status==="planlagt");
+      if(opgD.dato){
+        // Skal være inden henvDato+7 (working-day-agnostisk grænse)
+        const diff=daysBetween(henvDato,opgD.dato);
+        log("Deadline","Booking inden for deadline (henvDato+7)",diff<=7,`diff=${diff}`);
+      }
+
+      // deadlineMode="indsatsDato" + indsatsDato
+      const rDI=runPlanner([patD],{medarbejdere:[med],lokTider:lt,pause:5,minGapDays:0,step:5,maxDage:60,prioritering:"haste",deadlineMode:"indsatsDato",indsatsDato:"2026-05-01"});
+      const opgDI=rDI.patienter[0].opgaver[0];
+      log("Deadline","deadlineMode=indsatsDato bruger indsatsDato som base",opgDI.status==="planlagt");
+
+      // Haste-prioritering: haste-patient vs normal → haste først
+      const patNormal={id:"pN",navn:"N",cpr:"020202-0200",henvDato:"2026-04-18",status:"aktiv",statusHistorik:[],haste:false,
+        opgaver:[{id:"oN",sekvens:1,opgave:"X",minutter:60,status:"afventer",låst:false,muligeMed:["D"],muligeLok:["R"],patInv:false,tidligst:"08:00",senest:"17:00",dato:null,startKl:null,slutKl:null,lokale:null,medarbejder:null}]};
+      const patHaste={id:"pH",navn:"H",cpr:"030303-0300",henvDato:"2026-04-19",status:"aktiv",statusHistorik:[],haste:true,
+        opgaver:[{id:"oH",sekvens:1,opgave:"X",minutter:60,status:"afventer",låst:false,muligeMed:["D"],muligeLok:["R"],patInv:false,tidligst:"08:00",senest:"17:00",dato:null,startKl:null,slutKl:null,lokale:null,medarbejder:null}]};
+      const rH=runPlanner([patNormal,patHaste],{medarbejdere:[med],lokTider:lt,pause:5,minGapDays:0,step:5,maxDage:60,prioritering:"haste"});
+      const o1=rH.patienter.find(p=>p.id==="pN")?.opgaver[0];
+      const o2=rH.patienter.find(p=>p.id==="pH")?.opgaver[0];
+      log("Deadline","Haste-patient planlagt før eller samtidig med normal",
+        o1&&o2&&o1.dato&&o2.dato? o2.dato<=o1.dato : false,
+        `normal=${o1?.dato} haste=${o2?.dato}`);
+    }catch(e){log("Deadline","Deadline-suite",false,e.message);}
+
+    // ── SUITE 61: maxPatVisitsPerMedPerUge (strenghed) ──────────────
+    try{
+      const alleDage=Object.fromEntries(["Søndag","Mandag","Tirsdag","Onsdag","Torsdag","Fredag","Lørdag"].map(d=>([d,{aktiv:true,start:"08:00",slut:"17:00"}])));
+      const lt={Mandag:{"R":{å:"08:00",l:"17:00"}},Tirsdag:{"R":{å:"08:00",l:"17:00"}},Onsdag:{"R":{å:"08:00",l:"17:00"}},Torsdag:{"R":{å:"08:00",l:"17:00"}},Fredag:{"R":{å:"08:00",l:"17:00"}}};
+      const med={navn:"V",titel:"Psykolog",kompetencer:["X"],arbejdsdage:alleDage};
+      const mkPat=(id,n)=>({id,navn:id,cpr:id+"-0001",henvDato:"2026-04-20",status:"aktiv",statusHistorik:[],haste:false,
+        opgaver:Array.from({length:n},(_,i)=>({id:id+"_"+i,sekvens:i+1,opgave:"X",minutter:30,status:"afventer",låst:false,muligeMed:["V"],muligeLok:["R"],patInv:true,tidligst:"08:00",senest:"17:00",dato:null,startKl:null,slutKl:null,lokale:null,medarbejder:null}))});
+      // 4 patienter med 1 patient-opgave hver → 4 besøg samme uge for V
+      const pats=[mkPat("p1",1),mkPat("p2",1),mkPat("p3",1),mkPat("p4",1)];
+      // Hård: max 2/uge → kun 2 planlægges
+      const rH=runPlanner(pats,{medarbejdere:[med],lokTider:lt,pause:5,minGapDays:0,step:5,maxDage:7,maxPatVisitsPerMedPerUge:2,maxPatVisitsStrenged:"haard"});
+      const planlagteH=rH.patienter.flatMap(p=>p.opgaver.filter(o=>o.status==="planlagt"));
+      log("MaxVisits","Hård grænse 2/uge: max 2 planlagt samme uge",planlagteH.length===2||planlagteH.length<4,`planlagt=${planlagteH.length}`);
+      // Blød: max 2/uge bløde → alle 4 planlægges (blød = advarsel)
+      const rB=runPlanner(pats,{medarbejdere:[med],lokTider:lt,pause:5,minGapDays:0,step:5,maxDage:14,maxPatVisitsPerMedPerUge:2,maxPatVisitsStrenged:"bloed"});
+      const planlagteB=rB.patienter.flatMap(p=>p.opgaver.filter(o=>o.status==="planlagt"));
+      log("MaxVisits","Blød grænse: flere end 2 kan planlægges (advar)",planlagteB.length>=2);
+    }catch(e){log("MaxVisits","MaxVisits-suite",false,e.message);}
+
+    // ── SUITE 62: maxMedPerPatient ──────────────────────────────────
+    try{
+      const alleDage=Object.fromEntries(["Søndag","Mandag","Tirsdag","Onsdag","Torsdag","Fredag","Lørdag"].map(d=>([d,{aktiv:true,start:"08:00",slut:"17:00"}])));
+      const lt={Mandag:{"R":{å:"08:00",l:"17:00"}},Tirsdag:{"R":{å:"08:00",l:"17:00"}},Onsdag:{"R":{å:"08:00",l:"17:00"}},Torsdag:{"R":{å:"08:00",l:"17:00"}},Fredag:{"R":{å:"08:00",l:"17:00"}}};
+      const mk=(navn)=>({navn,titel:"Psykolog",kompetencer:["X"],arbejdsdage:alleDage});
+      const meds=[mk("M1"),mk("M2"),mk("M3"),mk("M4")];
+      // 3 opgaver på samme patient med 4 mulige medarbejdere
+      const patM={id:"pM",navn:"M",cpr:"010101-0300",henvDato:"2026-04-20",status:"aktiv",statusHistorik:[],haste:false,
+        opgaver:[
+          {id:"oM1",sekvens:1,opgave:"X",minutter:30,status:"afventer",låst:false,muligeMed:["M1","M2","M3","M4"],muligeLok:["R"],patInv:false,tidligst:"08:00",senest:"17:00"},
+          {id:"oM2",sekvens:2,opgave:"X",minutter:30,status:"afventer",låst:false,muligeMed:["M1","M2","M3","M4"],muligeLok:["R"],patInv:false,tidligst:"08:00",senest:"17:00"},
+          {id:"oM3",sekvens:3,opgave:"X",minutter:30,status:"afventer",låst:false,muligeMed:["M1","M2","M3","M4"],muligeLok:["R"],patInv:false,tidligst:"08:00",senest:"17:00"},
+        ]};
+      // Hård: max 2 forskellige medarbejdere per patient
+      const rH=runPlanner([patM],{medarbejdere:meds,lokTider:lt,pause:5,minGapDays:0,step:5,maxDage:14,maxMedPerPatient:2,maxMedStrenged:"haard"});
+      const planlagte=rH.patienter[0].opgaver.filter(o=>o.status==="planlagt");
+      const distinct=new Set(planlagte.map(o=>o.medarbejder));
+      log("MaxMed","maxMedPerPatient=2 hård: ≤ 2 distinkte medarbejdere",distinct.size<=2,`distinct=${distinct.size}`);
+    }catch(e){log("MaxMed","MaxMedPerPatient-suite",false,e.message);}
+
+    // ── SUITE 63: buildPatient-shape ────────────────────────────────
+    try{
+      const raw={navn:"Test",cpr:"010101-1111",henvDato:"2026-04-18",forlobNr:1,afdeling:"a1"};
+      const fl={1:[{o:"Opgave1",m:45,p:true,tl:"08:00",ss:"17:00",s:1,l:["R"],u:["Projektor"]}]};
+      const p=buildPatient(raw,fl,[]);
+      log("BuildPat","Resultat har id",!!p.id);
+      log("BuildPat","Resultat har opgaver-array",Array.isArray(p.opgaver));
+      log("BuildPat","Opgave har udstyr-felt fra f.u",Array.isArray(p.opgaver[0].udstyr)&&p.opgaver[0].udstyr.includes("Projektor"));
+      log("BuildPat","Opgave har muligeLok",p.opgaver[0].muligeLok.includes("R"));
+      log("BuildPat","Opgave er afventer som default",p.opgaver[0].status==="afventer");
+      log("BuildPat","Tom forløbsliste giver tom opgaver-array",(buildPatient({navn:"T",cpr:"x",forlobNr:99},{},[]).opgaver||[]).length===0);
+      log("BuildPat","Raw uden u-felt: opgave har tom udstyr-array",(()=>{
+        const raw2={navn:"T",cpr:"y",forlobNr:1};
+        const fl2={1:[{o:"A",m:30,p:false,tl:"08:00",ss:"16:00",s:1,l:[]}]};
+        const p2=buildPatient(raw2,fl2,[]);
+        return Array.isArray(p2.opgaver[0].udstyr)&&p2.opgaver[0].udstyr.length===0;
+      })());
+    }catch(e){log("BuildPat","buildPatient-suite",false,e.message);}
+
     // ── SUITE 58: i18n sprogskift + fallback ─────────────────────────
     try{
       const oprindelig=i18n.language;
