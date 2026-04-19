@@ -3,7 +3,7 @@ import { today } from "../utils/index.js";
 import { C, BASE_MED, LK, PK, PD, NAV_ITEMS, buildPatient } from "../data/constants.js";
 import { Btn, Input, Sel, FRow, Pill, ViewHeader, ErrorBoundary } from "../components/primitives.jsx";
 
-function PlanlaegIndstillingerPanel({config,setConfig,setPatienter,setMedarbejdere,setForlob,forlob,setLokTider,lokMeta={},setLokMeta,patienter=[],lokaler=[],saveLokaler=()=>{},medarbejdere=[],setIndsatser=()=>{},indsatser=[]}){
+export function PlanlaegIndstillingerPanel({config,setConfig,setPatienter,setMedarbejdere,setForlob,forlob,setLokTider,lokMeta={},setLokMeta,patienter=[],lokaler=[],saveLokaler=()=>{},medarbejdere=[],setIndsatser=()=>{},indsatser=[]}){
   const [c,setC]=useState({...config,serverModel:config.serverModel||"planmed",selfhostedUrl:config.selfhostedUrl||""});
   const set=(k,v)=>setC(p=>({...p,[k]:v}));
   const [gemtIndstillinger,setGemtIndstillinger]=useState(false);
@@ -142,6 +142,24 @@ function PlanlaegIndstillingerPanel({config,setConfig,setPatienter,setMedarbejde
             <div style={{display:"flex",alignItems:"center",gap:8}}>
               <Input type="number" value={c.maxMedPerPatient} onChange={v=>set("maxMedPerPatient",Number(v))} min="0" max="20" style={{width:70}}/>
               <span style={{color:C.txtM,fontSize:12}}>{c.maxMedPerPatient===0?"(ingen grænse)":"medarbejdere"}</span>
+            </div>
+          </KriterieRad>
+          <KriterieRad
+            label="Global cooldown mellem opgaver (dage)"
+            hint="0 = ingen. Minimum afstand mellem to opgaver på samme patient. Kan overrides per opgave — der bruges den strengeste værdi."
+            strenghedKey={null}>
+            <div style={{display:"flex",alignItems:"center",gap:8}}>
+              <Input type="number" value={c.cooldownDage||0} onChange={v=>set("cooldownDage",Number(v))} min="0" max="365" style={{width:70}}/>
+              <span style={{color:C.txtM,fontSize:12}}>{(c.cooldownDage||0)===0?"(ingen)":"dage"}</span>
+            </div>
+          </KriterieRad>
+          <KriterieRad
+            label="Global min. dage mellem patientbesøg"
+            hint="0 = ingen. Gælder kun opgaver med patient til stede. Kan overrides per opgave."
+            strenghedKey={null}>
+            <div style={{display:"flex",alignItems:"center",gap:8}}>
+              <Input type="number" value={c.patInvMinDage||0} onChange={v=>set("patInvMinDage",Number(v))} min="0" max="365" style={{width:70}}/>
+              <span style={{color:C.txtM,fontSize:12}}>{(c.patInvMinDage||0)===0?"(ingen)":"dage"}</span>
             </div>
           </KriterieRad>
         </div>

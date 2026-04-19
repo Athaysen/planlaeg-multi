@@ -103,10 +103,13 @@ export function runPlanner(patienter, config={}) {
     return kraevet.every(u=>har.includes(u));
   };
   // Hjælper: tjek patient-specifikke spacing-regler.
-  // - cooldownDage: minimum dage fra en planlagt opgave til næste opgave på samme patient
+  // - cooldownDage: minimum dage mellem to opgaver på samme patient (symmetrisk)
   // - patInvMinDage: minimum dage mellem to patInv:true-opgaver på samme patient
-  // Reglen er symmetrisk: både eksisterende og ny opgaves værdi respekteres
-  // (dvs. max(eksisterende, ny) gælder).
+  // Begge regler anvender max(eksisterende, ny) så den strengeste værdi vinder.
+  // Symmetrisk afstand — samme dag (diff=0) blokeres hvis enten har cooldown>0.
+  // Global fallback fra config: configCooldown / configPatInvMinDage.
+  const configCooldown = Number(config.cooldownDage)||0;
+  const configPatInvMinDage = Number(config.patInvMinDage)||0;
   const spacingOk = (opg, dato, patId) => {
     if(!patId) return true;
     const pat = klonPat.find(p => p.id === patId);
@@ -114,15 +117,12 @@ export function runPlanner(patienter, config={}) {
     const andre = pat.opgaver.filter(o => o.id !== opg.id && o.status === "planlagt" && o.dato);
     for(const a of andre) {
       const diff = Math.abs(daysBetween(a.dato, dato));
-      // cooldownDage: efter den eksisterende opgave er ny-dato for tæt på
-      const cdExist = Number(a.cooldownDage)||0;
-      if(cdExist > 0 && dato > a.dato && diff <= cdExist) return false;
-      // cooldown på ny opgave: eksisterende opgave er senere end ny + inden for nyt cooldown
-      const cdNy = Number(opg.cooldownDage)||0;
-      if(cdNy > 0 && a.dato > dato && diff <= cdNy) return false;
-      // patInvMinDage: gælder kun hvis BÅDE er patInv
+      // Cooldown — symmetrisk: brug den strengeste af (ny, eksisterende, config-default).
+      const cd = Math.max(Number(opg.cooldownDage)||0, Number(a.cooldownDage)||0, configCooldown);
+      if(cd > 0 && diff < cd) return false;
+      // patInvMinDage — gælder kun hvis BÅDE er patInv:true
       if(opg.patInv && a.patInv) {
-        const minDist = Math.max(Number(opg.patInvMinDage)||0, Number(a.patInvMinDage)||0);
+        const minDist = Math.max(Number(opg.patInvMinDage)||0, Number(a.patInvMinDage)||0, configPatInvMinDage);
         if(minDist > 0 && diff < minDist) return false;
       }
     }

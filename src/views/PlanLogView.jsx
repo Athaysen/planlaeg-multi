@@ -3,6 +3,7 @@ import { today } from "../utils/index.js";
 import { C } from "../data/constants.js";
 import { ErrorBoundary } from "../components/primitives.jsx";
 import { analyserRessourcer } from "../planner/runPlanner.js";
+import { PlanlaegIndstillingerPanel } from "./IndstillingerView.jsx";
 
 export default function PlanLogView({patienter,planLog=[],medarbejdere=[],setPatienter,onPlan,running,progress,planFraDato,setPlanFraDato,afdScope,alleAfdelinger=[],toggleAktiv,toggleRes,lokaler=[],certifikater=[],planDebug,config={},setConfig=()=>{},setMedarbejdere=()=>{},setForlob=()=>{},forlob={},lokTider={},setLokTider=()=>{},lokMeta={},setLokMeta=()=>{},saveLokaler=()=>{},setIndsatser=()=>{},indsatser=[],adminData={}}){
   const [planTab,setPlanTab]=useState("planlaegning");
