@@ -256,8 +256,12 @@ export default function PlanMedTester({onClose}){
     try{
       log("Browser","localStorage tilgængeligt",typeof localStorage!=="undefined");
       log("Browser","Array.flatMap() understøttet",typeof [].flatMap==="function");
-      log("Browser","Optional chaining understøttet",(()=>{try{const o=null;return o?.x===undefined;}catch{return false;}})());
-      log("Browser","Nullish coalescing understøttet",(()=>{try{return (null??'ok')==='ok';}catch{return false;}})());
+      // Hvis denne fil er nået frem til runtime, har browseren parset optional chaining
+      // og nullish coalescing succesfuldt — ellers ville hele testmodulet have fejlet
+      // ved parse-tid. Syntaks-check sker derfor implicit; disse assertions
+      // dokumenterer bare, at understøttelse er en forudsætning.
+      log("Browser","Optional chaining understøttet (parse-tid)",true);
+      log("Browser","Nullish coalescing understøttet (parse-tid)",true);
       log("Browser","Promise/async understøttet",typeof Promise!=="undefined");
       log("Browser","CSS Grid understøttet",CSS.supports("display","grid"));
       log("Browser","CSS Variables understøttet",CSS.supports("color","var(--test)"));
@@ -1950,7 +1954,8 @@ export default function PlanMedTester({onClose}){
       try{
         // Filtrer med ukendt medarbejder
         const alle=[{medarbejder:null,dato:iDag,status:"planlagt"},{medarbejder:"Anna",dato:null,status:"planlagt"}];
-        const vis=alle.filter(o=>("alle"==="alle"||o.medarbejder==="alle")&&(o.dato||"")>=iDag);
+        const filTitel="alle";
+        const vis=alle.filter(o=>(filTitel==="alle"||o.medarbejder===filTitel)&&(o.dato||"")>=iDag);
         // Klik på dag med ingen opgaver
         const dagOpgs=alle.filter(o=>o.dato===iDag);
       }catch(e){ok=false;}
@@ -1966,8 +1971,8 @@ export default function PlanMedTester({onClose}){
         // Opdater åbningstid til ugyldig tid
         let lt={"Lokale 1":{}};
         lt={...lt,"Lokale 1":{...lt["Lokale 1"],Mandag:{å:"99:99",l:"00:00"}}};
-        // toMin med ugyldig streng
-        const t=toMin("invalid"||"00:00");
+        // toMin med ugyldig streng — verificér at det ikke crasher
+        const t=toMin("invalid");
       }catch(e){ok=false;}
       log("Click:Lok","LokalerView: 0 åbentid, ugyldig tid, toMin fallback crasher ikke",ok);
 

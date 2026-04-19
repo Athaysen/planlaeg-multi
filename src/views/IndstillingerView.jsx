@@ -1,6 +1,6 @@
 import React, { useState, useRef } from "react";
 import { today } from "../utils/index.js";
-import { C, BASE_MED, LK, PK, PD, NAV_ITEMS, buildPatient } from "../data/constants.js";
+import { C, BASE_MED, LK, PK, PD, NAV_ITEMS, INIT_PATIENTER_RAW, buildPatient } from "../data/constants.js";
 import { Btn, Input, Sel, FRow, Pill, ViewHeader, ErrorBoundary, StrenghedToggle } from "../components/primitives.jsx";
 import { ConfirmDialog } from "../components/dialogs.jsx";
 
