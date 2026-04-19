@@ -379,8 +379,8 @@ return [];}});
     });
   },[patienter,afdScope]);
 
-  const fejl=useMemo(()=>{try{return [];}catch(e){
-return [];}},[scopedPatienter,lokTider]);
+  // fejl-listen beregnes aldrig i øjeblikket (regel-validering er ikke implementeret endnu)
+  const fejl=useMemo(()=>[],[scopedPatienter,lokTider]);
 
   const handlePlan=useCallback(async ()=>{
     if(running)return;

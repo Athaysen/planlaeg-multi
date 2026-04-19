@@ -1,0 +1,37 @@
+name: CI
+
+on:
+  push:
+    branches: ['**']
+  pull_request:
+    branches: ['**']
+
+# Samme pre-commit-hook-check der køres lokalt: lint + build.
+# Test-suiten i src/tests/PlanMedTester.jsx er browser-only (kan tilføjes
+# senere med Playwright hvis ønsket).
+jobs:
+  lint-and-build:
+    name: Lint + Build
+    runs-on: ubuntu-latest
+    # simple-git-hooks installerer normalt en lokal git-hook via prepare-scriptet.
+    # Dette er irrelevant i CI og kan give støj hvis .git/hooks/ ikke findes.
+    env:
+      SKIP_INSTALL_SIMPLE_GIT_HOOKS: 1
+    steps:
+      - name: Checkout repository
+        uses: actions/checkout@v4
+
+      - name: Setup Node.js
+        uses: actions/setup-node@v4
+        with:
+          node-version: '20'
+          cache: 'npm'
+
+      - name: Install dependencies
+        run: npm ci
+
+      - name: Lint (ESLint — no-undef + jsx-no-undef)
+        run: npm run lint
+
+      - name: Build (Vite)
+        run: npm run build
