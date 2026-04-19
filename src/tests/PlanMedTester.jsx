@@ -2398,6 +2398,63 @@ export default function PlanMedTester({onClose}){
       })());
     }catch(e){log("BuildPat","buildPatient-suite",false,e.message);}
 
+    // ── SUITE 64: cooldownDage og patInvMinDage spacing ─────────────
+    try{
+      const alleDage=Object.fromEntries(["Søndag","Mandag","Tirsdag","Onsdag","Torsdag","Fredag","Lørdag"].map(d=>([d,{aktiv:true,start:"08:00",slut:"17:00"}])));
+      const lt={};["Mandag","Tirsdag","Onsdag","Torsdag","Fredag","Lørdag","Søndag"].forEach(d=>{lt[d]={"R":{å:"08:00",l:"17:00"}};});
+      const med={navn:"S",titel:"Psykolog",kompetencer:["X","Y"],arbejdsdage:alleDage};
+
+      // Test 1: cooldownDage på første opgave → anden opgave må ikke være inden for 3 dage
+      const patC={id:"pC",navn:"C",cpr:"010101-0500",henvDato:"2026-04-20",status:"aktiv",statusHistorik:[],haste:false,
+        opgaver:[
+          {id:"oC1",sekvens:1,opgave:"X",minutter:30,status:"afventer",låst:false,muligeMed:["S"],muligeLok:["R"],patInv:false,tidligst:"08:00",senest:"17:00",cooldownDage:3,dato:null,startKl:null,slutKl:null,lokale:null,medarbejder:null},
+          {id:"oC2",sekvens:2,opgave:"Y",minutter:30,status:"afventer",låst:false,muligeMed:["S"],muligeLok:["R"],patInv:false,tidligst:"08:00",senest:"17:00",dato:null,startKl:null,slutKl:null,lokale:null,medarbejder:null},
+        ]};
+      const rC=runPlanner([patC],{medarbejdere:[med],lokTider:lt,pause:5,minGapDays:0,step:5,maxDage:14});
+      const planlagteC=rC.patienter[0].opgaver.filter(o=>o.status==="planlagt");
+      log("Spacing","Cooldown: begge opgaver planlagt",planlagteC.length===2);
+      if(planlagteC.length===2){
+        const sort=[...planlagteC].sort((a,b)=>a.dato.localeCompare(b.dato));
+        const gap=daysBetween(sort[0].dato,sort[1].dato);
+        log("Spacing","Cooldown: ≥3 dage mellem opgaverne",gap>=3,`gap=${gap} dage`);
+      }
+
+      // Test 2: patInvMinDage mellem to patient-opgaver
+      const patP={id:"pP",navn:"P",cpr:"020202-0500",henvDato:"2026-04-20",status:"aktiv",statusHistorik:[],haste:false,
+        opgaver:[
+          {id:"oP1",sekvens:1,opgave:"X",minutter:30,status:"afventer",låst:false,muligeMed:["S"],muligeLok:["R"],patInv:true,patInvMinDage:5,tidligst:"08:00",senest:"17:00",dato:null,startKl:null,slutKl:null,lokale:null,medarbejder:null},
+          {id:"oP2",sekvens:2,opgave:"Y",minutter:30,status:"afventer",låst:false,muligeMed:["S"],muligeLok:["R"],patInv:true,patInvMinDage:5,tidligst:"08:00",senest:"17:00",dato:null,startKl:null,slutKl:null,lokale:null,medarbejder:null},
+        ]};
+      const rP=runPlanner([patP],{medarbejdere:[med],lokTider:lt,pause:5,minGapDays:0,step:5,maxDage:14});
+      const planlagteP=rP.patienter[0].opgaver.filter(o=>o.status==="planlagt");
+      log("Spacing","patInvMinDage: begge patient-opgaver planlagt",planlagteP.length===2);
+      if(planlagteP.length===2){
+        const sort=[...planlagteP].sort((a,b)=>a.dato.localeCompare(b.dato));
+        const gap=daysBetween(sort[0].dato,sort[1].dato);
+        log("Spacing","patInvMinDage: ≥5 dage mellem patient-opgaver",gap>=5,`gap=${gap} dage`);
+      }
+
+      // Test 3: patInvMinDage gælder IKKE hvis en opgave er intern (patInv=false)
+      const patMix={id:"pMix",navn:"Mix",cpr:"030303-0500",henvDato:"2026-04-20",status:"aktiv",statusHistorik:[],haste:false,
+        opgaver:[
+          {id:"om1",sekvens:1,opgave:"X",minutter:30,status:"afventer",låst:false,muligeMed:["S"],muligeLok:["R"],patInv:true,patInvMinDage:10,tidligst:"08:00",senest:"17:00"},
+          {id:"om2",sekvens:2,opgave:"Y",minutter:30,status:"afventer",låst:false,muligeMed:["S"],muligeLok:["R"],patInv:false,tidligst:"08:00",senest:"17:00"},
+        ]};
+      const rMix=runPlanner([patMix],{medarbejdere:[med],lokTider:lt,pause:5,minGapDays:0,step:5,maxDage:14});
+      const planlagteMix=rMix.patienter[0].opgaver.filter(o=>o.status==="planlagt");
+      log("Spacing","patInvMinDage ignoreres når kun én er patInv",planlagteMix.length===2);
+
+      // Test 4: cooldownDage=0 og patInvMinDage=0 → ingen spacing-krav
+      const patF={id:"pF",navn:"F",cpr:"040404-0500",henvDato:"2026-04-20",status:"aktiv",statusHistorik:[],haste:false,
+        opgaver:[
+          {id:"of1",sekvens:1,opgave:"X",minutter:30,status:"afventer",låst:false,muligeMed:["S"],muligeLok:["R"],patInv:false,cooldownDage:0,tidligst:"08:00",senest:"17:00"},
+          {id:"of2",sekvens:2,opgave:"Y",minutter:30,status:"afventer",låst:false,muligeMed:["S"],muligeLok:["R"],patInv:false,cooldownDage:0,tidligst:"08:00",senest:"17:00"},
+        ]};
+      const rF=runPlanner([patF],{medarbejdere:[med],lokTider:lt,pause:5,minGapDays:0,step:5,maxDage:7});
+      const planlagteF=rF.patienter[0].opgaver.filter(o=>o.status==="planlagt");
+      log("Spacing","Intet cooldown-krav: begge kan planlægges samme dag",planlagteF.length===2);
+    }catch(e){log("Spacing","Spacing-suite",false,e.message);}
+
     // ── SUITE 58: i18n sprogskift + fallback ─────────────────────────
     try{
       const oprindelig=i18n.language;

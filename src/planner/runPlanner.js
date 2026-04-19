@@ -1,5 +1,5 @@
 // Planlægger + ressource-analyse. Pure JS — ingen React-afhængigheder.
-import { today } from "../utils/index.js";
+import { today, daysBetween } from "../utils/index.js";
 import { DEFAULT_TITLER } from "../data/constants.js";
 
 // ── Ressource-analyse (separat fra planlægning) ──
@@ -101,6 +101,32 @@ export function runPlanner(patienter, config={}) {
     if(!Array.isArray(kraevet)||kraevet.length===0) return true;
     const har=Array.isArray(lokMeta?.[lokNavn]?.udstyr)?lokMeta[lokNavn].udstyr:[];
     return kraevet.every(u=>har.includes(u));
+  };
+  // Hjælper: tjek patient-specifikke spacing-regler.
+  // - cooldownDage: minimum dage fra en planlagt opgave til næste opgave på samme patient
+  // - patInvMinDage: minimum dage mellem to patInv:true-opgaver på samme patient
+  // Reglen er symmetrisk: både eksisterende og ny opgaves værdi respekteres
+  // (dvs. max(eksisterende, ny) gælder).
+  const spacingOk = (opg, dato, patId) => {
+    if(!patId) return true;
+    const pat = klonPat.find(p => p.id === patId);
+    if(!pat) return true;
+    const andre = pat.opgaver.filter(o => o.id !== opg.id && o.status === "planlagt" && o.dato);
+    for(const a of andre) {
+      const diff = Math.abs(daysBetween(a.dato, dato));
+      // cooldownDage: efter den eksisterende opgave er ny-dato for tæt på
+      const cdExist = Number(a.cooldownDage)||0;
+      if(cdExist > 0 && dato > a.dato && diff <= cdExist) return false;
+      // cooldown på ny opgave: eksisterende opgave er senere end ny + inden for nyt cooldown
+      const cdNy = Number(opg.cooldownDage)||0;
+      if(cdNy > 0 && a.dato > dato && diff <= cdNy) return false;
+      // patInvMinDage: gælder kun hvis BÅDE er patInv
+      if(opg.patInv && a.patInv) {
+        const minDist = Math.max(Number(opg.patInvMinDage)||0, Number(a.patInvMinDage)||0);
+        if(minDist > 0 && diff < minDist) return false;
+      }
+    }
+    return true;
   };
   const titlerBase=Array.isArray(titlerCfg)&&titlerCfg.length>0?titlerCfg:DEFAULT_TITLER;
   // Bagudkompat: udvid med titler der faktisk findes på medarbejdere — så gamle
@@ -565,6 +591,8 @@ export function runPlanner(patienter, config={}) {
       const dato = addDays2(tidligstDato,di);
       if(!dagBrugbar(dato)) continue;
       if(deadline && dato>deadline) return false;
+      // Respektér cooldownDage og patInvMinDage ift. allerede planlagte opgaver på patienten
+      if(!spacingOk(opg, dato, patId)) continue;
 
       // tidligstMin gælder kun for tidligstDato; andre dage starter fra opgavens tidligst
       const dagMin = dato===tidligstDato ? tidligstMin : (opg.tidligst ? toMin2(opg.tidligst) : 0);
@@ -660,6 +688,9 @@ export function runPlanner(patienter, config={}) {
       const dato = addDays2(tidligstDato,di);
       if(!dagBrugbar(dato)) continue;
       if(deadline && dato>deadline) return false;
+      // Respektér cooldownDage og patInvMinDage for hver opgave i gruppen
+      // (gruppen bookes på samme dag, så check hver opgave mod allerede planlagte)
+      if(!opgaver.every(o=>spacingOk(o, dato, patId))) continue;
       const startMin = dato===tidligstDato?tidligstMin:0;
 
       for(const medNavn of sortKand) {
