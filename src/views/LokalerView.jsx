@@ -4,6 +4,7 @@ import React, { useState, useMemo } from "react";
 import { today, addDays, toMin, uid, parseLocalDate, daysBetween, getDag, valutaSymbol, formatBeloeb } from "../utils/index.js";
 import { C, ALLE_K, DEFAULT_LOK_TIDER, STANDARD_AABNINGSTIDER, INIT_CERTIFIKATER } from "../data/constants.js";
 import { Btn, Input, Modal, FRow, Pill, ViewHeader, PeriodeVaelger } from "../components/primitives.jsx";
+import { ConfirmDialog } from "../components/dialogs.jsx";
 
 export default function LokalerView({patienter,lokTider,setLokTider,lokMeta={},setLokMeta,lokaler=[],saveLokaler=()=>{},adminData={},udstyrsKat=[],saveUdstyrsKat=()=>{},udstyrsPakker=[],saveUdstyrsPakker=()=>{}}){
   const [topTab,setTopTab]=useState("lokaler"); // "lokaler" | "udstyr"
@@ -619,7 +620,7 @@ function LokalTiderForm({lok,lokTider,onSave,onClose}){
 
 // ── UdstyrPanel ──────────────────────────────────────────────
 // Toggle-baseret udstyrsliste, ligesom kompetencer på medarbejdere
-function UdstyrPanel({udstyr=[], onChange}) {
+export function UdstyrPanel({udstyr=[], onChange}) {
   const [nytNavn, setNytNavn] = React.useState("");
 
   // Globalt udstyr-katalog — alle kendte udstyr på tværs af lokaler

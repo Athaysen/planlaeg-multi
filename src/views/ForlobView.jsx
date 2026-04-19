@@ -4,7 +4,8 @@ import React, { useState, useMemo } from "react";
 import { uid } from "../utils/index.js";
 import { C, ALLE_K, BASE_MED, LK, PK, PD, TITLE_C, buildPatient } from "../data/constants.js";
 import { Btn, Input, Sel, Modal, FRow, Pill, ViewHeader } from "../components/primitives.jsx";
-import { IndsatsForm } from "./LokalerView.jsx";
+import { IndsatsForm, UdstyrPanel } from "./LokalerView.jsx";
+import { MedForm } from "./MedarbejderView.jsx";
 
 function CertifikaterTab({certifikater=[],setCertifikater}){
   const certs=certifikater;
@@ -708,22 +709,6 @@ function OpgaveForm({data,onSave,onClose,lokaler=[]}){
   );
 }
 
-// Hjælpe-komponent: blød/hård toggle
-function StrenghedToggle({value, onChange}) {
-  return(
-    <div style={{display:"flex",gap:4,marginTop:4}}>
-      {["bloed","haard"].map(v=>(
-        <button key={v} onClick={()=>onChange(v)}
-          style={{background:value===v?(v==="bloed"?C.ambM:C.redM):"transparent",
-            color:value===v?(v==="bloed"?C.amb:C.red):C.txtM,
-            border:`1px solid ${value===v?(v==="bloed"?C.amb:C.red):C.brd}`,
-            borderRadius:6,padding:"2px 10px",cursor:"pointer",
-            fontSize:11,fontFamily:"inherit",fontWeight:value===v?700:400}}>
-          {v==="bloed"?"Blød (advar)":"Hård (afvis)"}
-        </button>
-      ))}
-    </div>
-  );
-}
+// StrenghedToggle flyttet til /src/components/primitives.jsx (generisk blød/hård-toggle)
 
 // ── Planlægningsindstillinger (genbruges i Planlæg-fanen) ──

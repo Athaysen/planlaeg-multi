@@ -5,6 +5,7 @@ import React, { useState, useEffect, useMemo } from "react";
 import { today, addDays, toMin, fromMin, uid } from "../utils/index.js";
 import { C, FORLOB, ALLE_K, PAT_STATUS, STATUS, sC, sB, sL, buildPatient } from "../data/constants.js";
 import { Btn, Input, Sel, Modal, FRow, Pill, StatusBadge, ProgressRing, ViewHeader } from "../components/primitives.jsx";
+import { UdstyrPanel } from "./LokalerView.jsx";
 
 function PatientDetaljeModal({pat,medarbejdere=[],patienter,forlob=FORLOB,onClose,onEdit,onDelete,onTildelForlob,onAddOpg,onEditOpg,setPatienter,updateOpg,deleteOpg,toggleLås,resetOpg,onMarkerLøst=null,lokMeta={},setAnmodninger=null,showToast=()=>{},lokaler=[]}){
   const [tab,setTab]=useState("overblik");

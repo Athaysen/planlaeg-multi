@@ -3,6 +3,9 @@ import { useTranslation } from "react-i18next";
 import { today, addDays, VALUTAER, valutaSymbol, formatBeloeb } from "../utils/index.js";
 import { C, KAP_TYPER, FORLOB_GALLERI, TITLE_C } from "../data/constants.js";
 import { Btn, Input, Sel, Modal, FRow, Pill, ViewHeader, beregnMaxTimer } from "../components/primitives.jsx";
+import { ConfirmDialog } from "../components/dialogs.jsx";
+import IndstillingerView from "../views/IndstillingerView.jsx";
+import { GodkendelsesView, AktivLogView } from "../views/admin-subviews.jsx";
 
 // Eneste export — AdminView. De andre (RulleplanNotifView, AdminAfdelingerTab,
 // AdminBrugereTab, FaggrupperTab, ForlobAdminTab) er intern til admin-siden.

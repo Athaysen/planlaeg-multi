@@ -404,3 +404,22 @@ export class ErrorBoundary extends React.Component {
     return this.props.children;
   }
 }
+
+// Blød/hård-toggle — bruges i kapacitetsregler (bløde = advarsel, hårde = afvis)
+export function StrenghedToggle({ value, onChange }) {
+  return (
+    <div style={{display:"flex",gap:4,marginTop:4}}>
+      {["bloed","haard"].map(v=>(
+        <button key={v} onClick={()=>onChange(v)}
+          style={{background:value===v?(v==="bloed"?C.ambM:C.redM):"transparent",
+            color:value===v?(v==="bloed"?C.amb:C.red):C.txtM,
+            border:`1px solid ${value===v?(v==="bloed"?C.amb:C.red):C.brd}`,
+            borderRadius:6,padding:"2px 10px",cursor:"pointer",
+            fontSize:11,fontFamily:"inherit",fontWeight:value===v?700:400}}>
+          {v==="bloed"?"Blød (advar)":"Hård (afvis)"}
+        </button>
+      ))}
+    </div>
+  );
+}
+

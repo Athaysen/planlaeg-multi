@@ -387,7 +387,7 @@ export default function MedarbejderView({medarbejdere,setMedarbejdere,patienter,
 }
 
 // Ny MedForm med mail, arbejdssted, arbejdsdage
-function MedForm({med,onSave,onClose,certifikater=[],adminData={}}){
+export function MedForm({med,onSave,onClose,certifikater=[],adminData={}}){
   const dagNavne=["Mandag","Tirsdag","Onsdag","Torsdag","Fredag","Lørdag","Søndag"];
   const defaultDage=Object.fromEntries(dagNavne.map(d=>([d,{aktiv:["Mandag","Tirsdag","Onsdag","Torsdag","Fredag"].includes(d),start:"08:30",slut:"16:00"}])));
 

@@ -4,6 +4,7 @@ import React, { useState } from "react";
 import { valutaSymbol } from "../utils/index.js";
 import { C, LK, PK, PD, KAP_TYPER, TITLE_C } from "../data/constants.js";
 import { Btn, Input, Modal, FRow } from "../components/primitives.jsx";
+import { ConfirmDialog } from "../components/dialogs.jsx";
 
 function KompetenceTilfoej({kompetencer, onChange, alleK=[]}) {
   const [søg, setSøg] = React.useState("");
