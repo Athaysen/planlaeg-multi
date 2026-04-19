@@ -553,7 +553,12 @@ export function runPlanner(patienter, config={}) {
   // ── Hjælper: book en enkelt opgave med tidligste start-minut ──
   const bookOpgave = (opg, effKandidater, tidligstDato, tidligstMin=0, patId=null, deadline=null) => {
     const varMin = (opg.minutter||60) + pause;
-    const muligeLok = ekspanderLokaler(opg.muligeLok||[]);
+    // Filtrér lokaler så kun dem med krævet udstyr kan vælges (samme regel som bookGruppe).
+    // Skelnen mellem "ingen constraint" (raw tom) og "alle rum filtreret bort" (raw ikke-tom
+    // men filtret resultat tomt) — i sidstnævnte tilfælde må opgaven fejle.
+    const muligeLokRaw = ekspanderLokaler(opg.muligeLok||[]);
+    const muligeLok = muligeLokRaw.filter(l=>lokHarUdstyr(l,opg.udstyr));
+    if(muligeLokRaw.length>0 && muligeLok.length===0) return false;
     const opgSenest = opg.senest ? toMin2(opg.senest) : 0;
     const kendteSæt = patId && patMedSet[patId] ? patMedSet[patId] : new Set();
     for(let di=0; di<maxDage; di++) {
