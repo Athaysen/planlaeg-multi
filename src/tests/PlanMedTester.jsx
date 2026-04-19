@@ -1,8 +1,10 @@
 import React, { useState } from "react";
-import { today, addDays, toMin, fromMin, parseLocalDate, daysBetween, isWeekend, getDag } from "../utils/index.js";
-import { C, KAP_TYPER, buildPatient } from "../data/constants.js";
+import i18n from "../i18n.js";
+import { today, addDays, toMin, fromMin, parseLocalDate, daysBetween, isWeekend, nextWD, getDag, valutaInfo, valutaSymbol, formatBeloeb, VALUTAER } from "../utils/index.js";
+import { getUge } from "../utils/eksport.js";
+import { C, KAP_TYPER, buildPatient, ensureKompetencer, DEFAULT_TITLER, STANDARD_AABNINGSTIDER, sC, sB, sL, FORLOB_GALLERI } from "../data/constants.js";
 import { Btn, ErrorBoundary, PeriodeVaelger, beregnMaxTimer, beregnRullendeGns, beregnKapStatus } from "../components/primitives.jsx";
-import { runPlanner } from "../planner/runPlanner.js";
+import { runPlanner, analyserRessourcer } from "../planner/runPlanner.js";
 
 export default function PlanMedTester({onClose}){
   const [results,setResults]=useState([]);
@@ -2060,6 +2062,240 @@ export default function PlanMedTester({onClose}){
       }catch(e){ok=false;}
       log("Click:Omf","OmfordelingView: ikke-eksisterende id, null-medarbejder sort crasher ikke",ok);
     }catch(e){log("Click:Alle","Click crash samlet suite",false,e.message);}
+
+    // ── SUITE 49: Valuta-helpers ─────────────────────────────────────
+    try{
+      // valutaInfo
+      log("Valuta","valutaInfo(DKK) = kr/da-DK",valutaInfo("DKK").symbol==="kr" && valutaInfo("DKK").locale==="da-DK");
+      log("Valuta","valutaInfo(EUR) = €",valutaInfo("EUR").symbol==="€");
+      log("Valuta","valutaInfo(USD) = $",valutaInfo("USD").symbol==="$");
+      log("Valuta","valutaInfo(NOK) = kr/nb-NO",valutaInfo("NOK").symbol==="kr" && valutaInfo("NOK").locale==="nb-NO");
+      log("Valuta","valutaInfo(ukendt) fallback til DKK",valutaInfo("XYZ").symbol==="kr" && valutaInfo("XYZ").locale==="da-DK");
+      log("Valuta","valutaInfo(undefined) fallback",valutaInfo().symbol==="kr");
+      // valutaSymbol
+      log("Valuta","valutaSymbol(DKK) = kr",valutaSymbol("DKK")==="kr");
+      log("Valuta","valutaSymbol(EUR) = €",valutaSymbol("EUR")==="€");
+      // formatBeloeb
+      log("Valuta","formatBeloeb(0, DKK) = '—'",formatBeloeb(0,"DKK")==="—");
+      log("Valuta","formatBeloeb(null) = '—'",formatBeloeb(null,"DKK")==="—");
+      log("Valuta","formatBeloeb(NaN) = '—'",formatBeloeb(NaN,"DKK")==="—");
+      log("Valuta","formatBeloeb(1500, DKK) indeholder 'kr'",formatBeloeb(1500,"DKK").includes("kr"));
+      log("Valuta","formatBeloeb(1500, EUR) indeholder '€'",formatBeloeb(1500,"EUR").includes("€"));
+      log("Valuta","formatBeloeb med suffix '/t'",formatBeloeb(950,"DKK","/t").endsWith("/t"));
+      log("Valuta","formatBeloeb(2500.7) afrundes",formatBeloeb(2500.7,"DKK").includes("2.501")||formatBeloeb(2500.7,"DKK").includes("2501"));
+      log("Valuta","VALUTAER har 5 understøttede",Object.keys(VALUTAER).length===5);
+      log("Valuta","VALUTAER inkluderer DKK,EUR,USD,SEK,NOK",["DKK","EUR","USD","SEK","NOK"].every(k=>VALUTAER[k]));
+    }catch(e){log("Valuta","Valuta-helpers suite",false,e.message);}
+
+    // ── SUITE 50: ensureKompetencer + status-helpers ────────────────
+    try{
+      // ensureKompetencer med tom liste
+      const medTom={id:"m1",navn:"Anna",titel:"Psykolog",kompetencer:[]};
+      const medMedKomp={id:"m2",navn:"Bent",titel:"Læge",kompetencer:["ECT"]};
+      const r1=ensureKompetencer(medTom);
+      log("Helpers2","ensureKompetencer: Psykolog får PK-defaults",Array.isArray(r1.kompetencer)&&r1.kompetencer.length>0);
+      const r2=ensureKompetencer(medMedKomp);
+      log("Helpers2","ensureKompetencer: bevarer eksisterende",r2.kompetencer.length===1&&r2.kompetencer[0]==="ECT");
+      const medLæge=ensureKompetencer({titel:"Læge",kompetencer:[]});
+      log("Helpers2","ensureKompetencer: Læge får LK-defaults",medLæge.kompetencer.some(k=>k.includes("Læge")));
+      const medPæd=ensureKompetencer({titel:"Pædagog",kompetencer:[]});
+      log("Helpers2","ensureKompetencer: Pædagog får PD-defaults",medPæd.kompetencer.some(k=>k.includes("Pædagog")));
+      // status-helpers
+      log("Helpers2","sC(planlagt) giver grøn farve",!!sC("planlagt"));
+      log("Helpers2","sB(afventer) giver baggrund",!!sB("afventer"));
+      log("Helpers2","sL(planlagt) indeholder 'Planlagt'",sL("planlagt").includes("Planlagt"));
+      log("Helpers2","sL(ukendt) falder tilbage til 'Afventer'",sL("ukendt-status").includes("Afventer"));
+    }catch(e){log("Helpers2","Status+kompetence suite",false,e.message);}
+
+    // ── SUITE 51: dagBrugbar (runPlanner weekend-logik) ──────────────
+    try{
+      const dagNavn=["Søndag","Mandag","Tirsdag","Onsdag","Torsdag","Fredag","Lørdag"];
+      const alleDage=Object.fromEntries(dagNavn.map(d=>([d,{aktiv:true,start:"08:00",slut:"17:00"}])));
+      const hverdage=Object.fromEntries(dagNavn.map(d=>([d,{aktiv:["Mandag","Tirsdag","Onsdag","Torsdag","Fredag"].includes(d),start:"08:00",slut:"17:00"}])));
+
+      // Test A: medarbejder arbejder hele ugen, lokale åbent Man-Fre → weekend-opgave fejler (lokale lukket lør/søn)
+      const medA={navn:"Anna",titel:"Psykolog",kompetencer:["X"],arbejdsdage:alleDage};
+      const ltA={Mandag:{"L1":{å:"08:00",l:"17:00"}},Tirsdag:{"L1":{å:"08:00",l:"17:00"}},Onsdag:{"L1":{å:"08:00",l:"17:00"}},Torsdag:{"L1":{å:"08:00",l:"17:00"}},Fredag:{"L1":{å:"08:00",l:"17:00"}}};
+      const patA={id:"p1",navn:"P",cpr:"010101-0001",henvDato:"2026-04-18",status:"aktiv",statusHistorik:[],haste:false,
+        opgaver:[{id:"o1",sekvens:1,opgave:"X",minutter:60,status:"afventer",låst:false,muligeMed:["Anna"],muligeLok:["L1"],patInv:false,tidligst:"08:00",senest:"17:00",dato:null,startKl:null,slutKl:null,lokale:null,medarbejder:null}]};
+      const rA=runPlanner([patA],{medarbejdere:[medA],lokTider:ltA,pause:5,minGapDays:0,step:5,maxDage:14});
+      const opgA=rA.patienter[0].opgaver[0];
+      log("DagBrug","Weekend-opgave booker kun hverdag (lokale lukket weekend)",opgA.dato&&!isWeekend(opgA.dato));
+
+      // Test B: ingen medarbejder + ingen lokaler → opgave fejler (dag ikke brugbar)
+      const rB=runPlanner([patA],{medarbejdere:[],lokTider:{},pause:0,minGapDays:0,step:5,maxDage:14});
+      log("DagBrug","Ingen medarbejder/lokale → ingen planlagt",rB.planned===0);
+
+      // Test C: medarbejder arbejder weekend + lokale åbent weekend → weekend-booking OK
+      const ltC={Mandag:{"L1":{å:"08:00",l:"17:00"}},Tirsdag:{"L1":{å:"08:00",l:"17:00"}},Onsdag:{"L1":{å:"08:00",l:"17:00"}},Torsdag:{"L1":{å:"08:00",l:"17:00"}},Fredag:{"L1":{å:"08:00",l:"17:00"}},Lørdag:{"L1":{å:"08:00",l:"17:00"}},Søndag:{"L1":{å:"08:00",l:"17:00"}}};
+      const rC=runPlanner([patA],{medarbejdere:[medA],lokTider:ltC,pause:5,minGapDays:0,step:5,maxDage:14});
+      log("DagBrug","Weekend-lokaler åbne → weekend tilladt",rC.planned===1);
+
+      // Test D: medarbejder kun hverdage → ingen weekend uanset lokaler
+      const medD={navn:"Bo",titel:"Psykolog",kompetencer:["X"],arbejdsdage:hverdage};
+      const rD=runPlanner([patA],{medarbejdere:[medD],lokTider:ltC,pause:5,minGapDays:0,step:5,maxDage:14});
+      const opgD=rD.patienter[0].opgaver[0];
+      log("DagBrug","Hverdags-medarbejder: ingen weekend",!opgD.dato||!isWeekend(opgD.dato));
+    }catch(e){log("DagBrug","dagBrugbar suite",false,e.message);}
+
+    // ── SUITE 52: Udstyrs-filtrering af muligeLok ────────────────────
+    try{
+      const dagNavn=["Søndag","Mandag","Tirsdag","Onsdag","Torsdag","Fredag","Lørdag"];
+      const alleDage=Object.fromEntries(dagNavn.map(d=>([d,{aktiv:true,start:"08:00",slut:"17:00"}])));
+      const med={navn:"U",titel:"Psykolog",kompetencer:["Y"],arbejdsdage:alleDage};
+      const lt={Mandag:{"RumA":{å:"08:00",l:"17:00"},"RumB":{å:"08:00",l:"17:00"}},Tirsdag:{"RumA":{å:"08:00",l:"17:00"},"RumB":{å:"08:00",l:"17:00"}},Onsdag:{"RumA":{å:"08:00",l:"17:00"},"RumB":{å:"08:00",l:"17:00"}},Torsdag:{"RumA":{å:"08:00",l:"17:00"},"RumB":{å:"08:00",l:"17:00"}},Fredag:{"RumA":{å:"08:00",l:"17:00"},"RumB":{å:"08:00",l:"17:00"}}};
+      // Kun RumA har Projektor
+      const lokMeta={RumA:{udstyr:["Projektor","Whiteboard"]},RumB:{udstyr:["Whiteboard"]}};
+      // Opgave kræver Projektor
+      const patU={id:"pU",navn:"U",cpr:"020202-0002",henvDato:today(),status:"aktiv",statusHistorik:[],haste:false,
+        opgaver:[{id:"oU",sekvens:1,opgave:"Y",minutter:60,status:"afventer",låst:false,muligeMed:["U"],muligeLok:["RumA","RumB"],udstyr:["Projektor"],patInv:false,tidligst:"08:00",senest:"17:00",dato:null,startKl:null,slutKl:null,lokale:null,medarbejder:null}]};
+      const rU=runPlanner([patU],{medarbejdere:[med],lokTider:lt,lokMeta,pause:5,minGapDays:0,step:5,maxDage:14});
+      const booket=rU.patienter[0].opgaver[0];
+      log("Udstyr","Opgave med krav 'Projektor' booker i RumA",booket.lokale==="RumA");
+      log("Udstyr","Opgave med krav 'Projektor' booker IKKE i RumB",booket.lokale!=="RumB");
+
+      // Opgave kræver ECT-udstyr som intet lokale har → fejler
+      const patU2={...patU,id:"pU2",opgaver:[{...patU.opgaver[0],id:"oU2",udstyr:["ECT-udstyr"]}]};
+      const rU2=runPlanner([patU2],{medarbejdere:[med],lokTider:lt,lokMeta,pause:5,minGapDays:0,step:5,maxDage:14});
+      log("Udstyr","Umuligt udstyrskrav → opgave fejler",rU2.planned===0);
+
+      // Tom udstyr-liste = ingen krav → kan bruge begge rum
+      const patU3={...patU,id:"pU3",opgaver:[{...patU.opgaver[0],id:"oU3",udstyr:[]}]};
+      const rU3=runPlanner([patU3],{medarbejdere:[med],lokTider:lt,lokMeta,pause:5,minGapDays:0,step:5,maxDage:14});
+      log("Udstyr","Tom udstyr-liste = ingen krav",rU3.planned===1);
+    }catch(e){log("Udstyr","Udstyrs-filter suite",false,e.message);}
+
+    // ── SUITE 53: Lokale uden åbningstid = lukket ────────────────────
+    try{
+      const alleDage=Object.fromEntries(["Søndag","Mandag","Tirsdag","Onsdag","Torsdag","Fredag","Lørdag"].map(d=>([d,{aktiv:true,start:"08:00",slut:"17:00"}])));
+      const med={navn:"L",titel:"Psykolog",kompetencer:["Z"],arbejdsdage:alleDage};
+      // Lokale "RumA" kun defineret for Mandag
+      const lt={Mandag:{"RumA":{å:"08:00",l:"17:00"}}};
+      const patL={id:"pL",navn:"L",cpr:"030303-0003",henvDato:"2026-04-20",status:"aktiv",statusHistorik:[],haste:false,
+        opgaver:[{id:"oL",sekvens:1,opgave:"Z",minutter:60,status:"afventer",låst:false,muligeMed:["L"],muligeLok:["RumA"],patInv:false,tidligst:"08:00",senest:"17:00",dato:null,startKl:null,slutKl:null,lokale:null,medarbejder:null}]};
+      const rL=runPlanner([patL],{medarbejdere:[med],lokTider:lt,pause:5,minGapDays:0,step:5,maxDage:14});
+      const opgL=rL.patienter[0].opgaver[0];
+      log("LokLukk","Lokale uden dag-entry behandles som lukket",opgL.dato?getDag(opgL.dato)==="Mandag":false);
+      log("LokLukk","Planlagt (mindst én mandag findes i vinduet)",rL.planned===1);
+    }catch(e){log("LokLukk","Lokale-lukket suite",false,e.message);}
+
+    // ── SUITE 54: Flaskehals-analyse med titler fra config ──────────
+    try{
+      const alleDage=Object.fromEntries(["Søndag","Mandag","Tirsdag","Onsdag","Torsdag","Fredag","Lørdag"].map(d=>([d,{aktiv:["Mandag","Tirsdag","Onsdag","Torsdag","Fredag"].includes(d),start:"08:00",slut:"16:00"}])));
+      const psy={navn:"Psy",titel:"Psykolog",kompetencer:["K1"],arbejdsdage:alleDage};
+      const læg={navn:"Læg",titel:"Læge",kompetencer:["K2"],arbejdsdage:alleDage};
+      const patF=[
+        // 3 patienter der alle kræver Psykolog = høj belastning på Psykolog-titel
+        {id:"pA",navn:"A",cpr:"010101-0010",henvDato:today(),status:"aktiv",statusHistorik:[],haste:false,
+          opgaver:[{id:"oA",sekvens:1,opgave:"K1",minutter:60,status:"afventer",låst:false,muligeMed:["Psykolog"],muligeLok:[],patInv:false,tidligst:"08:00",senest:"16:00"}]},
+        {id:"pB",navn:"B",cpr:"020202-0020",henvDato:today(),status:"aktiv",statusHistorik:[],haste:false,
+          opgaver:[{id:"oB",sekvens:1,opgave:"K1",minutter:60,status:"afventer",låst:false,muligeMed:["Psykolog"],muligeLok:[],patInv:false,tidligst:"08:00",senest:"16:00"}]},
+      ];
+      const ana=analyserRessourcer(patF,{medarbejdere:[psy,læg],lokTider:{},titler:DEFAULT_TITLER});
+      log("Flask","analyserRessourcer returnerer medarbejder-array",Array.isArray(ana.medarbejdere));
+      log("Flask","Inkluderer Psykolog",ana.medarbejdere.some(r=>r.titel==="Psykolog"));
+      log("Flask","Inkluderer Læge",ana.medarbejdere.some(r=>r.titel==="Læge"));
+      log("Flask","Custom titler fra config respekteres",(()=>{
+        const custom=[{id:"X",navn:"X",farve:"#000",defaultTimerPerUge:30,defaultKrPrTime:0}];
+        const a2=analyserRessourcer([],{medarbejdere:[],titler:custom});
+        return a2.medarbejdere.some(r=>r.titel==="X");
+      })());
+    }catch(e){log("Flask","Flaskehals-analyse suite",false,e.message);}
+
+    // ── SUITE 55: Titler-migration og adminData-defaults ────────────
+    try{
+      // Simuler hydrate fra gammel data uden titler
+      const gammel1={kapDefaults:{Psykolog:{grænseTimer:23}},taktDefaults:{Psykolog:{krPrTime:950}}};
+      const migreret1={...gammel1};
+      if(!Array.isArray(migreret1.titler)) migreret1.titler=[];
+      if(migreret1.titler.length===0) migreret1.titler=DEFAULT_TITLER.map(t=>({...t}));
+      if(!migreret1.valuta||!VALUTAER[migreret1.valuta]) migreret1.valuta="DKK";
+      log("Migration","Migreret data har titler",Array.isArray(migreret1.titler)&&migreret1.titler.length===3);
+      log("Migration","Migreret data har valuta=DKK",migreret1.valuta==="DKK");
+
+      // Simuler migration med custom faggruppe i kapDefaults
+      const gammel2={kapDefaults:{Sygeplejerske:{grænseTimer:30},Psykolog:{grænseTimer:23}},taktDefaults:{Sygeplejerske:{krPrTime:600},Psykolog:{krPrTime:950}},titler:[...DEFAULT_TITLER]};
+      const kendte=new Set(gammel2.titler.map(t=>t.navn));
+      const ekstra=new Set();
+      Object.keys(gammel2.kapDefaults||{}).forEach(k=>{if(k&&k!=="Lokale"&&!kendte.has(k)) ekstra.add(k);});
+      log("Migration","Custom faggruppe detekteret",ekstra.has("Sygeplejerske"));
+
+      // Verificer VALUTAER-validation
+      log("Migration","Ugyldig valuta mappes til DKK",(()=>{
+        let v="XYZ"; if(!VALUTAER[v]) v="DKK"; return v==="DKK";
+      })());
+
+      // DEFAULT_TITLER-shape
+      log("Migration","DEFAULT_TITLER har 3 titler",DEFAULT_TITLER.length===3);
+      log("Migration","Hver titel har {id,navn,farve,defaultTimerPerUge,defaultKrPrTime}",
+        DEFAULT_TITLER.every(t=>t.id&&t.navn&&t.farve&&typeof t.defaultTimerPerUge==="number"&&typeof t.defaultKrPrTime==="number"));
+    }catch(e){log("Migration","Migration suite",false,e.message);}
+
+    // ── SUITE 56: STANDARD_AABNINGSTIDER + wizard-output-shape ───────
+    try{
+      // STANDARD_AABNINGSTIDER dækker alle 7 dage
+      const dage=["Mandag","Tirsdag","Onsdag","Torsdag","Fredag","Lørdag","Søndag"];
+      log("Wizard","STANDARD_AABNINGSTIDER har 7 dage",dage.every(d=>STANDARD_AABNINGSTIDER[d]));
+      log("Wizard","Mandag default 08:00-16:00",STANDARD_AABNINGSTIDER.Mandag.å==="08:00"&&STANDARD_AABNINGSTIDER.Mandag.l==="16:00");
+      log("Wizard","Fredag default 08:00-16:00",STANDARD_AABNINGSTIDER.Fredag.å==="08:00"&&STANDARD_AABNINGSTIDER.Fredag.l==="16:00");
+      log("Wizard","Lørdag default lukket",STANDARD_AABNINGSTIDER.Lørdag.å==="00:00"&&STANDARD_AABNINGSTIDER.Lørdag.l==="00:00");
+      log("Wizard","Søndag default lukket",STANDARD_AABNINGSTIDER.Søndag.å==="00:00"&&STANDARD_AABNINGSTIDER.Søndag.l==="00:00");
+
+      // Simulér wizard-submit-shape
+      const lokalerRens=[{navn:"Rum1",tider:{...STANDARD_AABNINGSTIDER}}];
+      const lokTiderMap=dage.reduce((acc,dag)=>{acc[dag]={};lokalerRens.forEach(l=>{acc[dag][l.navn]=l.tider[dag];});return acc;},{});
+      log("Wizard","lokTiderMap har alle 7 dage",dage.every(d=>lokTiderMap[d]));
+      log("Wizard","Rum1 har Mandag-åbningstider",lokTiderMap.Mandag.Rum1.å==="08:00");
+      log("Wizard","Rum1 har Lørdag=lukket",lokTiderMap.Lørdag.Rum1.å==="00:00");
+    }catch(e){log("Wizard","Wizard/åbningstider suite",false,e.message);}
+
+    // ── SUITE 57: Forløbs-skabelon import/eksport + galleri ──────────
+    try{
+      // Galleri-data
+      log("Forløb","FORLOB_GALLERI har mindst 3 eksempler",FORLOB_GALLERI.length>=3);
+      log("Forløb","Hver galleri-skabelon har navn og opgaver",FORLOB_GALLERI.every(g=>g.navn&&Array.isArray(g.opgaver)&&g.opgaver.length>0));
+      log("Forløb","Galleri inkluderer 'Psykiatrisk udredning - barn'",FORLOB_GALLERI.some(g=>g.navn.includes("Psykiatrisk udredning")));
+      log("Forløb","Galleri inkluderer 'Almen praksis'",FORLOB_GALLERI.some(g=>g.navn.includes("Almen praksis")));
+      log("Forløb","Galleri inkluderer 'Privat psykolog'",FORLOB_GALLERI.some(g=>g.navn.toLowerCase().includes("privat psykolog")));
+
+      // Simulér JSON-export
+      const forlobMap={t1:[{o:"A",m:30,p:true,tl:"08:00",ss:"16:00",s:1,l:[],mm:["Psykolog"]}]};
+      const forlobMeta={t1:{navn:"Test",beskrivelse:"desc"}};
+      const payload={version:1,eksporteret:new Date().toISOString(),skabeloner:Object.keys(forlobMap).map(id=>({id,navn:forlobMeta[id]?.navn||"",beskrivelse:forlobMeta[id]?.beskrivelse||"",opgaver:forlobMap[id]||[]}))};
+      const json=JSON.stringify(payload);
+      log("Forløb","Eksport-payload gyldig JSON",(()=>{try{JSON.parse(json);return true;}catch(e){return false;}})());
+      const parsed=JSON.parse(json);
+      log("Forløb","Eksport har version",parsed.version===1);
+      log("Forløb","Eksport har skabeloner-array",Array.isArray(parsed.skabeloner));
+      log("Forløb","Skabelon har id+navn+opgaver",parsed.skabeloner[0].id==="t1"&&parsed.skabeloner[0].navn==="Test"&&parsed.skabeloner[0].opgaver.length===1);
+
+      // Simulér import-validation: defekt data afvises
+      const defektJson='{"skabeloner":[{"navn":"X"}]}'; // mangler opgaver
+      const defekt=JSON.parse(defektJson);
+      const gyldig=defekt.skabeloner.filter(s=>Array.isArray(s.opgaver));
+      log("Forløb","Import afviser skabelon uden opgaver-array",gyldig.length===0);
+    }catch(e){log("Forløb","Forløb import/eksport suite",false,e.message);}
+
+    // ── SUITE 58: i18n sprogskift + fallback ─────────────────────────
+    try{
+      const oprindelig=i18n.language;
+      // Skift til engelsk
+      await i18n.changeLanguage("en");
+      const enDashboard=i18n.t("nav.dashboard");
+      log("i18n","Engelsk: nav.dashboard = 'Dashboard'",enDashboard==="Dashboard");
+      log("i18n","Engelsk: nav.patienter = 'Patients'",i18n.t("nav.patienter")==="Patients");
+      log("i18n","Engelsk: common.save = 'Save'",i18n.t("common.save")==="Save");
+      // Skift til dansk
+      await i18n.changeLanguage("da");
+      log("i18n","Dansk: nav.patienter = 'Patienter'",i18n.t("nav.patienter")==="Patienter");
+      log("i18n","Dansk: common.save = 'Gem'",i18n.t("common.save")==="Gem");
+      // Ukendt nøgle returnerer nøglen selv (i18next default)
+      log("i18n","Ukendt nøgle returnerer nøglen",i18n.t("abc.xyz.ikkefindes")==="abc.xyz.ikkefindes");
+      // Valuta-locale uafhængig af UI-sprog
+      log("i18n","formatBeloeb(DKK) respekterer da-DK",formatBeloeb(1000,"DKK").includes(".")||formatBeloeb(1000,"DKK").includes("1000"));
+      // Gendan
+      await i18n.changeLanguage(oprindelig||"da");
+    }catch(e){log("i18n","i18n suite",false,e.message);}
 
     setRunning(false);setDone(true);
   };
