@@ -4,7 +4,11 @@
   "scripts": {
     "dev": "vite",
     "build": "vite build",
-    "lint": "eslint src"
+    "lint": "eslint src",
+    "prepare": "simple-git-hooks"
+  },
+  "simple-git-hooks": {
+    "pre-commit": "npm run lint && npm run build"
   },
   "dependencies": {
     "i18next": "^26.0.5",
@@ -18,6 +22,7 @@
     "eslint": "^9.39.4",
     "eslint-plugin-react": "^7.37.5",
     "globals": "^17.5.0",
+    "simple-git-hooks": "^2.13.1",
     "vite": "^6.0.0"
   }
 }
