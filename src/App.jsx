@@ -271,9 +271,12 @@ export default function App(){
   // Hooken aktiveres KUN når authStage === "app" (dvs. efter login).
   // Ved timeout: log i aktivLog, nulstil password i memory, vis toast,
   // send brugeren tilbage til welcome-skærmen.
-  // TEST-OVERRIDE: sæt ?testInaktiv=1 i URL for 6-sek timeout (fjernes efter test)
+  // TEST-OVERRIDE: ?testInaktiv=1 giver 6-sek timeout + 3-sek advarsel (9 sek total):
+  // modal dukker op efter 3 sek inaktivitet, logout efter 6 sek yderligere.
+  // Skal fjernes efter verifikation.
   const _testInaktiv = typeof window !== "undefined" && new URLSearchParams(window.location.search).get("testInaktiv") === "1";
-  const inaktivitetTimeoutMin = _testInaktiv ? 0.1 : (adminData?.sikkerhed?.inaktivitetTimeoutMin ?? 30);
+  const inaktivitetTimeoutMin = _testInaktiv ? 0.15 : (adminData?.sikkerhed?.inaktivitetTimeoutMin ?? 30);
+  const inaktivitetAdvarselMin = _testInaktiv ? 0.05 : 2; // 3 sek i test, 2 min i prod
   const handleInaktivTimeout = useCallback(() => {
     logEntry("sikkerhed","Auto-logout ved inaktivitet");
     try{localStorage.removeItem("pm_pw");}catch(e){}
@@ -284,7 +287,7 @@ export default function App(){
   const {nulstil:nulstilInaktivitet, advarselAktiv:visInaktivAdvarsel} = useInaktivitetsTimer(
     inaktivitetTimeoutMin,
     handleInaktivTimeout,
-    { advarselMin: 2, enabled: authStage === "app" }
+    { advarselMin: inaktivitetAdvarselMin, enabled: authStage === "app" }
   );
 
   //  Rulleplan: marker opgave løst + send notifikation

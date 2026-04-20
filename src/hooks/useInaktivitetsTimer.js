@@ -32,11 +32,16 @@ export function useInaktivitetsTimer(timeoutMin, onTimeout, options = {}) {
     setAdvarselAktiv(false);
     if (!enabled) return;
     const timeoutMs = Math.max(0, timeoutMin * 60 * 1000);
+    const advarselMs = Math.max(0, advarselMin * 60 * 1000);
     timeoutRef.current = setTimeout(() => {
       onTimeoutRef.current && onTimeoutRef.current();
     }, timeoutMs);
-    if (advarselMin > 0) {
-      const advarselDelayMs = Math.max(0, timeoutMs - advarselMin * 60 * 1000);
+    // Planlæg kun advarsel hvis der er mindst 1 sekund mellem advarsel og
+    // endelig timeout — ellers bliver advarselDelayMs=0 og modalen re-åbner
+    // straks efter hver nulstil, hvilket får "Jeg er her"-knappen til at
+    // virke som om den ikke gør noget.
+    if (advarselMs > 0 && timeoutMs - advarselMs >= 1000) {
+      const advarselDelayMs = timeoutMs - advarselMs;
       advarselRef.current = setTimeout(() => setAdvarselAktiv(true), advarselDelayMs);
     }
   }, [timeoutMin, advarselMin, enabled]);
