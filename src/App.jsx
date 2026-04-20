@@ -1,3 +1,13 @@
+// ══════════════════════════════════════════════════════════════════════════
+//  SIKKERHED: INGEN HARDKODEDE IDENTITETER MÅ COMMITTES
+// ══════════════════════════════════════════════════════════════════════════
+//  - authData, ejer-email, selskabsnavn og lignende skal ALTID starte tomme.
+//  - Demo-data som startpatienter, start-medarbejdere og lign. må kun loades
+//    når import.meta.env.DEV er true (lokal udvikling). I production-builds
+//    skal appen starte helt rent og tvinge brugeren gennem wizard.
+//  - Hvis du har brug for at teste med sample-data, brug "Indlæs demo-data"-
+//    knappen i Indstillinger i stedet for at committe defaults.
+// ══════════════════════════════════════════════════════════════════════════
 import React, { useState, useEffect, useCallback, useMemo, useRef } from "react";
 import { useTranslation } from "react-i18next";
 import i18n, { SPROG } from "./i18n.js";
@@ -55,8 +65,12 @@ export default function App(){
   // fjernet af sikkerhedshensyn. Denne linje sikrer eksisterende brugere
   // ikke bærer rundt på et gammelt lagret password efter opdateringen.
   try{localStorage.removeItem("pm_pw");}catch(e){}
-  const [authStage,setAuthStage]=useState("app");
-  const [authData,setAuthData]=useState({email:"admin@psykiatri.rm.dk",password:"",navn:"Systemadministrator",selskab:"Psykiatri Region Midtjylland",afdeling:"Alle afdelinger",rolle:"admin"});
+  // Start altid på welcome — ingen auto-login med gemt data.
+  // authStage skiftes til "app" først når brugeren har gennemført login-flow.
+  const [authStage,setAuthStage]=useState("welcome");
+  // Ingen hardkodede identiteter. Brugerens oplysninger udfyldes gennem
+  // AuthFlow (login/dept-steps).
+  const [authData,setAuthData]=useState({email:"",password:"",navn:"",selskab:"",afdeling:"",rolle:""});
   const isAdmin = authData.rolle==="admin" || authData.rolle==="superadmin" || authData.rolle==="ejer";
   // Ejer-konto fra localStorage (oprettes ved førstegangs-opstart)
   const [ejerKonto,setEjerKontoState]=useState(()=>{
@@ -101,9 +115,17 @@ export default function App(){
   const [view,setView]=useState("dashboard");
   const [gsOpen,setGsOpen]=useState(false);
   const [gsQuery,setGsQuery]=useState("");
-  const [patienter,setPatienter]=useState(()=>{try{return INIT_PATIENTER_RAW.map(r=>buildPatient(r));}catch(e){
-return [];}});
-  const [medarbejdere,setMedarbejdereRaw]=useState(()=>[...BASE_MED].map(ensureKompetencer));
+  // Demo-data (patienter, medarbejdere) loades KUN i DEV-mode.
+  // I production-builds starter alle lister tomme — brugeren skal tilføje
+  // egne data eller importere via Indstillinger.
+  const [patienter,setPatienter]=useState(()=>{
+    if(!import.meta.env.DEV) return [];
+    try{return INIT_PATIENTER_RAW.map(r=>buildPatient(r));}catch(e){return [];}
+  });
+  const [medarbejdere,setMedarbejdereRaw]=useState(()=>{
+    if(!import.meta.env.DEV) return [];
+    return [...BASE_MED].map(ensureKompetencer);
+  });
   const setMedarbejdere=React.useCallback((valOrFn)=>{
     setMedarbejdereRaw(prev=>{
       const ny=typeof valOrFn==="function"?valOrFn(prev):valOrFn;
