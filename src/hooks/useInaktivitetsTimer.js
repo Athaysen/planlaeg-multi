@@ -25,6 +25,12 @@ export function useInaktivitetsTimer(timeoutMin, onTimeout, options = {}) {
   // Hold seneste onTimeout i ref så ændringer i callbacken ikke genstarter effect
   const onTimeoutRef = useRef(onTimeout);
   useEffect(() => { onTimeoutRef.current = onTimeout; }, [onTimeout]);
+  // Hold advarselAktiv i ref så event-handleren kan læse den seneste værdi
+  // uden at effect'en skal genstartes. Bruges til at ignorere bruger-events
+  // mens advarslen er aktiv — så modalen ikke forsvinder når brugeren
+  // bevæger musen hen mod "Jeg er her"-knappen.
+  const advarselAktivRef = useRef(false);
+  useEffect(() => { advarselAktivRef.current = advarselAktiv; }, [advarselAktiv]);
 
   const nulstil = useCallback(() => {
     if (timeoutRef.current) clearTimeout(timeoutRef.current);
@@ -54,7 +60,13 @@ export function useInaktivitetsTimer(timeoutMin, onTimeout, options = {}) {
       return undefined;
     }
     nulstil();
-    const handler = () => nulstil();
+    // Mens advarslen er aktiv, ignoreres alle events — brugeren SKAL klikke
+    // "Jeg er her" (der kalder nulstil eksplicit) eller blive logget ud.
+    // Ellers ville enhver musbevægelse skjule modalen før brugeren kan klikke.
+    const handler = () => {
+      if (advarselAktivRef.current) return;
+      nulstil();
+    };
     AKTIVITETS_EVENTS.forEach((ev) =>
       window.addEventListener(ev, handler, { passive: true })
     );
