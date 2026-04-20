@@ -36,6 +36,7 @@ function AdminView({adminData,setAdminData,anmodninger=[],setAnmodninger,medarbe
     {id:"brugere",      label:" Brugere",        desc:"Roller og adgange"},
     {id:"faggrupper",   label:" Faggrupper",     desc:"Titler og standard-takster"},
     {id:"forlob",       label:" Forløb",         desc:"Skabeloner, import/eksport, galleri"},
+    {id:"sikkerhed",    label:" Sikkerhed",       desc:"Auto-logout og session-regler"},
     {id:"admindst",     label:"Admin indstillinger", desc:"Hvad medarbejdere kan ændre selv"},
     {id:"aktivlog",     label:"Aktivitets-log",        desc:"Alle bevægelser i systemet"},
     {id:"indstillinger",label:"Indstillinger",          desc:"Planlægning, IT og hjælp"},
@@ -146,6 +147,31 @@ function AdminView({adminData,setAdminData,anmodninger=[],setAnmodninger,medarbe
       {/* -- TAB: FORLØB -- */}
       {tab==="forlob"&&(
         <ForlobAdminTab forlob={forlob} setForlob={setForlob} forlobMeta={forlobMeta} setForlobMeta={setForlobMeta} lokaler={lokaler} showToast={showToast}/>
+      )}
+
+      {/* -- TAB: SIKKERHED -- */}
+      {tab==="sikkerhed"&&(
+        <div style={{background:C.s2,border:`1px solid ${C.brd}`,borderRadius:12,padding:"20px 24px",maxWidth:560}}>
+          <div style={{color:C.txt,fontWeight:700,fontSize:15,marginBottom:4}}>Session-sikkerhed</div>
+          <div style={{color:C.txtM,fontSize:12,marginBottom:18}}>
+            Kontrollér hvor længe en bruger kan være inaktiv før appen automatisk logger ud.
+          </div>
+          <FRow label="Auto-logout ved inaktivitet (minutter)" hint="Min 5, max 120. Brugeren får en advarsel 2 minutter før.">
+            <div style={{display:"flex",alignItems:"center",gap:10}}>
+              <Input type="number" min="5" max="120"
+                value={adminData?.sikkerhed?.inaktivitetTimeoutMin??30}
+                onChange={v=>{
+                  const n=Math.max(5,Math.min(120,Number(v)||30));
+                  setAdminData(d=>({...d,sikkerhed:{...(d.sikkerhed||{}),inaktivitetTimeoutMin:n}}));
+                }} style={{width:90}}/>
+              <span style={{color:C.txtM,fontSize:12}}>minutter</span>
+            </div>
+          </FRow>
+          <div style={{marginTop:8,padding:"10px 14px",background:C.accM,border:`1px solid ${C.acc}44`,borderRadius:8,fontSize:12,color:C.acc,lineHeight:1.5}}>
+            Aktivitet omfatter: musebevægelse, tastetryk, klik, scroll, touch.
+            Ændringer træder i kraft ved næste login.
+          </div>
+        </div>
       )}
 
       {/* -- TAB: KAPACITET STANDARDER -- */}

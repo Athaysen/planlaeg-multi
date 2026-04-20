@@ -33,6 +33,7 @@ import {
 } from "./components/primitives.jsx";
 import { runPlanner, analyserRessourcer } from "./planner/runPlanner.js";
 import { hashKode, erBcryptHash } from "./utils/krypto.js";
+import { useInaktivitetsTimer } from "./hooks/useInaktivitetsTimer.js";
 import PlanMedTester from "./tests/PlanMedTester.jsx";
 import AuthFlow from "./auth/AuthFlow.jsx";
 import EjerSetupDialog from "./auth/EjerSetupDialog.jsx";
@@ -182,6 +183,10 @@ export default function App(){
       "Lokale":  {krPrTime:0},
     },
     valuta:"DKK",
+    // Sikkerhedsindstillinger (Admin → Sikkerhed)
+    sikkerhed:{
+      inaktivitetTimeoutMin:30, // min 5, max 120 — styres i Admin → Sikkerhed
+    },
     selskaber:[],
   };
   const [adminData,setAdminDataRaw]=useState(()=>{
@@ -212,6 +217,11 @@ export default function App(){
         });
         // Migration: gammel data uden valuta antages at være DKK (Danish kroner)
         if(!parsed.valuta||!VALUTAER[parsed.valuta]) parsed.valuta="DKK";
+        // Migration: gammel data uden sikkerhedsindstillinger får defaults
+        if(!parsed.sikkerhed||typeof parsed.sikkerhed!=="object") parsed.sikkerhed={};
+        if(typeof parsed.sikkerhed.inaktivitetTimeoutMin!=="number"){
+          parsed.sikkerhed.inaktivitetTimeoutMin=30;
+        }
         return {...ADMIN_DEFAULTS,...parsed};
       }
     }catch(e){}
@@ -256,7 +266,28 @@ export default function App(){
   const [toast,setToast]=useState(null);
   const showToast=(msg,type="success")=>{setToast({msg,type});setTimeout(()=>setToast(null),3200);};
 
-  //  Rulleplan: marker opgave løst + send notifikation 
+  // ── Auto-logout ved inaktivitet ─────────────────────────────────
+  // Timeout hentes fra adminData.sikkerhed.inaktivitetTimeoutMin (default 30).
+  // Hooken aktiveres KUN når authStage === "app" (dvs. efter login).
+  // Ved timeout: log i aktivLog, nulstil password i memory, vis toast,
+  // send brugeren tilbage til welcome-skærmen.
+  // TEST-OVERRIDE: sæt ?testInaktiv=1 i URL for 6-sek timeout (fjernes efter test)
+  const _testInaktiv = typeof window !== "undefined" && new URLSearchParams(window.location.search).get("testInaktiv") === "1";
+  const inaktivitetTimeoutMin = _testInaktiv ? 0.1 : (adminData?.sikkerhed?.inaktivitetTimeoutMin ?? 30);
+  const handleInaktivTimeout = useCallback(() => {
+    logEntry("sikkerhed","Auto-logout ved inaktivitet");
+    try{localStorage.removeItem("pm_pw");}catch(e){}
+    setAuthData(d=>({...d,password:""}));
+    setAuthStage("welcome");
+    showToast("Du blev logget ud pga. inaktivitet","warn");
+  },[logEntry]);
+  const {nulstil:nulstilInaktivitet, advarselAktiv:visInaktivAdvarsel} = useInaktivitetsTimer(
+    inaktivitetTimeoutMin,
+    handleInaktivTimeout,
+    { advarselMin: 2, enabled: authStage === "app" }
+  );
+
+  //  Rulleplan: marker opgave løst + send notifikation
   const handleMarkerLøst=(pat,opg)=>{
     const dato=new Date().toISOString().slice(0,10);
     // 1. Marker opgaven som løst
@@ -649,6 +680,32 @@ export default function App(){
       {visScope&&<ScopeModal alleAfdelinger={alleAfdelinger} afdScope={afdScope} toggleAktiv={toggleAktiv} toggleRes={toggleRes} onClose={()=>setVisScope(false)}/>}
       {toast&&<Toast msg={toast.msg} type={toast.type} onDone={()=>setToast(null)}/>}
       {visTester&&<PlanMedTester onClose={()=>setVisTester(false)}/>}
+
+      {/* Inaktivitets-advarsel: vises 2 min før auto-logout.
+          Enhver aktivitet (mus, tastatur, klik) nulstiller automatisk
+          timeren og skjuler modalen. */}
+      {visInaktivAdvarsel&&(
+        <div onClick={nulstilInaktivitet}
+          style={{position:"fixed",inset:0,background:"rgba(15,25,35,0.55)",backdropFilter:"blur(6px)",
+            display:"flex",alignItems:"center",justifyContent:"center",zIndex:10000,padding:16}}>
+          <div onClick={e=>e.stopPropagation()}
+            style={{background:C.s1,border:`2px solid ${C.amb}`,borderRadius:14,padding:"28px 32px",
+              maxWidth:440,width:"100%",boxShadow:"0 12px 48px rgba(0,0,0,0.25)"}}>
+            <div style={{color:C.amb,fontWeight:800,fontSize:16,marginBottom:10}}>
+              Du logges ud om 2 minutter
+            </div>
+            <div style={{color:C.txtD,fontSize:13,lineHeight:1.5,marginBottom:20}}>
+              Du har været inaktiv længe. For din sikkerhed logges du automatisk
+              ud om 2 minutter. Klik nedenfor for at forblive logget ind.
+            </div>
+            <button onClick={nulstilInaktivitet}
+              style={{width:"100%",padding:"10px 0",background:C.acc,color:"#fff",border:"none",
+                borderRadius:8,fontWeight:700,fontSize:14,cursor:"pointer",fontFamily:"inherit"}}>
+              Jeg er her — forbliv logget ind
+            </button>
+          </div>
+        </div>
+      )}
     </div>
   );
 }
