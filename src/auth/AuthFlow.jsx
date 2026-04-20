@@ -15,12 +15,13 @@ export default function AuthFlow({stage, setStage, data, setData}){
   const [visNyAfd,setVisNyAfd]=useState(true);
   const upd=(k,v)=>setData(d=>({...d,[k]:v}));
 
-  // Husk mig - autofyld ved komponent mount
+  // Husk mig - autofyld email ved komponent mount.
+  // Password gemmes IKKE i localStorage (sikkerhedsrisiko — klartekst
+  // i browserens storage er tilgængelig for XSS og alle installerede extensions).
   useEffect(()=>{
     try{
       const em=localStorage.getItem("pm_email");
-      const pw=localStorage.getItem("pm_pw");
-      if(em&&pw) setData(d=>({...d,email:em,password:pw,huskMig:true}));
+      if(em) setData(d=>({...d,email:em,huskMig:true}));
     }catch(ex){}
   },[]);
 
@@ -275,13 +276,14 @@ export default function AuthFlow({stage, setStage, data, setData}){
               <label style={{display:"flex",alignItems:"center",gap:8,cursor:"pointer"}}>
                 <input type="checkbox" checked={data.huskMig||false} onChange={e=>{
                   upd("huskMig",e.target.checked);
+                  // Kun email huskes — password gemmes aldrig i localStorage
                   if(e.target.checked){
-                    try{localStorage.setItem("pm_email",data.email||"");localStorage.setItem("pm_pw",data.password||"");}catch(ex){}
+                    try{localStorage.setItem("pm_email",data.email||"");}catch(ex){}
                   } else {
-                    try{localStorage.removeItem("pm_email");localStorage.removeItem("pm_pw");}catch(ex){}
+                    try{localStorage.removeItem("pm_email");}catch(ex){}
                   }
                 }} style={{accentColor:"#0050b3"}}/>
-                <span style={{color:C.txtD,fontSize:12}}>{t("auth.rememberMe")}</span>
+                <span style={{color:C.txtD,fontSize:12}}>{t("auth.rememberEmail")}</span>
               </label>
               <span style={{color:C.acc,fontSize:12,cursor:"pointer"}}>{t("auth.forgotPassword")}</span>
             </div>
@@ -301,7 +303,8 @@ export default function AuthFlow({stage, setStage, data, setData}){
             disabled={loading} onClick={()=>fakeLoad(()=>{
               if(!data.email||!data.password){setErr(t("auth.errFillFields"));setLoading(false);return;}
               if(mode==="signup"&&!data.selskab){setErr(t("auth.errCompany"));setLoading(false);return;}
-              if(data.huskMig){try{localStorage.setItem("pm_email",data.email);localStorage.setItem("pm_pw",data.password);}catch(ex){}}
+              // Husk kun email — password gemmes aldrig i klartekst
+              if(data.huskMig){try{localStorage.setItem("pm_email",data.email);}catch(ex){}}
               setStage("dept");
             })}>
             {loading?t("auth.loggingIn"):(mode==="login"?t("auth.logIn")+" >":t("auth.createAccountBtn")+" >")}

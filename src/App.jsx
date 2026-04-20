@@ -49,6 +49,11 @@ import {
 // ===============================================
 export default function App(){
   const {t} = useTranslation();
+  // Engangs-oprydning: fjern tidligere gemt password fra localStorage.
+  // "pm_pw" blev tidligere gemt i klartekst under "Husk mig" — det er
+  // fjernet af sikkerhedshensyn. Denne linje sikrer eksisterende brugere
+  // ikke bærer rundt på et gammelt lagret password efter opdateringen.
+  try{localStorage.removeItem("pm_pw");}catch(e){}
   const [authStage,setAuthStage]=useState("app");
   const [authData,setAuthData]=useState({email:"admin@psykiatri.rm.dk",password:"",navn:"Systemadministrator",selskab:"Psykiatri Region Midtjylland",afdeling:"Alle afdelinger",rolle:"admin"});
   const isAdmin = authData.rolle==="admin" || authData.rolle==="superadmin" || authData.rolle==="ejer";
@@ -586,7 +591,14 @@ return [];}});
         {/* Content */}
         <div style={{flex:1,overflowY:"auto",padding:20}}>
           <ErrorBoundary key={view}>
-          {view==="dashboard"&&<ErrorBoundary><Dashboard patienter={scopedPatienter} medarbejdere={scopedMed} fejl={fejl} onLogout={()=>setAuthStage("welcome")} alleAfdelinger={alleAfdelinger} afdScope={afdScope}/></ErrorBoundary>}
+          {view==="dashboard"&&<ErrorBoundary><Dashboard patienter={scopedPatienter} medarbejdere={scopedMed} fejl={fejl} onLogout={()=>{
+            // Ryd password fra memory + localStorage ved logout (belt-and-braces:
+            // vi skriver ikke længere pm_pw, men sikrer mod gammel data og
+            // in-memory-restancer).
+            try{localStorage.removeItem("pm_pw");}catch(e){}
+            setAuthData(d=>({...d,password:""}));
+            setAuthStage("welcome");
+          }} alleAfdelinger={alleAfdelinger} afdScope={afdScope}/></ErrorBoundary>}
           {view==="patienter"&&<ErrorBoundary><PatientKalenderView patienter={scopedPatienter} medarbejdere={scopedMed} setPatienter={setPatienter} forlob={forlob} showToast={showToast} onMarkerLøst={handleMarkerLøst} lokMeta={lokMeta} setAnmodninger={setAnmodninger} adminData={adminData} lokaler={lokaler}/></ErrorBoundary>}
           {view==="kalender"&&<ErrorBoundary><KalenderView patienter={scopedPatienter} medarbejdere={scopedMed} lokaler={lokaler}/></ErrorBoundary>}
           {view==="medarbejdere"&&<ErrorBoundary><MedarbejderView medarbejdere={scopedMed} setMedarbejdere={setMedarbejdere} patienter={scopedPatienter} setPatienter={setPatienter} anmodninger={anmodninger} setAnmodninger={setAnmodninger} isAdmin={isAdmin} certifikater={certifikater} showToast={showToast} adminData={adminData}/></ErrorBoundary>}

@@ -53,6 +53,7 @@
     "passwordPlaceholderLogin": "--------",
     "passwordPlaceholderSignup": "Min. 8 chars",
     "rememberMe": "Remember me",
+    "rememberEmail": "Remember my email",
     "forgotPassword": "Forgot password?",
     "companyName": "Company name",
     "companyPlaceholder": "e.g. Acme Health",
