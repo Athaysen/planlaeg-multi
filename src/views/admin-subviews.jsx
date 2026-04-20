@@ -5,6 +5,7 @@ import { today, addDays } from "../utils/index.js";
 import { C, PAT_STATUS } from "../data/constants.js";
 import { Btn, FRow, Pill, ViewHeader } from "../components/primitives.jsx";
 import { RulleplanNotifView } from "../admin/AdminView.jsx";
+import { HANDLINGER, OBJEKTTYPER, filterAudit, eksporterAuditCSV } from "../utils/audit.js";
 
 export function GodkendelsesView({anmodninger,setAnmodninger,medarbejdere,setMedarbejdere,rulNotif=[],setRulNotif=()=>{},patienter=[],setPatienter=()=>{}}){
   const [tab,setTab]=useState("godkendelser");
@@ -453,23 +454,27 @@ export function OmfordelingView({patienter=[],setPatienter=()=>{},medarbejdere=[
 // AKTIVITETS-LOG VIEW
 // ================================================================
 export function AktivLogView({aktivLog=[],setAktivLog,gemLog,adminData={}}){
-  const [søg,setSøg]=useState("");
-  const [filType,setFilType]=useState("alle");
+  // 6 filter-dimensioner jf. journalføringsbekendtgørelsens krav om
+  // sporing pr. handling, objekttype, bruger, dato og patient-id.
+  const [handling,setHandling]=useState("alle");
+  const [objekttype,setObjekttype]=useState("alle");
+  const [bruger,setBruger]=useState("");
+  const [datoFra,setDatoFra]=useState("");
+  const [datoTil,setDatoTil]=useState("");
+  const [patientId,setPatientId]=useState("");
+  const [fritekst,setFritekst]=useState("");
   const [visIndstillinger,setVisIndstillinger]=useState(false);
-
-  // Typer
-  const TYPER=["alle","patient","medarbejder","opgave","planlægning","login","system"];
 
   // Rens log ældre end gemPeriodeDage
   const gemPeriodeDage=adminData?.logIndstillinger?.gemPeriodeDage||60;
   const cutoff=addDays(today(),-gemPeriodeDage);
-  const aktivFiltreret=aktivLog.filter(e=>e.dato>=cutoff);
+  const aktivFiltreret=aktivLog.filter(e=>(e.dato||"")>=cutoff);
 
-  const filtreret=aktivFiltreret.filter(e=>
-    (filType==="alle"||e.type===filType)&&
-    (søg===""||e.tekst?.toLowerCase().includes(søg.toLowerCase())||
-     e.bruger?.toLowerCase().includes(søg.toLowerCase()))
-  );
+  const filtreret=useMemo(()=>filterAudit(aktivFiltreret,{
+    handling: handling==="alle"?null:handling,
+    objekttype: objekttype==="alle"?null:objekttype,
+    bruger, datoFra, datoTil, patientId, fritekst,
+  }),[aktivFiltreret,handling,objekttype,bruger,datoFra,datoTil,patientId,fritekst]);
 
   // Eksporter log som HTML til print (PDF)
   const eksporterPdf=()=>{
@@ -492,10 +497,30 @@ export function AktivLogView({aktivLog=[],setAktivLog,gemLog,adminData={}}){
   };
 
   // Nulstil log
+  // BEMÆRK: Denne funktion MÅ IKKE bruges i produktion — audit-loggen er
+  // append-only jf. journalføringsbekendtgørelsen § 8. I en backend-setup
+  // fjernes denne knap helt (DELETE-permission skal være revoked på
+  // audit_log-tabellen). I klient-demoen er den bevaret til testformål.
   const nulstilLog=()=>{
     setAktivLog([]);
     gemLog([]);
   };
+
+  // CSV-eksport via den delte audit-helper. BOM + download-trigger sker her.
+  const eksporterCSV=()=>{
+    const csv=eksporterAuditCSV(filtreret);
+    const blob=new Blob(["\uFEFF"+csv],{type:"text/csv;charset=utf-8"});
+    const url=URL.createObjectURL(blob);
+    const a=document.createElement("a");
+    a.href=url; a.download=`aktivlog_${today()}.csv`; a.click();
+    URL.revokeObjectURL(url);
+  };
+
+  const resetFiltre=()=>{
+    setHandling("alle"); setObjekttype("alle"); setBruger("");
+    setDatoFra(""); setDatoTil(""); setPatientId(""); setFritekst("");
+  };
+  const harFiltre=handling!=="alle"||objekttype!=="alle"||bruger||datoFra||datoTil||patientId||fritekst;
 
   return(
     <div style={{display:"flex",flexDirection:"column",gap:14}}>
@@ -506,6 +531,7 @@ export function AktivLogView({aktivLog=[],setAktivLog,gemLog,adminData={}}){
           <div style={{color:C.txtM,fontSize:12}}>{aktivFiltreret.length} poster · gemmes {gemPeriodeDage} dage · {filtreret.length} vises</div>
         </div>
         <Btn v="ghost" onClick={()=>setVisIndstillinger(v=>!v)}>Indstillinger</Btn>
+        <Btn v="outline" small onClick={eksporterCSV}>Eksporter CSV</Btn>
         <Btn v="subtle" onClick={eksporterPdf}>Eksporter PDF</Btn>
         {aktivLog.length>0&&<Btn v="danger" onClick={nulstilLog}>Nulstil log</Btn>}
       </div>
@@ -538,27 +564,59 @@ export function AktivLogView({aktivLog=[],setAktivLog,gemLog,adminData={}}){
         </div>
       )}
 
-      {/* Filter toolbar */}
-      <div style={{display:"flex",gap:8,alignItems:"center",flexWrap:"wrap"}}>
-        <input value={søg} onChange={e=>setSøg(e.target.value)}
-          placeholder="Søg i log..." 
-          style={{flex:1,minWidth:200,padding:"7px 12px",border:`1px solid ${C.brd}`,borderRadius:8,background:C.s1,color:C.txt,fontSize:13,fontFamily:"inherit"}}/>
-        {TYPER.map(t=>(
-          <button key={t} onClick={()=>setFilType(t)}
-            style={{padding:"5px 12px",borderRadius:6,border:`1px solid ${filType===t?C.acc:C.brd}`,
-              background:filType===t?C.accM:"transparent",color:filType===t?C.acc:C.txtM,
-              fontSize:12,fontWeight:filType===t?700:400,cursor:"pointer",fontFamily:"inherit",
-              textTransform:"capitalize"}}>
-            {t}
-          </button>
-        ))}
+      {/* Filter-panel: 6 dimensioner jf. journalføringsbekendtgørelsen */}
+      <div style={{background:C.s2,border:`1px solid ${C.brd}`,borderRadius:12,padding:"14px 16px"}}>
+        <div style={{display:"grid",gridTemplateColumns:"repeat(auto-fit,minmax(140px,1fr))",gap:10,marginBottom:10}}>
+          <div>
+            <label style={{fontSize:10,color:C.txtM,fontWeight:600,display:"block",marginBottom:3}}>Handling</label>
+            <select value={handling} onChange={e=>setHandling(e.target.value)}
+              style={{width:"100%",padding:"6px 8px",border:`1px solid ${C.brd}`,borderRadius:6,background:C.s1,color:C.txt,fontSize:12,fontFamily:"inherit"}}>
+              <option value="alle">Alle</option>
+              {HANDLINGER.map(h=><option key={h} value={h}>{h}</option>)}
+            </select>
+          </div>
+          <div>
+            <label style={{fontSize:10,color:C.txtM,fontWeight:600,display:"block",marginBottom:3}}>Objekttype</label>
+            <select value={objekttype} onChange={e=>setObjekttype(e.target.value)}
+              style={{width:"100%",padding:"6px 8px",border:`1px solid ${C.brd}`,borderRadius:6,background:C.s1,color:C.txt,fontSize:12,fontFamily:"inherit"}}>
+              <option value="alle">Alle</option>
+              {OBJEKTTYPER.map(o=><option key={o} value={o}>{o}</option>)}
+            </select>
+          </div>
+          <div>
+            <label style={{fontSize:10,color:C.txtM,fontWeight:600,display:"block",marginBottom:3}}>Bruger</label>
+            <input value={bruger} onChange={e=>setBruger(e.target.value)} placeholder="navn/email…"
+              style={{width:"100%",padding:"6px 8px",border:`1px solid ${C.brd}`,borderRadius:6,background:C.s1,color:C.txt,fontSize:12,fontFamily:"inherit"}}/>
+          </div>
+          <div>
+            <label style={{fontSize:10,color:C.txtM,fontWeight:600,display:"block",marginBottom:3}}>Dato fra</label>
+            <input type="date" value={datoFra} onChange={e=>setDatoFra(e.target.value)}
+              style={{width:"100%",padding:"6px 8px",border:`1px solid ${C.brd}`,borderRadius:6,background:C.s1,color:C.txt,fontSize:12,fontFamily:"inherit"}}/>
+          </div>
+          <div>
+            <label style={{fontSize:10,color:C.txtM,fontWeight:600,display:"block",marginBottom:3}}>Dato til</label>
+            <input type="date" value={datoTil} onChange={e=>setDatoTil(e.target.value)}
+              style={{width:"100%",padding:"6px 8px",border:`1px solid ${C.brd}`,borderRadius:6,background:C.s1,color:C.txt,fontSize:12,fontFamily:"inherit"}}/>
+          </div>
+          <div>
+            <label style={{fontSize:10,color:C.txtM,fontWeight:600,display:"block",marginBottom:3}}>Patient-ID</label>
+            <input value={patientId} onChange={e=>setPatientId(e.target.value)} placeholder="fx p123"
+              style={{width:"100%",padding:"6px 8px",border:`1px solid ${C.brd}`,borderRadius:6,background:C.s1,color:C.txt,fontSize:12,fontFamily:"inherit"}}/>
+          </div>
+        </div>
+        <div style={{display:"flex",gap:8,alignItems:"center"}}>
+          <input value={fritekst} onChange={e=>setFritekst(e.target.value)}
+            placeholder="Fritekst (søger i hele entry: bruger, tekst, detaljer, osv.)"
+            style={{flex:1,padding:"7px 12px",border:`1px solid ${C.brd}`,borderRadius:8,background:C.s1,color:C.txt,fontSize:13,fontFamily:"inherit"}}/>
+          {harFiltre&&<Btn v="ghost" small onClick={resetFiltre}>Ryd filtre</Btn>}
+        </div>
       </div>
 
       {/* Log tabel */}
       <div style={{background:C.s2,border:`1px solid ${C.brd}`,borderRadius:12,overflow:"hidden"}}>
-        <div style={{display:"grid",gridTemplateColumns:"140px 140px 110px 1fr",
+        <div style={{display:"grid",gridTemplateColumns:"150px 130px 110px 90px 110px 1fr",
           padding:"9px 16px",background:C.s3,borderBottom:`1px solid ${C.brd}`}}>
-          {["Dato / tid","Bruger","Type","Hændelse"].map(h=>(
+          {["Dato / tid","Bruger","Handling","Objekt","Objekt-ID","Hændelse"].map(h=>(
             <span key={h} style={{color:C.txtM,fontSize:11,fontWeight:600}}>{h}</span>
           ))}
         </div>
@@ -569,12 +627,14 @@ export function AktivLogView({aktivLog=[],setAktivLog,gemLog,adminData={}}){
         ):(
           <div style={{maxHeight:500,overflowY:"auto"}}>
             {[...filtreret].reverse().map((e,i)=>(
-              <div key={i} style={{display:"grid",gridTemplateColumns:"140px 140px 110px 1fr",
+              <div key={e.id||i} style={{display:"grid",gridTemplateColumns:"150px 130px 110px 90px 110px 1fr",
                 padding:"8px 16px",borderBottom:`1px solid ${C.brd}44`,
-                background:i%2===0?C.s2:C.s3+"80"}}>
-                <span style={{color:C.txtM,fontSize:11}}>{e.dato} {e.tid||""}</span>
-                <span style={{color:C.txtD,fontSize:12,fontWeight:500}}>{e.bruger||"—"}</span>
-                <span style={{color:C.acc,fontSize:11,fontWeight:600,textTransform:"capitalize"}}>{e.type||""}</span>
+                background:i%2===0?C.s2:C.s3+"80",fontSize:11}}>
+                <span style={{color:C.txtM}}>{e.dato} {e.tid||""}</span>
+                <span style={{color:C.txtD,fontWeight:500}}>{e.bruger||"—"}<br/><span style={{fontSize:10,color:C.txtM}}>{e.rolle||""}</span></span>
+                <span style={{color:C.acc,fontWeight:600,textTransform:"capitalize"}}>{e.handling||e.type||""}</span>
+                <span style={{color:C.txtD,textTransform:"capitalize"}}>{e.objekttype||"—"}</span>
+                <span style={{color:C.txtM,fontFamily:"monospace",fontSize:10,whiteSpace:"nowrap",overflow:"hidden",textOverflow:"ellipsis"}}>{e.objektId||"—"}</span>
                 <span style={{color:C.txt,fontSize:12}}>{e.tekst||""}</span>
               </div>
             ))}

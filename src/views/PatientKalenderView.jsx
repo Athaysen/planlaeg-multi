@@ -2,9 +2,11 @@
 // Holdes samlet i én fil fordi komponenterne er tæt koblede
 // (PatientKalenderView mounter PatientDetaljeModal, som mounter form-modals).
 import React, { useState, useEffect, useMemo } from "react";
-import { today, addDays, toMin, fromMin, uid } from "../utils/index.js";
+import { today, addDays, toMin, fromMin, uid, validerCPR } from "../utils/index.js";
+import { useAudit, filterAudit } from "../utils/audit.js";
+import { useTranslation } from "react-i18next";
 import { C, FORLOB, ALLE_K, PAT_STATUS, STATUS, sC, sB, sL, buildPatient } from "../data/constants.js";
-import { Btn, Input, Sel, Modal, FRow, Pill, StatusBadge, ProgressRing, ViewHeader } from "../components/primitives.jsx";
+import { Btn, Input, Sel, Modal, FRow, Pill, StatusBadge, ProgressRing, ViewHeader, CprAdvarselBoks } from "../components/primitives.jsx";
 import { UdstyrPanel } from "./LokalerView.jsx";
 import {
   eksporterPatientlisteExcel, eksporterMedarbejdereExcel,
@@ -12,12 +14,23 @@ import {
   eksporterOpgaveplanPDF, eksporterUgeplanPDF,
 } from "../utils/eksport.js";
 
-function PatientDetaljeModal({pat,medarbejdere=[],patienter,forlob=FORLOB,onClose,onEdit,onDelete,onTildelForlob,onAddOpg,onEditOpg,setPatienter,updateOpg,deleteOpg,toggleLås,resetOpg,onMarkerLøst=null,lokMeta={},setAnmodninger=null,showToast=()=>{},lokaler=[]}){
+function PatientDetaljeModal({pat,medarbejdere=[],patienter,forlob=FORLOB,onClose,onEdit,onDelete,onTildelForlob,onAddOpg,onEditOpg,setPatienter,updateOpg,deleteOpg,toggleLås,resetOpg,onMarkerLøst=null,lokMeta={},setAnmodninger=null,showToast=()=>{},lokaler=[],aktivLog=[]}){
+  const {audit}=useAudit();
   const [tab,setTab]=useState("overblik");
   const [nyAdr,setNyAdr]=useState({navn:"",vej:"",husnr:"",postnr:"",by:""});
   const [kpiDrill,setKpiDrill]=useState(null); // "planlagt"|"afventer"|"fejl"|"alt"
   const [editStam,setEditStam]=useState(false);
   const p=patienter.find(x=>x.id===pat.id)||pat;
+
+  // Audit: log opslag når modalen mountes.
+  // Kører kun ved første render (og ved patient-id-skift). Bruger
+  // patient-id som dep så at åbne en ny patient genlogger — men samme
+  // patient re-rendered pga. data-ændringer logger IKKE igen.
+  // Bevidst kun p.id i dep-array: vi vil IKKE re-logge ved hver re-render
+  // når patient-data mutes (redigering). Kun når modalen åbner en ny patient.
+  useEffect(()=>{
+    audit("opslag","patient",p.id,{navn:p.navn,cpr:p.cpr});
+  },[p.id]);
 
   const done=p.opgaver.filter(o=>o.status==="planlagt").length;
   const afv=p.opgaver.filter(o=>o.status==="afventer").length;
@@ -64,11 +77,16 @@ function PatientDetaljeModal({pat,medarbejdere=[],patienter,forlob=FORLOB,onClos
 
   const delAdresse=(aid)=>setPatienter(ps=>ps.map(x=>x.id===p.id?{...x,adresser:(x.adresser||[]).filter(a=>a.id!==aid)}:x));
 
+  // Audit-entries for denne patient — bruges både i tab-label (antal)
+  // og i selve journal-adgangs-sektionen. Filtrerer på objektId === p.id.
+  const patientAudit=useMemo(()=>filterAudit(aktivLog,{patientId:p.id}),[aktivLog,p.id]);
+
   const TABS=[
     {id:"overblik",label:"Overblik"},
     {id:"indsatser",label:`Opgaver${tot>0?" ("+tot+")":""}`},
     {id:"foraeld",label:"Forældre / Værge"},
     {id:"adresser",label:`Adresser${(p.adresser||[]).length>0?" ("+(p.adresser||[]).length+")":""}`},
+    {id:"audit",label:`Journal-adgang${patientAudit.length>0?" ("+patientAudit.length+")":""}`},
   ];
 
   const TabBtn=({id,label})=>(
@@ -137,7 +155,7 @@ function PatientDetaljeModal({pat,medarbejdere=[],patienter,forlob=FORLOB,onClos
                           Opgaveplan (.xlsx)
                         </button>
                         <div style={{padding:"7px 14px 5px",color:C.txtM,fontSize:10,fontWeight:700,letterSpacing:"0.06em",borderBottom:`1px solid ${C.brd}`,borderTop:`1px solid ${C.brd}`}}>PDF / HTML (print)</div>
-                        <button onClick={()=>{eksporterOpgaveplanPDF(p);setXm(false);}}
+                        <button onClick={()=>{audit("eksport","patient",p.id,{navn:p.navn,format:"pdf",type:"opgaveplan"});eksporterOpgaveplanPDF(p);setXm(false);}}
                           style={{display:"block",width:"100%",textAlign:"left",padding:"9px 14px",background:"none",border:"none",color:C.txt,fontFamily:"inherit",fontSize:12,cursor:"pointer"}}
                           onMouseEnter={e=>e.currentTarget.style.background=C.s2}
                           onMouseLeave={e=>e.currentTarget.style.background="none"}>
@@ -149,7 +167,7 @@ function PatientDetaljeModal({pat,medarbejdere=[],patienter,forlob=FORLOB,onClos
                 })()}
               </div>
               <Btn v="danger" small onClick={onDelete}>Slet</Btn>
-              <button onClick={onClose} style={{background:"none",border:"none",color:C.txtD,cursor:"pointer",fontSize:22,lineHeight:1,padding:"0 2px",marginLeft:4}}>×</button>
+              <button onClick={onClose} aria-label="Luk patientdetaljer" style={{background:"none",border:"none",color:C.txtD,cursor:"pointer",fontSize:22,lineHeight:1,padding:"0 2px",marginLeft:4}}>×</button>
             </div>
           </div>
           {/* TABS */}
@@ -236,7 +254,7 @@ function PatientDetaljeModal({pat,medarbejdere=[],patienter,forlob=FORLOB,onClos
                   <div style={{border:`1px solid ${dc}33`,borderRadius:10,overflow:"hidden",marginTop:4}}>
                     <div style={{background:dc+"11",padding:"8px 14px",borderBottom:`1px solid ${dc}22`,display:"flex",justifyContent:"space-between",alignItems:"center"}}>
                       <span style={{color:dc,fontWeight:700,fontSize:12}}>{drillOps.length} opgave{drillOps.length!==1?"r":""}</span>
-                      <button onClick={()=>setKpiDrill(null)} style={{background:"none",border:"none",color:C.txtM,cursor:"pointer",fontSize:16,lineHeight:1}}>×</button>
+                      <button onClick={()=>setKpiDrill(null)} aria-label="Luk drill-down" style={{background:"none",border:"none",color:C.txtM,cursor:"pointer",fontSize:16,lineHeight:1}}>×</button>
                     </div>
                     <div style={{maxHeight:200,overflowY:"auto"}}>
                       {drillOps.map((o,i)=>(
@@ -423,7 +441,7 @@ function PatientDetaljeModal({pat,medarbejdere=[],patienter,forlob=FORLOB,onClos
                       onClick={()=>onMarkerLøst&&onMarkerLøst(p,o)}>
                       v Løst
                     </Btn>}
-                    <button onClick={()=>deleteOpg(p.id,o.id)} style={{background:"none",color:C.red,border:"none",cursor:"pointer",fontSize:18,padding:"0 3px",lineHeight:1}}>×</button>
+                    <button onClick={()=>deleteOpg(p.id,o.id)} aria-label="Slet opgave" style={{background:"none",color:C.red,border:"none",cursor:"pointer",fontSize:18,padding:"0 3px",lineHeight:1}}>×</button>
                   </div>
                 </div>
               ))}
@@ -523,13 +541,57 @@ function PatientDetaljeModal({pat,medarbejdere=[],patienter,forlob=FORLOB,onClos
             </div>
           )}
 
+          {/* JOURNAL-ADGANGS-HISTORIK — alle audit-entries på denne patient.
+              Patienten har ret til at se hvem der har tilgået deres journal
+              (journalføringsbekendtgørelsen § 6 sammenholdt med GDPR art 15).
+              Listen er append-only og viser ALT — også sletninger af egne
+              opgaver, så brugeren kan spore hvem der har ændret hvad. */}
+          {tab==="audit"&&(
+            <div style={{display:"flex",flexDirection:"column",gap:10}}>
+              <div style={{background:C.s2,border:`1px solid ${C.brd}`,borderRadius:10,padding:"12px 14px"}}>
+                <div style={{color:C.txt,fontWeight:700,fontSize:13,marginBottom:3}}>Journal-adgangs-historik</div>
+                <div style={{color:C.txtM,fontSize:11,lineHeight:1.5}}>
+                  Alle registreringer af dataadgang på denne patient. Listen er <strong>append-only</strong> — poster kan ikke slettes eller ændres retroaktivt (journalføringsbekendtgørelsen § 8).
+                </div>
+              </div>
+              {patientAudit.length===0?(
+                <div style={{padding:"20px",textAlign:"center",color:C.txtM,fontSize:12,background:C.s3,borderRadius:9,border:`1px dashed ${C.brd}`}}>
+                  Ingen registreringer endnu
+                </div>
+              ):(
+                <div style={{background:C.s2,border:`1px solid ${C.brd}`,borderRadius:10,overflow:"hidden"}}>
+                  <div style={{display:"grid",gridTemplateColumns:"150px 140px 100px 1fr",padding:"8px 14px",background:C.s3,borderBottom:`1px solid ${C.brd}`}}>
+                    {["Dato / tid","Bruger","Handling","Detaljer"].map(h=>(
+                      <span key={h} style={{color:C.txtM,fontSize:10,fontWeight:700,letterSpacing:"0.05em"}}>{h}</span>
+                    ))}
+                  </div>
+                  <div style={{maxHeight:320,overflowY:"auto"}}>
+                    {[...patientAudit].reverse().map((e,i)=>(
+                      <div key={e.id||i} style={{display:"grid",gridTemplateColumns:"150px 140px 100px 1fr",
+                        padding:"7px 14px",borderBottom:`1px solid ${C.brd}44`,fontSize:11,
+                        background:i%2===0?C.s1:C.s2}}>
+                        <span style={{color:C.txtM,fontVariantNumeric:"tabular-nums"}}>{e.dato} {e.tid||""}</span>
+                        <span style={{color:C.txtD,fontWeight:500}}>{e.bruger}<br/><span style={{fontSize:9,color:C.txtM}}>{e.rolle||""}</span></span>
+                        <span style={{color:C.acc,fontWeight:600,textTransform:"capitalize"}}>{e.handling||e.type}</span>
+                        <span style={{color:C.txt}}>{e.tekst}
+                          {e.detaljer?.felt && <span style={{color:C.txtM,fontSize:10}}> · {e.detaljer.felt}</span>}
+                        </span>
+                      </div>
+                    ))}
+                  </div>
+                </div>
+              )}
+            </div>
+          )}
+
         </div>
       </div>
     </div>
   );
 }
 
-export default function PatientKalenderView({patienter,medarbejdere,setPatienter,forlob=FORLOB,showToast=()=>{},onMarkerLøst=null,lokMeta={},setAnmodninger=()=>{},adminData={},lokaler=[]}){
+export default function PatientKalenderView({patienter,medarbejdere,setPatienter,forlob=FORLOB,showToast=()=>{},onMarkerLøst=null,lokMeta={},setAnmodninger=()=>{},adminData={},lokaler=[],aktivLog=[]}){
+  const {audit}=useAudit();
   const [søg,setSøg]=useState("");
   const [fil,setFil]=useState("alle");
   const [statusFil,setStatusFil]=useState("alle");
@@ -607,7 +669,13 @@ export default function PatientKalenderView({patienter,medarbejdere,setPatienter
     setPatienter(ps=>ps.map(p=>p.id!==patId?p:{...p,opgaver:p.opgaver.map(o=>o.id!==opgId?o:{...o,...ch})}));
   const deleteOpg=(patId,opgId)=>
     setPatienter(ps=>ps.map(p=>p.id!==patId?p:{...p,opgaver:p.opgaver.filter(o=>o.id!==opgId)}));
-  const deletePat=(patId)=>{ setPatienter(ps=>ps.filter(p=>p.id!==patId)); setValgt(null); setDelPat(null); };
+  const deletePat=(patId)=>{
+    const slettet=patienter.find(p=>p.id===patId);
+    audit("sletning","patient",patId,{navn:slettet?.navn||"?",afdeling:slettet?.afdeling||""});
+    setPatienter(ps=>ps.filter(p=>p.id!==patId));
+    setValgt(null);
+    setDelPat(null);
+  };
   const toggleLås=(patId,opgId,lås)=>updateOpg(patId,opgId,{låst:lås});
   const resetOpg=(patId,opgId)=>updateOpg(patId,opgId,{status:"afventer",dato:null,startKl:null,slutKl:null,lokale:null,medarbejder:null,låst:false});
 
@@ -663,11 +731,23 @@ export default function PatientKalenderView({patienter,medarbejdere,setPatienter
               <div style={{position:"absolute",right:0,top:"calc(100% + 6px)",background:C.s1,border:`1px solid ${C.brd}`,borderRadius:10,boxShadow:"0 8px 32px rgba(0,0,0,0.18)",zIndex:200,minWidth:240,overflow:"hidden"}}
                 onClick={e=>e.stopPropagation()}>
                 <div style={{padding:"8px 14px 6px",color:C.txtM,fontSize:10,fontWeight:700,letterSpacing:"0.06em",borderBottom:`1px solid ${C.brd}`}}>EXCEL</div>
-                <MenuItem label="Patientliste (.xlsx)" onClick={()=>{eksporterPatientlisteExcel(sortedPat);setExportMenu(false);}}/>
-                <MenuItem label="Medarbejderoversigt (.xlsx)" onClick={()=>{eksporterMedarbejdereExcel(medarbejdere);setExportMenu(false);}}/>
-                <MenuItem label="Ugeplan (.xlsx)" onClick={()=>{eksporterUgeplanExcel(sortedPat);setExportMenu(false);}}/>
+                <MenuItem label="Patientliste (.xlsx)" onClick={()=>{
+                  audit("eksport","patient","bulk",{antal:sortedPat.length,format:"xlsx",type:"patientliste",ids:sortedPat.slice(0,50).map(p=>p.id)});
+                  eksporterPatientlisteExcel(sortedPat);setExportMenu(false);
+                }}/>
+                <MenuItem label="Medarbejderoversigt (.xlsx)" onClick={()=>{
+                  audit("eksport","medarbejder","bulk",{antal:medarbejdere.length,format:"xlsx"});
+                  eksporterMedarbejdereExcel(medarbejdere);setExportMenu(false);
+                }}/>
+                <MenuItem label="Ugeplan (.xlsx)" onClick={()=>{
+                  audit("eksport","patient","bulk",{antal:sortedPat.length,format:"xlsx",type:"ugeplan",ids:sortedPat.slice(0,50).map(p=>p.id)});
+                  eksporterUgeplanExcel(sortedPat);setExportMenu(false);
+                }}/>
                 <div style={{padding:"8px 14px 6px",color:C.txtM,fontSize:10,fontWeight:700,letterSpacing:"0.06em",borderBottom:`1px solid ${C.brd}`,borderTop:`1px solid ${C.brd}`,marginTop:4}}>PDF / HTML (print)</div>
-                <MenuItem label="Ugeplan (.pdf)" onClick={()=>{eksporterUgeplanPDF(sortedPat);setExportMenu(false);}}/>
+                <MenuItem label="Ugeplan (.pdf)" onClick={()=>{
+                  audit("eksport","patient","bulk",{antal:sortedPat.length,format:"pdf",type:"ugeplan",ids:sortedPat.slice(0,50).map(p=>p.id)});
+                  eksporterUgeplanPDF(sortedPat);setExportMenu(false);
+                }}/>
                 <div style={{padding:"8px 14px 6px",color:C.txtD,fontSize:10,borderTop:`1px solid ${C.brd}`,marginTop:4}}>Opgaveplan pr. patient — åbn patientens detaljer og vælg Eksport</div>
               </div>
             )}
@@ -790,6 +870,7 @@ export default function PatientKalenderView({patienter,medarbejdere,setPatienter
             medarbejdere={medarbejdere}
             patienter={patienter}
             forlob={forlob}
+            aktivLog={aktivLog}
             onClose={()=>setValgt(null)}
             onEdit={()=>setEditPat(valgt)}
             onDelete={()=>setDelPat(valgt)}
@@ -1386,9 +1467,12 @@ function EditPatientForm({pat, medarbejdere=[], onSave, onClose, lokaler=[]}){
 
 
 function NyPatientForm({onSave,onClose,forlob=FORLOB,medarbejdere=[],patienter=[],adminData={},lokaler=[]}){
+  const {t}=useTranslation();
+  const {audit}=useAudit();
   const [fejl,setFejl]=useState("");
   const [tab,setTab]=useState("basis");
   const [basis,setBasis]=useState({navn:"",cpr:"",henvDato:today(),patientNr:"",særligeHensyn:"",ansvarligMed:"",afdeling:"current",tidStart:"08:00",tidSlut:"17:00",tildel:false,forlobNr:Object.keys(forlob)[0]||"1"});
+  const cprCheck=useMemo(()=>validerCPR(basis.cpr),[basis.cpr]);
   const [adresser,setAdresser]=useState([]);
   const [foraeldre,setForaeldre]=useState([]);
   const [nyAdr,setNyAdr]=useState({navn:"",vej:"",husnr:"",postnr:"",by:""});
@@ -1411,13 +1495,17 @@ function NyPatientForm({onSave,onClose,forlob=FORLOB,medarbejdere=[],patienter=[
     if(!basis.navn.trim()||!basis.cpr.trim()){setFejl("Udfyld venligst navn og CPR-nummer.");return;}
     const cprClean=basis.cpr.replace(/[^0-9]/g,"");
     if(cprClean.length!==10){setFejl("CPR-nummer skal indeholde 10 cifre (ddmmåå-xxxx).");return;}
+    if(!cprCheck.gyldigtFormat){setFejl(t("auth.cpr."+(cprCheck.advarsel?.replace("cpr.","")||"ugyldigDato")));return;}
     if(patienter&&patienter.find(p=>p.cpr.replace(/[^0-9]/g,"")===cprClean)){setFejl("En patient med dette CPR-nummer eksisterer allerede.");return;}
     const extra={adresser,foraeldre,foraeldreNavn:foraeldre[0]?.navn||"",foraeldreCpr:foraeldre[0]?.cpr||"",foraeldreTlf:foraeldre[0]?.tlf||"",patientNr:basis.patientNr,tidStart:basis.tidStart,tidSlut:basis.tidSlut,ansvarligMed:basis.ansvarligMed,særligeHensyn:basis.særligeHensyn};
+    let patObjekt;
     if(basis.tildel){
-      onSave({...buildPatient({...basis,forlobNr:Number(basis.forlobNr)},forlob),...extra});
+      patObjekt={...buildPatient({...basis,forlobNr:Number(basis.forlobNr)},forlob),...extra};
     } else {
-      onSave({id:"p"+Date.now(),navn:basis.navn.trim(),cpr:basis.cpr.trim(),henvDato:basis.henvDato,afdeling:basis.afdeling,forlobNr:null,opgaver:[],...extra});
+      patObjekt={id:"p"+Date.now(),navn:basis.navn.trim(),cpr:basis.cpr.trim(),henvDato:basis.henvDato,afdeling:basis.afdeling,forlobNr:null,opgaver:[],...extra};
     }
+    audit("oprettelse","patient",patObjekt.id,{navn:patObjekt.navn,afdeling:patObjekt.afdeling,tildelt:basis.tildel});
+    onSave(patObjekt);
   };
 
   const fl=forlob[basis.forlobNr];
@@ -1440,7 +1528,10 @@ function NyPatientForm({onSave,onClose,forlob=FORLOB,medarbejdere=[],patienter=[
         <div style={{display:"flex",flexDirection:"column",gap:10}}>
           <div style={{display:"grid",gridTemplateColumns:"1fr 1fr",gap:10}}>
             <FRow label="Fuldt navn"><Input value={basis.navn} onChange={v=>setBas("navn",v)} placeholder="Lars Hansen"/></FRow>
-            <FRow label="CPR-nummer"><Input value={basis.cpr} onChange={v=>setBas("cpr",v)} placeholder="010175-1234"/></FRow>
+            <FRow label="CPR-nummer">
+              <Input value={basis.cpr} onChange={v=>setBas("cpr",v)} placeholder="010175-1234"/>
+              <CprAdvarselBoks check={cprCheck} t={t}/>
+            </FRow>
           </div>
           <div style={{display:"grid",gridTemplateColumns:"1fr 1fr",gap:10}}>
             <FRow label="Patient nr."><Input value={basis.patientNr} onChange={v=>setBas("patientNr",v)} placeholder="f.eks. 123456"/></FRow>

@@ -1,11 +1,14 @@
-import React, { useState } from "react";
+import React, { useState, useMemo } from "react";
+import { useTranslation } from "react-i18next";
 import { today } from "../utils/index.js";
 import { C } from "../data/constants.js";
 import { Btn, Input, FRow, Pill } from "../components/primitives.jsx";
 import { hashKode, tjekKode } from "../utils/krypto.js";
+import { validerEjerKode, beregnStyrke, styrkeGradient } from "../utils/kodeValidering.js";
 import PlanMedTester from "../tests/PlanMedTester.jsx";
 
 export default function EjerView({patienter,medarbejdere,adminData,setAdminData,authData,isUnlocked,setEjerUnlocked,ejerKode,ejerKonto,setEjerKonto,lokaler=[],lokMeta={},showToast=()=>{},certifikater=[],config={}}){
+  const {t}=useTranslation();
   const [kodeInput,setKodeInput]=useState("");
   const [fejl,setFejl]=useState("");
   const [verificerer,setVerificerer]=useState(false);
@@ -383,12 +386,12 @@ export default function EjerView({patienter,medarbejdere,adminData,setAdminData,
                 }}>Gem</Btn>
               </div>
             </FRow>
-            <FRow label="Skift ejer-kode (mindst 12 tegn, blanding af bogstav og tal)">
+            <FRow label={t("auth.ownerSetup.changeCodeLabel")}>
               <div style={{display:"flex",gap:8}}>
-                <Input value={nyEjerKode} onChange={v=>setNyEjerKode(v)} placeholder="Ny kode"/>
+                <Input value={nyEjerKode} onChange={v=>setNyEjerKode(v)} placeholder={t("auth.ownerSetup.ownerCodePlaceholder")}/>
                 <Btn v="outline" small onClick={async ()=>{
-                  if(!nyEjerKode||nyEjerKode.length<12){setGemtMsg("Kode skal være mindst 12 tegn");return;}
-                  if(!/[A-Za-zÆØÅæøå]/.test(nyEjerKode)||!/\d/.test(nyEjerKode)){setGemtMsg("Koden skal indeholde mindst ét bogstav og ét tal");return;}
+                  const v = validerEjerKode(nyEjerKode);
+                  if(!v.gyldig){setGemtMsg(v.fejl.map(k=>t(k)).join(" · "));return;}
                   try{
                     const hash = await hashKode(nyEjerKode);
                     setEjerKonto({...ejerKonto,kode:hash});
@@ -398,6 +401,7 @@ export default function EjerView({patienter,medarbejdere,adminData,setAdminData,
                   }
                 }}>Gem</Btn>
               </div>
+              <KodeStyrkeBlok kode={nyEjerKode} t={t}/>
             </FRow>
             <div style={{marginTop:16,padding:"12px 14px",background:C.ambM,border:"1px solid "+C.amb,borderRadius:8,fontSize:12,color:C.amb,fontWeight:500,marginBottom:12}}>
               Koden gemmes som bcrypt-hash i localStorage (saltRounds=10). Hash'en kan ikke omdannes til klartekst, men vær opmærksom på at browserens localStorage er tilgængelig for XSS-angreb — kræv HTTPS og CSP i produktion.
@@ -418,6 +422,32 @@ export default function EjerView({patienter,medarbejdere,adminData,setAdminData,
         </div>
       )}
       {visTesterEjer&&<PlanMedTester onClose={()=>setVisTesterEjer(false)}/>}
+    </div>
+  );
+}
+
+// Live styrke-bar + fejlliste under "Skift ejer-kode"-inputtet.
+function KodeStyrkeBlok({kode, t}){
+  const validering = useMemo(()=>validerEjerKode(kode),[kode]);
+  const styrke = useMemo(()=>beregnStyrke(kode),[kode]);
+  const pct = kode ? Math.max(8,((styrke.score+1)/4)*100) : 0;
+  if(!kode) return null;
+  return (
+    <div style={{marginTop:6}}>
+      <div style={{position:"relative",height:6,borderRadius:4,background:"#e5e7eb",overflow:"hidden"}}>
+        <div style={{position:"absolute",top:0,left:0,bottom:0,width:pct+"%",background:styrkeGradient(),transition:"width .15s ease-out"}}/>
+      </div>
+      <div style={{display:"flex",justifyContent:"space-between",marginTop:3,fontSize:10,color:C.txtM}}>
+        <span>{t("auth.ownerSetup.strength.label")}</span>
+        <span style={{color:styrke.farve,fontWeight:700}}>{t(styrke.labelKey)}</span>
+      </div>
+      {!validering.gyldig && (
+        <ul style={{margin:"6px 0 0 0",padding:"0 0 0 16px",fontSize:11,lineHeight:1.5}}>
+          {validering.fejl.map(k=>(
+            <li key={k} style={{color:C.red}}>{t(k)}</li>
+          ))}
+        </ul>
+      )}
     </div>
   );
 }

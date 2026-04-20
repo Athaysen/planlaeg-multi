@@ -33,6 +33,7 @@ import {
 } from "./components/primitives.jsx";
 import { runPlanner, analyserRessourcer } from "./planner/runPlanner.js";
 import { hashKode, erBcryptHash } from "./utils/krypto.js";
+import { AuditProvider, byggEntry } from "./utils/audit.js";
 import { useInaktivitetsTimer } from "./hooks/useInaktivitetsTimer.js";
 import PlanMedTester from "./tests/PlanMedTester.jsx";
 import AuthFlow from "./auth/AuthFlow.jsx";
@@ -42,6 +43,7 @@ import AdminView from "./admin/AdminView.jsx";
 import Dashboard from "./views/Dashboard.jsx";
 import KalenderView from "./views/KalenderView.jsx";
 import PlanLogView from "./views/PlanLogView.jsx";
+import KapacitetsView from "./views/KapacitetsView.jsx";
 import EjerView from "./views/EjerView.jsx";
 import IndstillingerView from "./views/IndstillingerView.jsx";
 import PatientKalenderView from "./views/PatientKalenderView.jsx";
@@ -490,6 +492,19 @@ export default function App(){
     setRunning(false);
     setProgress(null);
     logEntry("planlægning","Auto: "+res.planned+" planlagt, "+res.failed+" ikke fundet");
+    // Audit: strukturer-log af planlægning med berørte patient-ids.
+    // Gør det muligt efterfølgende at finde ud af hvilke patienter der
+    // blev omplanlagt (krav ved journal-forespørgsler).
+    const berørtePatIds = nulstillet.filter(p=>p.opgaver.some(o=>!o.låst)).map(p=>p.id);
+    const planEntry = byggEntry("ændring", "patient", "bulk",
+      { felt: "planlægning", antal: berørtePatIds.length, ids: berørtePatIds.slice(0,50), planlagt: res.planned, fejlet: res.failed },
+      authData
+    );
+    setAktivLog(prev => {
+      const ny = [...prev, planEntry].slice(-5000);
+      gemAktivLog(ny);
+      return ny;
+    });
     const type=res.planned===0&&total>0?"warn":res.failed>0?"warn":"success";
     setToast({msg:"Planlagt: "+res.planned+" | Ikke fundet: "+res.failed+" | Total: "+total,type});
   },[patienter,medarbejdere,running,config,lokTider,planFraDato]);
@@ -536,6 +551,7 @@ export default function App(){
   }
 
   return(
+    <AuditProvider authData={authData} setAktivLog={setAktivLog}>
     <div style={{display:"flex",minHeight:"100vh",background:C.bg,fontFamily:"'DM Sans','Segoe UI',sans-serif",color:C.txt}}>
       <style>{`
         *{box-sizing:border-box}
@@ -549,8 +565,51 @@ export default function App(){
         .pm-tr-hover:hover{background:rgba(0,80,179,0.05)!important}
         .pm-nav-hover:hover{background:rgba(0,80,179,0.05)!important}
         .auth-input:focus{border-color:#0050b3!important;outline:none}
+
+        /* WCAG 2.4.7 Focus Visible — synlig fokus-indikator på alle
+           tastatur-fokuserbare elementer. :focus-visible matches KUN ved
+           tastatur-fokus (ikke mus-klik), så knapper ikke får blå ring
+           efter klik, men fungerer perfekt ved Tab-navigation. */
+        button:focus-visible,
+        a:focus-visible,
+        [role="button"]:focus-visible,
+        [role="tab"]:focus-visible,
+        [role="menuitem"]:focus-visible,
+        [role="dialog"]:focus-visible,
+        input:focus-visible,
+        select:focus-visible,
+        textarea:focus-visible,
+        [tabindex]:focus-visible {
+          outline: 3px solid ${C.acc};
+          outline-offset: 2px;
+          border-radius: 4px;
+        }
+        /* Fjern outline på klik (mus), behold for tastatur */
+        button:focus:not(:focus-visible),
+        a:focus:not(:focus-visible) {
+          outline: none;
+        }
+        /* WCAG 2.4.1 Skip-link — skjul indtil tastatur-fokus */
+        .pm-skip-link {
+          position: absolute;
+          left: -9999px;
+          top: 8px;
+          background: ${C.acc};
+          color: #fff;
+          padding: 8px 16px;
+          border-radius: 4px;
+          text-decoration: none;
+          z-index: 9999;
+          font-weight: 700;
+        }
+        .pm-skip-link:focus {
+          left: 8px;
+        }
         @import url('https://fonts.googleapis.com/css2?family=DM+Sans:wght@400;500;600;700;800;900&display=swap');
       `}</style>
+
+      {/* WCAG 2.4.1 Bypass Blocks — skip-link til hovedindhold */}
+      <a href="#pm-main" className="pm-skip-link">Gå til hovedindhold</a>
 
       {/* Global Search Overlay */}
       {gsOpen&&<GlobalSearch
@@ -577,7 +636,7 @@ export default function App(){
           </button>
         </div>
 
-        <nav style={{flex:1,padding:"8px 8px",overflowY:"auto"}}>
+        <nav aria-label="Hovedmenu" style={{flex:1,padding:"8px 8px",overflowY:"auto"}}>
           {NAV_ITEMS.map((item,i)=>{
             if(item.sep) return <div key={`sep${i}`} style={{height:1,background:C.brd,margin:"6px 8px",opacity:.5}}/>;
             if(item.adminOnly && !isAdmin) return null;
@@ -657,8 +716,8 @@ export default function App(){
           </div>
         </div>
 
-        {/* Content */}
-        <div style={{flex:1,overflowY:"auto",padding:20}}>
+        {/* Content — id kobler skip-link til hovedindholdet (WCAG 2.4.1) */}
+        <main id="pm-main" tabIndex={-1} style={{flex:1,overflowY:"auto",padding:20}}>
           <ErrorBoundary key={view}>
           {view==="dashboard"&&<ErrorBoundary><Dashboard patienter={scopedPatienter} medarbejdere={scopedMed} fejl={fejl} onLogout={()=>{
             // Ryd password fra memory + localStorage ved logout (belt-and-braces:
@@ -668,16 +727,17 @@ export default function App(){
             setAuthData(d=>({...d,password:""}));
             setAuthStage("welcome");
           }} alleAfdelinger={alleAfdelinger} afdScope={afdScope}/></ErrorBoundary>}
-          {view==="patienter"&&<ErrorBoundary><PatientKalenderView patienter={scopedPatienter} medarbejdere={scopedMed} setPatienter={setPatienter} forlob={forlob} showToast={showToast} onMarkerLøst={handleMarkerLøst} lokMeta={lokMeta} setAnmodninger={setAnmodninger} adminData={adminData} lokaler={lokaler}/></ErrorBoundary>}
+          {view==="patienter"&&<ErrorBoundary><PatientKalenderView patienter={scopedPatienter} medarbejdere={scopedMed} setPatienter={setPatienter} forlob={forlob} showToast={showToast} onMarkerLøst={handleMarkerLøst} lokMeta={lokMeta} setAnmodninger={setAnmodninger} adminData={adminData} lokaler={lokaler} aktivLog={aktivLog}/></ErrorBoundary>}
           {view==="kalender"&&<ErrorBoundary><KalenderView patienter={scopedPatienter} medarbejdere={scopedMed} lokaler={lokaler}/></ErrorBoundary>}
           {view==="medarbejdere"&&<ErrorBoundary><MedarbejderView medarbejdere={scopedMed} setMedarbejdere={setMedarbejdere} patienter={scopedPatienter} setPatienter={setPatienter} anmodninger={anmodninger} setAnmodninger={setAnmodninger} isAdmin={isAdmin} certifikater={certifikater} showToast={showToast} adminData={adminData}/></ErrorBoundary>}
           {view==="lokaler"&&<ErrorBoundary><LokalerView patienter={patienter} lokTider={lokTider} setLokTider={setLokTider} lokMeta={lokMeta} setLokMeta={setLokMeta} lokaler={lokaler} saveLokaler={saveLokaler} adminData={adminData} udstyrsKat={udstyrsKat} saveUdstyrsKat={saveUdstyrsKat} udstyrsPakker={udstyrsPakker} saveUdstyrsPakker={saveUdstyrsPakker}/></ErrorBoundary>}
           {view==="forlob"&&<ErrorBoundary><ForlobView forlob={forlob} setForlob={setForlob} medarbejdere={scopedMed} setMedarbejdere={setMedarbejdere} indsatser={indsatser} setIndsatser={setIndsatser} certifikater={certifikater} setCertifikater={setCertifikater} lokaler={lokaler} setPatienter={setPatienter} adminData={adminData}/></ErrorBoundary>}
           {view==="planlog"&&<ErrorBoundary><PlanLogView patienter={scopedPatienter} planLog={planLog} medarbejdere={scopedMed} setPatienter={setPatienter} setMedarbejdere={setMedarbejdere} onPlan={handlePlan} running={running} progress={progress} planFraDato={planFraDato} setPlanFraDato={setPlanFraDato} afdScope={afdScope} alleAfdelinger={alleAfdelinger} toggleAktiv={toggleAktiv} toggleRes={toggleRes} lokaler={lokaler} certifikater={certifikater} planDebug={planDebug} config={config} setConfig={setConfig} setForlob={setForlob} forlob={forlob} lokTider={lokTider} setLokTider={setLokTider} lokMeta={lokMeta} setLokMeta={setLokMeta} saveLokaler={saveLokaler} setIndsatser={setIndsatser} indsatser={indsatser} adminData={adminData}/></ErrorBoundary>}
+          {view==="kapacitet"&&<ErrorBoundary><KapacitetsView patienter={scopedPatienter} medarbejdere={scopedMed} lokaler={lokaler} lokTider={lokTider} lokMeta={lokMeta} adminData={adminData} config={config}/></ErrorBoundary>}
           {view==="admin"&&isAdmin&&<ErrorBoundary><AdminView adminData={adminData} setAdminData={setAdminData} authData={authData} anmodninger={anmodninger} setAnmodninger={setAnmodninger} medarbejdere={medarbejdere} setMedarbejdere={setMedarbejdere} rulNotif={rulNotif} setRulNotif={setRulNotif} patienter={patienter} setPatienter={setPatienter} aktivLog={aktivLog} setAktivLog={setAktivLog} gemLog={gemAktivLog} lokMeta={lokMeta} config={config} setConfig={setConfig} setForlob={setForlob} forlob={forlob} forlobMeta={forlobMeta} setForlobMeta={setForlobMeta} setLokTider={setLokTider} setLokMeta={setLokMeta} lokaler={lokaler} saveLokaler={saveLokaler} indsatser={indsatser} setIndsatser={setIndsatser} showToast={showToast}/></ErrorBoundary>}
           {view==="ejer"&&(authData.email===EJER_EMAIL||authData.rolle==="ejer")&&<ErrorBoundary><EjerView patienter={patienter} medarbejdere={medarbejdere} adminData={adminData} setAdminData={setAdminData} authData={authData} isUnlocked={isEjer} setEjerUnlocked={setEjerUnlocked} ejerKode={EJER_KODE} ejerKonto={ejerKonto} setEjerKonto={setEjerKonto} lokaler={lokaler} lokMeta={lokMeta} showToast={showToast} certifikater={certifikater} config={config}/></ErrorBoundary>}
           </ErrorBoundary>
-        </div>
+        </main>
       </div>
 
       {visScope&&<ScopeModal alleAfdelinger={alleAfdelinger} afdScope={afdScope} toggleAktiv={toggleAktiv} toggleRes={toggleRes} onClose={()=>setVisScope(false)}/>}
@@ -710,6 +770,7 @@ export default function App(){
         </div>
       )}
     </div>
+    </AuditProvider>
   );
 }
 // ── EKSPORT FUNKTIONER ──────────────────────────────────

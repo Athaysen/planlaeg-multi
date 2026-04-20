@@ -65,29 +65,65 @@ export function Btn({ onClick, disabled, children, v = "ghost", small, full, tit
   );
 }
 
-export function Input({ value, onChange, placeholder, style, type = "text", min, max }) {
-  return <input type={type} value={value||""} min={min} max={max}
+// Input — forwarder id og aria-* så FRow-label-kobling virker (WCAG 1.3.1).
+export function Input({ value, onChange, placeholder, style, type = "text", min, max, id, "aria-label": ariaLabel, "aria-describedby": ariaDescribedBy }) {
+  return <input type={type} value={value||""} min={min} max={max} id={id}
+    aria-label={ariaLabel} aria-describedby={ariaDescribedBy}
     onChange={e=>onChange(e.target.value)} placeholder={placeholder}
     style={sx({background:C.s1,border:`1px solid ${C.brd}`,borderRadius:8,padding:"7px 11px",color:C.txt,fontSize:13,fontFamily:"inherit",outline:"none",width:"100%",boxSizing:"border-box"},style)}/>;
 }
 
-export function Sel({ value, onChange, options, style }) {
+export function Sel({ value, onChange, options, style, id, "aria-label": ariaLabel }) {
   return (
-    <select value={value||""} onChange={e=>onChange(e.target.value)}
+    <select value={value||""} onChange={e=>onChange(e.target.value)} id={id} aria-label={ariaLabel}
       style={sx({background:C.s1,border:`1px solid ${C.brd}`,borderRadius:8,padding:"7px 10px",color:C.txtD,fontSize:13,fontFamily:"inherit",cursor:"pointer",outline:"none"},style)}>
       {options.map(o=><option key={o.v??o} value={o.v??o}>{o.l??o}</option>)}
     </select>
   );
 }
 
+// Modal — WCAG 2.1 AA kompliant dialog-wrapper.
+// - role="dialog" + aria-modal="true" så skærmlæsere annoncerer modalen
+//   som en blokerende dialog og giver brugeren besked om fokus-trap.
+// - aria-labelledby peger på titel-elementet (autogenereret id via React).
+// - Escape lukker modalen (2.1.1 Keyboard, 2.1.2 No Keyboard Trap).
+// - Focus-autofokus på første fokuserbare element i modalen når mountet.
 export function Modal({ title, onClose, children, w = 520 }) {
+  const titleId = React.useId();
+  const containerRef = React.useRef(null);
+
+  // Escape lukker — 2.1.1 Keyboard tilgængelighed for at komme ud af modalen.
+  React.useEffect(() => {
+    const onKey = (e) => { if (e.key === "Escape") onClose(); };
+    window.addEventListener("keydown", onKey);
+    return () => window.removeEventListener("keydown", onKey);
+  }, [onClose]);
+
+  // Autofokus: flyt fokus ind i modalen når den mountes, så tastatur-brugere
+  // ikke står fast i baggrundens elementer. Vælg første fokuserbare inputs,
+  // ellers selve dialog-containeren (tabIndex=-1).
+  React.useEffect(() => {
+    const c = containerRef.current; if (!c) return;
+    const first = c.querySelector("input,select,textarea,button:not([aria-label='Luk'])");
+    (first || c).focus();
+  }, []);
+
   return (
     <div onClick={e=>{if(e.target===e.currentTarget)onClose()}}
       style={{position:"fixed",inset:0,background:"rgba(15,25,35,0.45)",backdropFilter:"blur(6px)",display:"flex",alignItems:"center",justifyContent:"center",zIndex:2000,padding:16}}>
-      <div style={{background:C.s2,border:`1px solid ${C.brd}`,borderRadius:14,width:w,maxWidth:"100%",maxHeight:"90vh",overflow:"hidden",display:"flex",flexDirection:"column",boxShadow:"0 12px 48px rgba(15,25,35,0.15)"}}>
+      <div
+        ref={containerRef}
+        role="dialog"
+        aria-modal="true"
+        aria-labelledby={titleId}
+        tabIndex={-1}
+        style={{background:C.s2,border:`1px solid ${C.brd}`,borderRadius:14,width:w,maxWidth:"100%",maxHeight:"90vh",overflow:"hidden",display:"flex",flexDirection:"column",boxShadow:"0 12px 48px rgba(15,25,35,0.15)",outline:"none"}}>
         <div style={{padding:"15px 20px",borderBottom:`1px solid ${C.brd}`,display:"flex",justifyContent:"space-between",alignItems:"center",position:"sticky",top:0,background:C.s2,zIndex:1}}>
-          <span style={{color:C.txt,fontWeight:700,fontSize:15}}>{title}</span>
-          <button onClick={onClose} style={{background:"none",border:"none",color:C.txtD,cursor:"pointer",fontSize:20,lineHeight:1,padding:"0 4px"}}>X</button>
+          <h2 id={titleId} style={{color:C.txt,fontWeight:700,fontSize:15,margin:0}}>{title}</h2>
+          <button
+            onClick={onClose}
+            aria-label="Luk"
+            style={{background:"none",border:"none",color:C.txtD,cursor:"pointer",fontSize:20,lineHeight:1,padding:"0 4px"}}>×</button>
         </div>
         <div style={{padding:20,flex:1,overflowY:"auto"}}>{children}</div>
       </div>
@@ -95,11 +131,36 @@ export function Modal({ title, onClose, children, w = 520 }) {
   );
 }
 
-export function FRow({ label, children, hint }) {
+// FRow — label-wrapper. Genererer stabilt id og kobler det til input via
+// cloneElement så htmlFor→id-kontrakten opfyldes automatisk, uden at alle
+// callsites skal bekymre sig om det.
+export function FRow({ label, children, hint, htmlFor }) {
+  const autoId = React.useId();
+  const labelId = htmlFor || autoId;
+  // Find første child-element der accepterer id og inject labelId.
+  // Virker både for native tags og custom-komponenter (Input, Sel) så længe
+  // de videresender id-prop til det underliggende form-element.
+  const inject = (nodes) => {
+    const arr = React.Children.toArray(nodes);
+    let injected = false;
+    return arr.map(child => {
+      if (injected || !React.isValidElement(child)) return child;
+      if (child.props?.id) return child; // allerede id-sat, spring over
+      const tagName = typeof child.type === "string" ? child.type : "";
+      const compName = typeof child.type === "function" ? (child.type.displayName || child.type.name || "") : "";
+      const accepts = ["input","select","textarea"].includes(tagName)
+        || ["Input","Sel","Textarea"].includes(compName);
+      if (accepts) {
+        injected = true;
+        return React.cloneElement(child, { id: labelId });
+      }
+      return child;
+    });
+  };
   return (
     <div style={{marginBottom:14}}>
-      <div style={{color:C.txtD,fontSize:12,marginBottom:5,fontWeight:600}}>{label}</div>
-      {children}
+      <label htmlFor={labelId} style={{color:C.txtD,fontSize:12,marginBottom:5,fontWeight:600,display:"block"}}>{label}</label>
+      {inject(children)}
       {hint&&<div style={{color:C.txtM,fontSize:11,marginTop:4}}>{hint}</div>}
     </div>
   );
@@ -423,3 +484,32 @@ export function StrenghedToggle({ value, onChange }) {
   );
 }
 
+// Gul warning-boks der vises under CPR-input når validerCPR returnerer
+// en advarsel (ikke-blokerende). `check` er resultatet fra validerCPR().
+// `t` er useTranslation's t-funktion.
+//
+// Vi viser IKKE 'cpr.tom' — tom streng dækkes af eksisterende "skal
+// udfyldes"-flow og warning-boksen ville ellers blinke under hele
+// oprettelsen indtil brugeren har tastet noget.
+export function CprAdvarselBoks({ check, t }) {
+  if (!check || !check.advarsel || check.advarsel === "cpr.tom") return null;
+  const msgKey = "auth." + check.advarsel;
+  return (
+    <div style={{
+      marginTop: 6,
+      padding: "8px 11px",
+      background: C.ambM,
+      border: "1px solid " + C.amb,
+      borderRadius: 7,
+      fontSize: 11,
+      color: C.amb,
+      lineHeight: 1.5,
+    }}>
+      <div style={{ fontWeight: 700, marginBottom: 2 }}>
+        ⚠ {t("auth.cpr.warningTitle")}
+      </div>
+      <div>{t(msgKey)}</div>
+      <div style={{ opacity: 0.85, marginTop: 3 }}>{t("auth.cpr.warningHint")}</div>
+    </div>
+  );
+}

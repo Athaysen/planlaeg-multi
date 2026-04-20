@@ -70,7 +70,7 @@ export function GlobalSearch({patienter=[],medarbejdere=[],onClose,onNavigate}){
             placeholder="Søg patienter, medarbejdere, opgaver..."
             onKeyDown={e=>{if(e.key==="Escape")onClose();}}
             style={{flex:1,background:"none",border:"none",outline:"none",fontSize:16,color:C.txt,fontFamily:"inherit"}}/>
-          {q&&<button onClick={()=>setQ("")} style={{background:"none",border:"none",color:C.txtM,cursor:"pointer",fontSize:18,lineHeight:1,padding:"0 4px"}}>×</button>}
+          {q&&<button onClick={()=>setQ("")} aria-label="Ryd søgning" style={{background:"none",border:"none",color:C.txtM,cursor:"pointer",fontSize:18,lineHeight:1,padding:"0 4px"}}>×</button>}
           <kbd style={{background:C.s3,border:`1px solid ${C.brd}`,borderRadius:5,padding:"2px 7px",fontSize:11,color:C.txtM}}>Esc</kbd>
         </div>
 
