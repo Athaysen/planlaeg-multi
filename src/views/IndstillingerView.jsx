@@ -202,7 +202,7 @@ export function PlanlaegIndstillingerPanel({config,setConfig,setPatienter,setMed
   );
 }
 
-export default function IndstillingerView({config,setConfig,setPatienter,setMedarbejdere,setForlob,forlob,setLokTider,lokMeta={},setLokMeta,patienter=[],lokaler=[],saveLokaler=()=>{},medarbejdere=[],setIndsatser=()=>{},indsatser=[]}){
+export default function IndstillingerView({config,setConfig,setPatienter,setMedarbejdere,setForlob,forlob,setLokTider,lokMeta={},setLokMeta,patienter=[],lokaler=[],saveLokaler=()=>{},medarbejdere=[],setIndsatser=()=>{},indsatser=[],adminData={},setAdminData=()=>{}}){
   const [c,setC]=useState({...config,serverModel:config.serverModel||"planmed",selfhostedUrl:config.selfhostedUrl||""});
   const set=(k,v)=>setC(p=>({...p,[k]:v}));
 
@@ -334,10 +334,32 @@ export default function IndstillingerView({config,setConfig,setPatienter,setMeda
           </div>
         </div>
       </div>
+
+      {/* -- Session-sikkerhed: auto-logout ved inaktivitet -- */}
+      <div style={{background:C.s2,border:`1px solid ${C.brd}`,borderRadius:12,padding:"18px 20px"}}>
+        <div style={{color:C.txt,fontWeight:700,fontSize:15,marginBottom:6}}>Session-sikkerhed</div>
+        <div style={{color:C.txtM,fontSize:12,marginBottom:14}}>
+          Kontrollér hvor længe en bruger kan være inaktiv før appen automatisk logger ud.
+          Brugeren får en advarsel 2 minutter før. Aktivitet omfatter musebevægelse, tastetryk,
+          klik, scroll og touch.
+        </div>
+        <FRow label="Auto-logout ved inaktivitet" hint="Min 5, max 120 minutter. Ændringer træder i kraft ved næste login.">
+          <div style={{display:"flex",alignItems:"center",gap:10}}>
+            <Input type="number" min="5" max="120"
+              value={adminData?.sikkerhed?.inaktivitetTimeoutMin??30}
+              onChange={v=>{
+                const n=Math.max(5,Math.min(120,Number(v)||30));
+                setAdminData(d=>({...d,sikkerhed:{...(d.sikkerhed||{}),inaktivitetTimeoutMin:n}}));
+              }} style={{width:90}}/>
+            <span style={{color:C.txtM,fontSize:12}}>minutter</span>
+          </div>
+        </FRow>
+      </div>
+
         </div>
       )}
 
-      {/* 
+      {/*
           HJÆLP-TAB
            */}
       {indTab==="hjaelp"&&<HjaelpTab/>}
