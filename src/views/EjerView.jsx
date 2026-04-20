@@ -2,11 +2,23 @@ import React, { useState } from "react";
 import { today } from "../utils/index.js";
 import { C } from "../data/constants.js";
 import { Btn, Input, FRow, Pill } from "../components/primitives.jsx";
+import { hashKode, tjekKode } from "../utils/krypto.js";
 import PlanMedTester from "../tests/PlanMedTester.jsx";
 
 export default function EjerView({patienter,medarbejdere,adminData,setAdminData,authData,isUnlocked,setEjerUnlocked,ejerKode,ejerKonto,setEjerKonto,lokaler=[],lokMeta={},showToast=()=>{},certifikater=[],config={}}){
   const [kodeInput,setKodeInput]=useState("");
   const [fejl,setFejl]=useState("");
+  const [verificerer,setVerificerer]=useState(false);
+  // ejerKode er nu en bcrypt-hash ("$2a$..." eller "$2b$..."), ikke klartekst.
+  // Verifikation er async fordi bcrypt.compare tager ~100ms.
+  const forsoegLasOp = async () => {
+    if(verificerer) return;
+    setVerificerer(true);
+    const ok = await tjekKode(kodeInput, ejerKode);
+    setVerificerer(false);
+    if(ok){setEjerUnlocked(true);setFejl("");}
+    else{setFejl("Forkert kode");setKodeInput("");}
+  };
   const [aktivTab,setAktivTab]=useState("lejere");
   const [visTesterEjer,setVisTesterEjer]=useState(false);
   const [systembesked,setSystembesked]=useState("");
@@ -49,20 +61,14 @@ export default function EjerView({patienter,medarbejdere,adminData,setAdminData,
           placeholder="Indtast kode"
           value={kodeInput}
           onChange={e=>setKodeInput(e.target.value)}
-          onKeyDown={e=>{
-            if(e.key==="Enter"){
-              if(kodeInput===ejerKode){setEjerUnlocked(true);setFejl("");}
-              else{setFejl("Forkert kode");setKodeInput("");}
-            }
-          }}
+          disabled={verificerer}
+          onKeyDown={e=>{ if(e.key==="Enter") forsoegLasOp(); }}
           style={{width:"100%",padding:"10px 14px",borderRadius:8,border:"1.5px solid "+(fejl?C.red:C.brd),fontSize:14,fontFamily:"inherit",outline:"none",marginBottom:fejl?6:16}}
         />
         {fejl&&<div style={{color:C.red,fontSize:12,marginBottom:12}}>{fejl}</div>}
-        <button onClick={()=>{
-          if(kodeInput===ejerKode){setEjerUnlocked(true);setFejl("");}
-          else{setFejl("Forkert kode");setKodeInput("");}
-        }} style={{width:"100%",padding:"10px 0",background:C.acc,color:"#fff",border:"none",borderRadius:8,fontWeight:700,fontSize:14,cursor:"pointer",fontFamily:"inherit"}}>
-          Lås op
+        <button onClick={forsoegLasOp} disabled={verificerer}
+          style={{width:"100%",padding:"10px 0",background:C.acc,color:"#fff",border:"none",borderRadius:8,fontWeight:700,fontSize:14,cursor:verificerer?"wait":"pointer",fontFamily:"inherit",opacity:verificerer?0.6:1}}>
+          {verificerer?"Verificerer...":"Lås op"}
         </button>
       </div>
     );
@@ -377,18 +383,24 @@ export default function EjerView({patienter,medarbejdere,adminData,setAdminData,
                 }}>Gem</Btn>
               </div>
             </FRow>
-            <FRow label="Skift ejer-kode (mindst 4 tegn)">
+            <FRow label="Skift ejer-kode (mindst 12 tegn, blanding af bogstav og tal)">
               <div style={{display:"flex",gap:8}}>
                 <Input value={nyEjerKode} onChange={v=>setNyEjerKode(v)} placeholder="Ny kode"/>
-                <Btn v="outline" small onClick={()=>{
-                  if(!nyEjerKode||nyEjerKode.length<4){setGemtMsg("Kode skal være mindst 4 tegn");return;}
-                  setEjerKonto({...ejerKonto,kode:nyEjerKode});
-                  setGemtMsg("Ejer-kode opdateret");setNyEjerKode("");
+                <Btn v="outline" small onClick={async ()=>{
+                  if(!nyEjerKode||nyEjerKode.length<12){setGemtMsg("Kode skal være mindst 12 tegn");return;}
+                  if(!/[A-Za-zÆØÅæøå]/.test(nyEjerKode)||!/\d/.test(nyEjerKode)){setGemtMsg("Koden skal indeholde mindst ét bogstav og ét tal");return;}
+                  try{
+                    const hash = await hashKode(nyEjerKode);
+                    setEjerKonto({...ejerKonto,kode:hash});
+                    setGemtMsg("Ejer-kode opdateret");setNyEjerKode("");
+                  }catch(e){
+                    setGemtMsg("Kunne ikke kryptere koden: "+e.message);
+                  }
                 }}>Gem</Btn>
               </div>
             </FRow>
             <div style={{marginTop:16,padding:"12px 14px",background:C.ambM,border:"1px solid "+C.amb,borderRadius:8,fontSize:12,color:C.amb,fontWeight:500,marginBottom:12}}>
-              Advarsel: Email og kode gemmes ukrypteret i localStorage. I produktion bør dette erstattes af en server-side løsning med hashing (bcrypt/Argon2).
+              Koden gemmes som bcrypt-hash i localStorage (saltRounds=10). Hash'en kan ikke omdannes til klartekst, men vær opmærksom på at browserens localStorage er tilgængelig for XSS-angreb — kræv HTTPS og CSP i produktion.
             </div>
             {gemtMsg&&<div style={{color:C.grn,fontSize:12,marginTop:10,fontWeight:600}}>{gemtMsg}</div>}
           </div>

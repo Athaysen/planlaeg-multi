@@ -22,6 +22,7 @@ import {
   beregnMaxTimer, beregnRullendeGns, beregnKapStatus,
 } from "./components/primitives.jsx";
 import { runPlanner, analyserRessourcer } from "./planner/runPlanner.js";
+import { hashKode, erBcryptHash } from "./utils/krypto.js";
 import PlanMedTester from "./tests/PlanMedTester.jsx";
 import AuthFlow from "./auth/AuthFlow.jsx";
 import EjerSetupDialog from "./auth/EjerSetupDialog.jsx";
@@ -62,6 +63,18 @@ export default function App(){
     try{return JSON.parse(localStorage.getItem("planmed_ejerKonto")||"null");}catch{return null;}
   });
   const setEjerKonto=(v)=>{setEjerKontoState(v);try{localStorage.setItem("planmed_ejerKonto",JSON.stringify(v));}catch(e){}};
+  // Migration: ældre installationer har kode gemt i klartekst. Hvis den eksisterer
+  // men ikke ser ud som en bcrypt-hash, hash den automatisk ved app-start — så
+  // eksisterende brugere ikke låses ude af opdateringen.
+  useEffect(()=>{
+    if(!ejerKonto||!ejerKonto.kode) return;
+    if(erBcryptHash(ejerKonto.kode)) return;
+    // Klartekst-kode detekteret — hash og gem igen
+    hashKode(ejerKonto.kode).then(hash=>{
+      setEjerKonto({...ejerKonto,kode:hash});
+    }).catch(()=>{});
+    // Kør kun når ejerKonto faktisk ændres; ESLint-regel er slået fra globalt
+  },[ejerKonto?.kode]);
   const EJER_EMAIL=ejerKonto?.email||"";
   const EJER_KODE=ejerKonto?.kode||"";
   const [ejerUnlocked,setEjerUnlocked]=useState(false);

@@ -2,19 +2,33 @@ import React, { useState } from "react";
 import { useTranslation } from "react-i18next";
 import { C } from "../data/constants.js";
 import { Input, FRow, LanguageSwitcher } from "../components/primitives.jsx";
+import { hashKode } from "../utils/krypto.js";
 
 // ── Ejer-opsætningsdialog (førstegangs-opstart) ──
+// Ejer-koden bliver hashet med bcrypt (saltRounds=10) inden den sendes videre
+// til App — den gemmes ALDRIG i klartekst i localStorage.
+// Længde- og kompleksitetskrav følger NIST SP 800-63B (min. 12 tegn,
+// blanding af bogstav + tal).
 export default function EjerSetupDialog({onSave}){
   const {t} = useTranslation();
   const [email,setEmail]=useState("");
   const [kode,setKode]=useState("");
   const [kode2,setKode2]=useState("");
   const [fejl,setFejl]=useState("");
-  const submit=()=>{
+  const [arbejder,setArbejder]=useState(false);
+  const submit=async ()=>{
     if(!email.trim()||!email.includes("@")){setFejl(t("auth.ownerSetup.errEmail"));return;}
-    if(kode.length<4){setFejl(t("auth.ownerSetup.errCodeShort"));return;}
+    if(kode.length<12){setFejl(t("auth.ownerSetup.errCodeShort"));return;}
+    if(!/[A-Za-zÆØÅæøå]/.test(kode)||!/\d/.test(kode)){setFejl(t("auth.ownerSetup.errCodeComplexity"));return;}
     if(kode!==kode2){setFejl(t("auth.ownerSetup.errCodeMatch"));return;}
-    onSave(email.trim(),kode);
+    setArbejder(true); setFejl("");
+    try{
+      const hash = await hashKode(kode);
+      onSave(email.trim(), hash);
+    }catch(e){
+      setFejl("Kunne ikke kryptere koden: "+e.message);
+      setArbejder(false);
+    }
   };
   return(
     <div style={{minHeight:"100vh",display:"flex",alignItems:"center",justifyContent:"center",background:C.bg,fontFamily:"'DM Sans','Segoe UI',sans-serif"}}>
@@ -43,8 +57,8 @@ export default function EjerSetupDialog({onSave}){
         <div style={{marginTop:8,padding:"10px 14px",background:C.ambM,border:"1px solid "+C.amb,borderRadius:8,fontSize:11,color:C.amb,fontWeight:500,marginBottom:14}}>
           {t("auth.ownerSetup.warning")}
         </div>
-        <button onClick={submit} style={{width:"100%",padding:"10px 0",background:C.acc,color:"#fff",border:"none",borderRadius:8,fontWeight:700,fontSize:14,cursor:"pointer",fontFamily:"inherit"}}>
-          {t("auth.ownerSetup.createBtn")}
+        <button onClick={submit} disabled={arbejder} style={{width:"100%",padding:"10px 0",background:C.acc,color:"#fff",border:"none",borderRadius:8,fontWeight:700,fontSize:14,cursor:arbejder?"wait":"pointer",fontFamily:"inherit",opacity:arbejder?0.6:1}}>
+          {arbejder?t("common.loading"):t("auth.ownerSetup.createBtn")}
         </button>
       </div>
     </div>

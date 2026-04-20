@@ -69,16 +69,17 @@
     "errCompany": "Angiv et selskabsnavn",
     "ownerSetup": {
       "title": "Velkommen — Opsæt ejer-konto",
-      "intro": "Dette er første opstart. Opret en ejer-konto for at administrere systemet. Email og kode gemmes lokalt i browseren.",
+      "intro": "Dette er første opstart. Opret en ejer-konto for at administrere systemet. Koden gemmes som bcrypt-hash i browseren.",
       "ownerEmail": "Ejer-email",
-      "ownerCode": "Ejer-kode (mindst 4 tegn)",
+      "ownerCode": "Ejer-kode (mindst 12 tegn, blanding af bogstaver og tal)",
       "ownerCodePlaceholder": "Vælg en kode",
       "repeatCode": "Gentag kode",
       "repeatCodePlaceholder": "Gentag koden",
-      "warning": "Advarsel: Email og kode gemmes ukrypteret i localStorage. I produktion bør dette erstattes af en server-side løsning med hashing (bcrypt/Argon2).",
+      "warning": "Koden gemmes som bcrypt-hash i localStorage (saltRounds=10). Hash'en kan ikke omdannes til klartekst, men vær opmærksom på at browserens localStorage er tilgængelig for XSS-angreb — kræv HTTPS og CSP i produktion.",
       "createBtn": "Opret ejer-konto",
       "errEmail": "Indtast en gyldig email-adresse",
-      "errCodeShort": "Ejer-kode skal være mindst 4 tegn",
+      "errCodeShort": "Ejer-kode skal være mindst 12 tegn",
+      "errCodeComplexity": "Ejer-kode skal indeholde mindst ét bogstav og ét tal",
       "errCodeMatch": "Koderne matcher ikke"
     },
     "dept": {

@@ -69,16 +69,17 @@
     "errCompany": "Enter a company name",
     "ownerSetup": {
       "title": "Welcome — Set up owner account",
-      "intro": "This is the first start. Create an owner account to administer the system. Email and code are stored locally in the browser.",
+      "intro": "This is the first start. Create an owner account to administer the system. The code is stored as a bcrypt hash in the browser.",
       "ownerEmail": "Owner email",
-      "ownerCode": "Owner code (min 4 characters)",
+      "ownerCode": "Owner code (min 12 characters, mix letters and numbers)",
       "ownerCodePlaceholder": "Choose a code",
       "repeatCode": "Repeat code",
       "repeatCodePlaceholder": "Repeat the code",
-      "warning": "Warning: Email and code are stored unencrypted in localStorage. In production this should be replaced with a server-side solution using hashing (bcrypt/Argon2).",
+      "warning": "The code is stored as a bcrypt hash in localStorage (saltRounds=10). The hash cannot be reversed, but note that the browser's localStorage is accessible to XSS attacks — require HTTPS and CSP in production.",
       "createBtn": "Create owner account",
       "errEmail": "Enter a valid email address",
-      "errCodeShort": "Owner code must be at least 4 characters",
+      "errCodeShort": "Owner code must be at least 12 characters",
+      "errCodeComplexity": "Owner code must contain at least one letter and one digit",
       "errCodeMatch": "The codes don't match"
     },
     "dept": {
