@@ -1,10 +1,16 @@
 import React, { useState } from "react";
+import { createRoot } from "react-dom/client";
 import i18n from "../i18n.js";
-import { today, addDays, toMin, fromMin, parseLocalDate, daysBetween, isWeekend, nextWD, getDag, valutaInfo, valutaSymbol, formatBeloeb, VALUTAER } from "../utils/index.js";
+import { Modal, Input, FRow } from "../components/primitives.jsx";
+import { today, addDays, toMin, fromMin, parseLocalDate, daysBetween, isWeekend, nextWD, getDag, valutaInfo, valutaSymbol, formatBeloeb, VALUTAER, validerCPR } from "../utils/index.js";
 import { getUge } from "../utils/eksport.js";
 import { C, KAP_TYPER, buildPatient, ensureKompetencer, DEFAULT_TITLER, STANDARD_AABNINGSTIDER, sC, sB, sL, FORLOB_GALLERI } from "../data/constants.js";
 import { Btn, ErrorBoundary, PeriodeVaelger, beregnMaxTimer, beregnRullendeGns, beregnKapStatus } from "../components/primitives.jsx";
 import { runPlanner, analyserRessourcer } from "../planner/runPlanner.js";
+import { analyserKapacitet } from "../planner/kapacitetsAnalyse.js";
+import { eksporterMarkdown, eksporterCSV } from "../views/kapacitetsEksport.js";
+import { byggEntry, filterAudit, eksporterAuditCSV, HANDLINGER, OBJEKTTYPER } from "../utils/audit.js";
+import { validerEjerKode, beregnStyrke, TOP_100_FAELLESKODER } from "../utils/kodeValidering.js";
 
 export default function PlanMedTester({onClose}){
   const [results,setResults]=useState([]);
@@ -2480,6 +2486,466 @@ export default function PlanMedTester({onClose}){
       // Gendan
       await i18n.changeLanguage(oprindelig||"da");
     }catch(e){log("i18n","i18n suite",false,e.message);}
+
+    // ── SUITE 65: Ejer-kode validering ───────────────────────────────
+    try{
+      // Afvisning — for kort
+      log("KodeVal","'kort' afvises",!validerEjerKode("kort").gyldig);
+      log("KodeVal","'Ab1' (3 tegn) afvises med tooShort",
+        validerEjerKode("Ab1").fejl.includes("auth.ownerSetup.val.tooShort"));
+      log("KodeVal","11-tegns 'Abcdefghij1' afvises",!validerEjerKode("Abcdefghij1").gyldig);
+
+      // Afvisning — mangler lille bogstav
+      const kunStort = validerEjerKode("ABCDEFGHIJ12");
+      log("KodeVal","Kun store bogstaver+tal afvises",!kunStort.gyldig);
+      log("KodeVal","Kun store bogstaver: noLower fejl",
+        kunStort.fejl.includes("auth.ownerSetup.val.noLower"));
+
+      // Afvisning — mangler stort bogstav
+      const kunSmaa = validerEjerKode("abcdefghij12");
+      log("KodeVal","Kun små bogstaver+tal afvises",!kunSmaa.gyldig);
+      log("KodeVal","Kun små bogstaver: noUpper fejl",
+        kunSmaa.fejl.includes("auth.ownerSetup.val.noUpper"));
+
+      // Afvisning — mangler tal
+      const ingenTal = validerEjerKode("Abcdefghijkl");
+      log("KodeVal","Ingen tal afvises",!ingenTal.gyldig);
+      log("KodeVal","Ingen tal: noDigit fejl",
+        ingenTal.fejl.includes("auth.ownerSetup.val.noDigit"));
+
+      // Afvisning — på fælleskoder-liste (case-insensitive)
+      log("KodeVal","'Password1234' (fælleskode) afvises",
+        validerEjerKode("Password1234").fejl.includes("auth.ownerSetup.val.common"));
+      log("KodeVal","'PASSWORD1234' (uppercase fælleskode) afvises",
+        validerEjerKode("PASSWORD1234").fejl.includes("auth.ownerSetup.val.common"));
+      // Kombineret fejl: 'password12' er både for kort, mangler stort bogstav OG er fælleskode
+      const komb = validerEjerKode("password12");
+      log("KodeVal","'password12' har 3 samtidige fejl",
+        komb.fejl.includes("auth.ownerSetup.val.tooShort")
+        && komb.fejl.includes("auth.ownerSetup.val.noUpper")
+        && komb.fejl.includes("auth.ownerSetup.val.common"));
+
+      // Afvisning — tom streng
+      log("KodeVal","Tom streng afvises",!validerEjerKode("").gyldig);
+      log("KodeVal","undefined afvises",!validerEjerKode(undefined).gyldig);
+
+      // Accept — stærk kode (ikke på listen)
+      log("KodeVal","'Xk7mP2qLr9vB' accepteres",validerEjerKode("Xk7mP2qLr9vB").gyldig);
+      log("KodeVal","'MinKat123Hopper' accepteres",validerEjerKode("MinKat123Hopper").gyldig);
+      log("KodeVal","'Solen1Skinner!' accepteres",validerEjerKode("Solen1Skinner!").gyldig);
+      log("KodeVal","Dansk 'Rødgrød3Bager' accepteres",validerEjerKode("Rødgrød3Bager").gyldig);
+
+      // Fejl-array er array
+      const r = validerEjerKode("bad");
+      log("KodeVal","fejl er array",Array.isArray(r.fejl));
+      log("KodeVal","fejl-nøgler har i18n-præfix",
+        r.fejl.every(k=>k.startsWith("auth.ownerSetup.val.")));
+
+      // Top-100 liste sanity check
+      log("KodeVal","TOP_100 indeholder 'password'",
+        TOP_100_FAELLESKODER.includes("password"));
+      log("KodeVal","TOP_100 har mindst 100 entries",
+        TOP_100_FAELLESKODER.length>=100);
+    }catch(e){log("KodeVal","Ejer-kode validering suite",false,e.message);}
+
+    // ── SUITE 66: Styrke-beregner ───────────────────────────────────
+    try{
+      // Tom = score 0 + none-label
+      const tom = beregnStyrke("");
+      log("Styrke","Tom streng: score 0",tom.score===0);
+      log("Styrke","Tom streng: labelKey strength.none",tom.labelKey==="auth.ownerSetup.strength.none");
+
+      // Fælleskode = svag uanset længde
+      const fk = beregnStyrke("password1234");
+      log("Styrke","Fælleskode = svag",fk.score===0&&fk.labelKey==="auth.ownerSetup.strength.weak");
+
+      // < 12 tegn = svag
+      log("Styrke","11 tegn = svag",beregnStyrke("Ab1xxxxxxx!").score===0);
+
+      // 12+ tegn men kun 2/3 komponenter = middel
+      const mid = beregnStyrke("abcdefghij12");
+      log("Styrke","12 tegn + 2 komponenter = middel",mid.score===1);
+      log("Styrke","Middel: labelKey strength.medium",mid.labelKey==="auth.ownerSetup.strength.medium");
+
+      // 12+ tegn + alle 3 komponenter = stærk
+      const st = beregnStyrke("Abcdefghij12");
+      log("Styrke","12 tegn + 3 komponenter = stærk",st.score===2);
+      log("Styrke","Stærk: labelKey strength.strong",st.labelKey==="auth.ownerSetup.strength.strong");
+
+      // 16+ tegn + alle 3 + specialtegn = meget stærk
+      const mst = beregnStyrke("Abcdefghij12345!");
+      log("Styrke","16 tegn + 3 komp + specialtegn = meget stærk",mst.score===3);
+      log("Styrke","Meget stærk: labelKey strength.veryStrong",
+        mst.labelKey==="auth.ownerSetup.strength.veryStrong");
+
+      // Farver er hex-strenge
+      log("Styrke","Farve er hex",typeof st.farve==="string"&&st.farve.startsWith("#"));
+    }catch(e){log("Styrke","Styrke-beregner suite",false,e.message);}
+
+    // ── SUITE 67: CPR-validering (format + modulus-11) ───────────────
+    try{
+      // Tom/manglende input
+      log("CPR","Tom streng: gyldigtFormat=false",validerCPR("").gyldigtFormat===false);
+      log("CPR","Tom streng: advarsel='cpr.tom'",validerCPR("").advarsel==="cpr.tom");
+      log("CPR","null: advarsel='cpr.tom'",validerCPR(null).advarsel==="cpr.tom");
+      log("CPR","undefined: advarsel='cpr.tom'",validerCPR(undefined).advarsel==="cpr.tom");
+
+      // Forkert længde
+      log("CPR","'123': forkertLaengde",validerCPR("123").advarsel==="cpr.forkertLaengde");
+      log("CPR","9 cifre: forkertLaengde",validerCPR("123456789").advarsel==="cpr.forkertLaengde");
+      log("CPR","11 cifre: forkertLaengde",validerCPR("12345678901").advarsel==="cpr.forkertLaengde");
+
+      // Bindestreg skal strippes før længde-check (10 cifre)
+      const m11ok=validerCPR("251248-4916");
+      log("CPR","Bindestreg strippes — gyldigtFormat=true",m11ok.gyldigtFormat===true);
+      log("CPR","'251248-4916' (kendt test-CPR) mod11 OK",m11ok.modulus11Ok===true);
+      log("CPR","'251248-4916' advarsel=null",m11ok.advarsel===null);
+      log("CPR","'251248-4916' dato er Date",m11ok.dato instanceof Date);
+      log("CPR","'251248-4916' år=1948",m11ok.dato.getFullYear()===1948);
+
+      // Ugyldig dato (31. feb)
+      log("CPR","'3102901234': ugyldigDato",validerCPR("3102901234").advarsel==="cpr.ugyldigDato");
+      log("CPR","Måned 13 afvises",validerCPR("0113801234").advarsel==="cpr.ugyldigDato");
+      log("CPR","Dag 00 afvises",validerCPR("0001801234").advarsel==="cpr.ugyldigDato");
+
+      // Modulus-11 fejl (pre-2007 CPR)
+      const m11fejl=validerCPR("010185-0000");
+      log("CPR","'010185-0000' mod11=false",m11fejl.modulus11Ok===false);
+      log("CPR","'010185-0000' advarsel='cpr.modulus11'",m11fejl.advarsel==="cpr.modulus11");
+      log("CPR","'010185-0000' gyldigtFormat=true",m11fejl.gyldigtFormat===true);
+
+      // Moderne CPR (2007+) — modulus-11 forventes NIET at advare selv når det fejler
+      const nyt=validerCPR("0101074000"); // 2007
+      log("CPR","2007-CPR: gyldigtFormat=true",nyt.gyldigtFormat===true);
+      log("CPR","2007-CPR: år=2007",nyt.dato.getFullYear()===2007);
+      log("CPR","2007-CPR: ingen advarsel selv ved mod11-fejl",
+        nyt.modulus11Ok===false && nyt.advarsel===null);
+
+      const nyt2=validerCPR("1503105001"); // 2010
+      log("CPR","2010-CPR: ingen advarsel",nyt2.advarsel===null);
+
+      // Århundredsbestemmelse via 7. ciffer
+      // seventh=0 → 1900
+      const c1900=validerCPR("0101010123");
+      log("CPR","7-ciffer 0 + aa 01 → 1901",c1900.dato&&c1900.dato.getFullYear()===1901);
+      // seventh=4, aa=20 → 2020 (aa<=36)
+      const c2020=validerCPR("0101204001");
+      log("CPR","7-ciffer 4 + aa 20 → 2020",c2020.dato&&c2020.dato.getFullYear()===2020);
+      // seventh=4, aa=80 → 1980 (aa>36)
+      const c1980=validerCPR("0101804001");
+      log("CPR","7-ciffer 4 + aa 80 → 1980",c1980.dato&&c1980.dato.getFullYear()===1980);
+      // seventh=5, aa=50 → 2050 (aa<=57)
+      const c2050=validerCPR("0101505001");
+      log("CPR","7-ciffer 5 + aa 50 → 2050",c2050.dato&&c2050.dato.getFullYear()===2050);
+      // seventh=5, aa=90 → 1890 (aa>57)
+      const c1890=validerCPR("0101905001");
+      log("CPR","7-ciffer 5 + aa 90 → 1890",c1890.dato&&c1890.dato.getFullYear()===1890);
+
+      // Struktur — returnerer altid alle 4 felter
+      const struct=validerCPR("010101-1234");
+      log("CPR","Returværdi har 4 felter",
+        "gyldigtFormat" in struct && "modulus11Ok" in struct
+        && "dato" in struct && "advarsel" in struct);
+
+      // Ikke-cifre strippes (bindestreg, mellemrum)
+      const m3=validerCPR(" 2512 48-49 16 ");
+      log("CPR","Mellemrum + bindestreg strippes",m3.gyldigtFormat===true && m3.modulus11Ok===true);
+
+      // Tal-input accepteres (konverteres til string)
+      log("CPR","Number-input konverteres til string",validerCPR(2512484916).modulus11Ok===true);
+
+      // Mod11-advarsel er KUN advarsel, ikke hård fejl — gyldigtFormat=true
+      log("CPR","Mod11-fejl ikke-blokerende: gyldigtFormat stadig true",
+        validerCPR("010185-0000").gyldigtFormat===true);
+    }catch(e){log("CPR","CPR-validering suite",false,e.message);}
+
+    // ── SUITE 68: Kapacitetsanalyse — lille datasæt kan planlægges ──
+    try{
+      const dage={Mandag:{aktiv:true,start:"08:00",slut:"16:00"},Tirsdag:{aktiv:true,start:"08:00",slut:"16:00"},Onsdag:{aktiv:true,start:"08:00",slut:"16:00"},Torsdag:{aktiv:true,start:"08:00",slut:"16:00"},Fredag:{aktiv:true,start:"08:00",slut:"16:00"}};
+      const pat=[{id:"p1",navn:"P1",cpr:"010101-1234",afdeling:"a1",henvDato:"2026-04-20",status:"aktiv",statusHistorik:[],opgaver:[{id:"o1",opgave:"Samtale",minutter:60,patInv:true,status:"afventer",muligeMed:["M1"],muligeLok:["L1"]}]}];
+      const med=[{id:"m1",navn:"M1",titel:"Psykolog",timer:30,afdeling:"a1",kompetencer:[],arbejdsdage:dage,certifikater:[]}];
+      const lokT={Mandag:{L1:{å:"08:00",l:"16:00"}},Tirsdag:{L1:{å:"08:00",l:"16:00"}},Onsdag:{L1:{å:"08:00",l:"16:00"}},Torsdag:{L1:{å:"08:00",l:"16:00"}},Fredag:{L1:{å:"08:00",l:"16:00"}}};
+      const res=analyserKapacitet(pat,med,["L1"],lokT,{slutDato:"2026-06-01",planFraDato:"2026-04-20"});
+      log("Kapacitet:Lille","Returnerer resume",!!res.resume);
+      log("Kapacitet:Lille","totalOpgaver=1",res.resume.totalOpgaver===1);
+      log("Kapacitet:Lille","kanLadesigGøre=true",res.resume.kanLadesigGøre===true);
+      log("Kapacitet:Lille","planlagte=1",res.resume.planlagte===1);
+      log("Kapacitet:Lille","fejlet=0",res.resume.fejlet===0);
+      log("Kapacitet:Lille","udnyttelse=100",res.resume.udnyttelse===100);
+      log("Kapacitet:Lille","Ingen flaskehalse",res.flaskehalse.length===0);
+      log("Kapacitet:Lille","Ingen scenarier nødvendige",res.scenarier.length===0);
+      log("Kapacitet:Lille","udnyttelse-tabel returneret",Array.isArray(res.udnyttelse));
+    }catch(e){log("Kapacitet:Lille","Lille datasæt suite",false,e.message);}
+
+    // ── SUITE 69: Kapacitetsanalyse — stort datasæt med flaskehals ──
+    try{
+      const dage={Mandag:{aktiv:true,start:"08:00",slut:"16:00"},Tirsdag:{aktiv:true,start:"08:00",slut:"16:00"},Onsdag:{aktiv:true,start:"08:00",slut:"16:00"},Torsdag:{aktiv:true,start:"08:00",slut:"16:00"},Fredag:{aktiv:true,start:"08:00",slut:"16:00"}};
+      const pat=Array.from({length:20},(_,i)=>({id:"p"+i,navn:"P"+i,cpr:"010101-1234",afdeling:"a1",henvDato:"2026-04-20",status:"aktiv",statusHistorik:[],opgaver:Array.from({length:5},(_,j)=>({id:"o"+i+"_"+j,opgave:"Samtale",minutter:90,patInv:true,status:"afventer",muligeMed:["M1","M2"],muligeLok:["L1"]}))}));
+      const med=[{id:"m1",navn:"M1",titel:"Psykolog",timer:30,afdeling:"a1",kompetencer:[],arbejdsdage:dage,certifikater:[]},{id:"m2",navn:"M2",titel:"Psykolog",timer:30,afdeling:"a1",kompetencer:[],arbejdsdage:dage,certifikater:[]}];
+      const lokT={Mandag:{L1:{å:"08:00",l:"16:00"}},Tirsdag:{L1:{å:"08:00",l:"16:00"}},Onsdag:{L1:{å:"08:00",l:"16:00"}},Torsdag:{L1:{å:"08:00",l:"16:00"}},Fredag:{L1:{å:"08:00",l:"16:00"}}};
+      const res=analyserKapacitet(pat,med,["L1"],lokT,{slutDato:"2026-05-04",planFraDato:"2026-04-20",titlerCfg:[{navn:"Psykolog",defaultKrPrTime:800}],taktDefaults:{Psykolog:{krPrTime:800}}});
+      log("Kapacitet:Stor","totalOpgaver=100",res.resume.totalOpgaver===100);
+      log("Kapacitet:Stor","kanLadesigGøre=false",res.resume.kanLadesigGøre===false);
+      log("Kapacitet:Stor","Har fejlet opgaver",res.resume.fejlet>0);
+      log("Kapacitet:Stor","udnyttelse<100%",res.resume.udnyttelse<100);
+      log("Kapacitet:Stor","Mindst 1 flaskehals identificeret",res.flaskehalse.length>=1);
+      log("Kapacitet:Stor","Flaskehalse sorteret descending efter delta",
+        res.flaskehalse.every((f,i,a)=>i===0||a[i-1].delta>=f.delta));
+      log("Kapacitet:Stor","Flaskehals har type+navn+delta",
+        res.flaskehalse.every(f=>f.type&&f.navn&&typeof f.delta==="number"));
+      log("Kapacitet:Stor","Mindst 1 scenarie genereret",res.scenarier.length>=1);
+      log("Kapacitet:Stor","Scenarier sorteret ascending efter omkostning",
+        res.scenarier.every((s,i,a)=>i===0||a[i-1].månedligOmkostning<=s.månedligOmkostning));
+      log("Kapacitet:Stor","Scenario har id+beskrivelse+nyUdnyttelse",
+        res.scenarier.every(s=>s.id&&s.beskrivelse&&typeof s.nyUdnyttelse==="number"));
+      log("Kapacitet:Stor","Udnyttelses-tabel har rows",res.udnyttelse.length>0);
+      log("Kapacitet:Stor","Udnyttelses-rows har navn+type+procent+farve",
+        res.udnyttelse.every(u=>u.navn&&u.type&&typeof u.procent==="number"&&u.farve));
+      // Forlæng-scenariet bør findes (stor rigelig ansat kan ikke 100%, men +12 uger typisk kan)
+      const forlaeng=res.scenarier.find(s=>s.id==="forlaeng");
+      if(forlaeng){
+        log("Kapacitet:Stor","Forlæng-scenario når 100%",forlaeng.nyUdnyttelse===100);
+        log("Kapacitet:Stor","Forlæng-scenario har 0 i månedlig omkostning",forlaeng.månedligOmkostning===0);
+      }
+    }catch(e){log("Kapacitet:Stor","Stort datasæt suite",false,e.message);}
+
+    // ── SUITE 70: Kapacitetsanalyse — struktur + edge cases ─────────
+    try{
+      // Tom patient-liste → alt kan planlægges
+      const tom=analyserKapacitet([],[],[],{},{slutDato:"2026-06-01",planFraDato:"2026-04-20"});
+      log("Kapacitet:Edge","Tom input: kanLadesigGøre=true",tom.resume.kanLadesigGøre===true);
+      log("Kapacitet:Edge","Tom input: totalOpgaver=0",tom.resume.totalOpgaver===0);
+      log("Kapacitet:Edge","Tom input: flaskehalse=[]",tom.flaskehalse.length===0);
+
+      // slutDato mangler → throw
+      let threw=false;
+      try{analyserKapacitet([],[],[],{},{});}catch{threw=true;}
+      log("Kapacitet:Edge","Manglende slutDato kaster fejl",threw===true);
+
+      // maxDage udregnes korrekt
+      const tom2=analyserKapacitet([],[],[],{},{slutDato:"2026-05-04",planFraDato:"2026-04-20"});
+      log("Kapacitet:Edge","maxDage=14 for 14-dages periode",tom2.resume.maxDage===14);
+
+      // Afdelings-filter filtrerer korrekt
+      const dage={Mandag:{aktiv:true,start:"08:00",slut:"16:00"}};
+      const pat=[
+        {id:"p1",navn:"P1",cpr:"1",afdeling:"a1",henvDato:"2026-04-20",status:"aktiv",statusHistorik:[],opgaver:[{id:"o1",opgave:"S",minutter:60,patInv:true,status:"afventer",muligeMed:["M1"],muligeLok:["L1"]}]},
+        {id:"p2",navn:"P2",cpr:"2",afdeling:"a2",henvDato:"2026-04-20",status:"aktiv",statusHistorik:[],opgaver:[{id:"o2",opgave:"S",minutter:60,patInv:true,status:"afventer",muligeMed:["M1"],muligeLok:["L1"]}]},
+      ];
+      const med=[{id:"m1",navn:"M1",titel:"Psykolog",timer:30,afdeling:"a1",kompetencer:[],arbejdsdage:dage,certifikater:[]}];
+      const lokT={Mandag:{L1:{å:"08:00",l:"16:00"}}};
+      const resA1=analyserKapacitet(pat,med,["L1"],lokT,{slutDato:"2026-06-01",planFraDato:"2026-04-20",afdelinger:["a1"]});
+      log("Kapacitet:Edge","Afdelings-filter reducerer totalOpgaver",resA1.resume.totalOpgaver===1);
+    }catch(e){log("Kapacitet:Edge","Kapacitet edge cases",false,e.message);}
+
+    // ── SUITE 71: Kapacitet — kombi-scenarie + dagfordeling + eksport ─
+    try{
+      const dage={Mandag:{aktiv:true,start:"08:00",slut:"16:00"},Tirsdag:{aktiv:true,start:"08:00",slut:"16:00"},Onsdag:{aktiv:true,start:"08:00",slut:"16:00"},Torsdag:{aktiv:true,start:"08:00",slut:"16:00"},Fredag:{aktiv:true,start:"08:00",slut:"16:00"}};
+      const pat=Array.from({length:20},(_,i)=>({id:"p"+i,navn:"P"+i,cpr:"x",afdeling:"a1",henvDato:"2026-04-20",status:"aktiv",statusHistorik:[],opgaver:Array.from({length:5},(_,j)=>({id:"o"+i+"_"+j,opgave:"Samtale",minutter:90,patInv:true,status:"afventer",muligeMed:["M1","M2"],muligeLok:["L1"]}))}));
+      const med=[{id:"m1",navn:"M1",titel:"Psykolog",timer:30,afdeling:"a1",kompetencer:[],arbejdsdage:dage,certifikater:[]},{id:"m2",navn:"M2",titel:"Psykolog",timer:30,afdeling:"a1",kompetencer:[],arbejdsdage:dage,certifikater:[]}];
+      const lokT={Mandag:{L1:{å:"08:00",l:"16:00"}},Tirsdag:{L1:{å:"08:00",l:"16:00"}},Onsdag:{L1:{å:"08:00",l:"16:00"}},Torsdag:{L1:{å:"08:00",l:"16:00"}},Fredag:{L1:{å:"08:00",l:"16:00"}}};
+      const res=analyserKapacitet(pat,med,["L1"],lokT,{slutDato:"2026-05-04",planFraDato:"2026-04-20",titlerCfg:[{navn:"Psykolog",defaultKrPrTime:800}],taktDefaults:{Psykolog:{krPrTime:800}}});
+
+      // Kombi-scenarie genereret
+      const kombi=res.scenarier.find(s=>s.id==="kombi");
+      log("Kapacitet:Avanc","Kombi-scenarie findes",!!kombi);
+      log("Kapacitet:Avanc","Kombi har type=kombination",kombi?.type==="kombination");
+      log("Kapacitet:Avanc","Kombi har positiv ekstraTimerPrUge",kombi?.ekstraTimerPrUge>0);
+      log("Kapacitet:Avanc","Kombi har positiv omkostning",kombi?.månedligOmkostning>0);
+
+      // Dagfordeling på top-flaskehals
+      const top=res.flaskehalse[0];
+      log("Kapacitet:Avanc","Top-flaskehals har dagFordeling",Array.isArray(top?.dagFordeling));
+      log("Kapacitet:Avanc","dagFordeling har 5 hverdage",top?.dagFordeling?.length===5);
+      log("Kapacitet:Avanc","dagFordeling inkluderer alle hverdage",
+        ["Mandag","Tirsdag","Onsdag","Torsdag","Fredag"].every(d=>top.dagFordeling.some(x=>x.dag===d)));
+      log("Kapacitet:Avanc","Hver dag har procent (enten tal eller null)",
+        top?.dagFordeling?.every(d=>d.procent===null||typeof d.procent==="number"));
+
+      // Mindst én dag har >50% booket (vi har vidst stor overbelastning)
+      log("Kapacitet:Avanc","Mindst én dag har målbar procent",
+        top?.dagFordeling?.some(d=>d.procent!=null&&d.procent>0));
+
+      // Markdown-eksport
+      const md=eksporterMarkdown(res,{valuta:"DKK"});
+      log("Eksport","Markdown er en streng",typeof md==="string");
+      log("Eksport","Markdown indeholder titel",md.includes("# kapacitet.title")||md.includes("# Kapacitetsanalyse"));
+      log("Eksport","Markdown indeholder flaskehalse-sektion",md.includes("kapacitet.flaskehalseTitle")||md.toLowerCase().includes("flaskehals"));
+      log("Eksport","Markdown indeholder scenarier-sektion",md.includes("kapacitet.scenarierTitle")||md.toLowerCase().includes("scenari"));
+      log("Eksport","Markdown indeholder udnyttelses-rækker",
+        res.udnyttelse.length===0 || res.udnyttelse.some(u=>md.includes(u.navn)));
+
+      // CSV-eksport
+      const csv=eksporterCSV(res);
+      log("Eksport","CSV er en streng",typeof csv==="string");
+      log("Eksport","CSV bruger ';'-separator",csv.includes(";"));
+      log("Eksport","CSV har header + rows",csv.split("\n").length>=2);
+      log("Eksport","CSV indeholder mindst én ressource",
+        res.udnyttelse.length===0 || res.udnyttelse.some(u=>csv.includes(u.navn)));
+
+      // CSV-escape for navne med semikolon/citat
+      const fakeRes={udnyttelse:[{navn:'M;N"O',type:"medarbejder",kapacitet:3600,bookede:1800,procent:50,farve:"#000"}]};
+      const csv2=eksporterCSV(fakeRes);
+      log("Eksport","CSV escaper navne med semikolon/citat",csv2.includes(`"M;N""O"`));
+    }catch(e){log("Kapacitet:Avanc","Avanc + eksport suite",false,e.message);}
+
+    // ── SUITE 72: Audit-log — struktur, filter, eksport ────────────
+    try{
+      const bruger={id:"u1",navn:"Test Admin",email:"test@klinik.dk",rolle:"admin",afdeling:"a1"};
+
+      // byggEntry har alle påkrævede felter
+      const e1=byggEntry("opslag","patient","p123",{navn:"Ole"},bruger);
+      log("Audit","Entry har id",!!e1.id);
+      log("Audit","Entry har dato (ISO format)",/^\d{4}-\d{2}-\d{2}$/.test(e1.dato));
+      log("Audit","Entry har tid",!!e1.tid);
+      log("Audit","Entry har numerisk timestamp",typeof e1.timestamp==="number");
+      log("Audit","Entry har audit:true flag",e1.audit===true);
+      log("Audit","Entry har handling",e1.handling==="opslag");
+      log("Audit","Entry har objekttype",e1.objekttype==="patient");
+      log("Audit","Entry har objektId som string",e1.objektId==="p123");
+      log("Audit","Entry har detaljer",e1.detaljer?.navn==="Ole");
+      log("Audit","Entry har brugerId",e1.brugerId==="u1");
+      log("Audit","Entry har rolle",e1.rolle==="admin");
+      log("Audit","Entry har afdeling",e1.afdeling==="a1");
+      log("Audit","Entry har bagudkompat tekst",typeof e1.tekst==="string"&&e1.tekst.length>0);
+      log("Audit","Entry har bagudkompat type",e1.type==="opslag");
+
+      // Enum-export er korrekt
+      log("Audit","HANDLINGER indeholder alle 5 handlinger",
+        HANDLINGER.length===5 && ["opslag","oprettelse","ændring","sletning","eksport"].every(h=>HANDLINGER.includes(h)));
+      log("Audit","OBJEKTTYPER indeholder alle 5 typer",
+        OBJEKTTYPER.length===5 && ["patient","opgave","medarbejder","lokale","forløb"].every(o=>OBJEKTTYPER.includes(o)));
+
+      // Entry-tekst reflekterer handling
+      const e2=byggEntry("oprettelse","patient","p2",{navn:"Anna"},bruger);
+      log("Audit","Oprettelse-entry har 'oprettede' i tekst",/oprettede/i.test(e2.tekst));
+      const e3=byggEntry("ændring","patient","p3",{felt:"status",før:"aktiv",efter:"udmeldt"},bruger);
+      log("Audit","Ændring-entry inkluderer felt-navn i tekst",/status/.test(e3.tekst));
+      const e4=byggEntry("eksport","patient","bulk",{antal:42,format:"csv"},bruger);
+      log("Audit","Eksport-entry inkluderer antal",/42/.test(e4.tekst));
+
+      // ── filterAudit ──
+      const log1=[
+        byggEntry("opslag","patient","p1",{},{navn:"Alice",rolle:"admin",afdeling:"a1"}),
+        byggEntry("ændring","patient","p1",{felt:"navn"},{navn:"Bob",rolle:"medarbejder",afdeling:"a2"}),
+        byggEntry("sletning","medarbejder","m5",{},{navn:"Alice",rolle:"admin",afdeling:"a1"}),
+        byggEntry("eksport","patient","bulk",{antal:10},{navn:"Alice",rolle:"admin",afdeling:"a1"}),
+      ];
+      log("Audit","filter handling: opslag",filterAudit(log1,{handling:"opslag"}).length===1);
+      log("Audit","filter objekttype: medarbejder",filterAudit(log1,{objekttype:"medarbejder"}).length===1);
+      log("Audit","filter bruger: 'alice'",filterAudit(log1,{bruger:"alice"}).length===3);
+      log("Audit","filter patientId: p1",filterAudit(log1,{patientId:"p1"}).length===2);
+      log("Audit","filter patientId ignorerer ikke-patient",filterAudit(log1,{patientId:"m5"}).length===0);
+      log("Audit","filter fritekst 'navn' matcher detaljer",filterAudit(log1,{fritekst:"navn"}).length>=1);
+      log("Audit","Tomme filtre returnerer alt",filterAudit(log1,{}).length===4);
+      log("Audit","Kombineret filter",
+        filterAudit(log1,{handling:"eksport",bruger:"alice"}).length===1);
+
+      // Dato-filter
+      const log2=[
+        {...byggEntry("opslag","patient","p1",{},bruger),dato:"2026-01-01"},
+        {...byggEntry("opslag","patient","p2",{},bruger),dato:"2026-03-15"},
+        {...byggEntry("opslag","patient","p3",{},bruger),dato:"2026-06-01"},
+      ];
+      log("Audit","filter datoFra inkluderer grænsen",filterAudit(log2,{datoFra:"2026-03-15"}).length===2);
+      log("Audit","filter datoTil inkluderer grænsen",filterAudit(log2,{datoTil:"2026-03-15"}).length===2);
+      log("Audit","filter datoFra+datoTil range",
+        filterAudit(log2,{datoFra:"2026-02-01",datoTil:"2026-04-01"}).length===1);
+
+      // ── eksporterAuditCSV ──
+      const csv=eksporterAuditCSV(log1);
+      log("Audit","CSV er string",typeof csv==="string");
+      log("Audit","CSV har header-række",csv.split("\n")[0].includes("Handling"));
+      log("Audit","CSV har én række per entry + header",csv.split("\n").length===log1.length+1);
+      log("Audit","CSV bruger semikolon-separator",csv.includes(";"));
+      log("Audit","CSV indeholder objekt-id",csv.includes("p1"));
+      log("Audit","CSV indeholder handling",csv.includes("opslag"));
+
+      // CSV-escape af specialtegn
+      const csvEsc=eksporterAuditCSV([byggEntry("opslag","patient",`p"1;test`,{},bruger)]);
+      log("Audit","CSV escaper semikolon + citat korrekt",csvEsc.includes('"p""1;test"'));
+
+      // Ukendt handling afvises
+      let fikUkendt=false;
+      try{
+        const bad=byggEntry("UKENDT","patient","p1",{},bruger);
+        // byggEntry validerer ikke selv; auditLog gør det. Så vi verificerer i stedet
+        // at byggEntry bevarer handlingen som-er (intet crash), mens enum er kanonisk.
+        fikUkendt=bad.handling==="UKENDT";
+      }catch(_){fikUkendt=false;}
+      log("Audit","byggEntry uden validering bevarer handling",fikUkendt===true);
+
+      // Append-only-mønster: entries har monotone timestamps
+      const e5=byggEntry("opslag","patient","p1",{},bruger);
+      const e6=byggEntry("opslag","patient","p2",{},bruger);
+      log("Audit","Entry-timestamps er monotont stigende",e6.timestamp>=e5.timestamp);
+    }catch(e){log("Audit","Audit suite",false,e.message);}
+
+    // ── SUITE 73: WCAG 2.1 AA — farvekontrast + aria ──────────────
+    try{
+      // Kontrast-beregning jf. WCAG 2.1 formel (relative luminance).
+      const luminance=(hex)=>{
+        const r=parseInt(hex.slice(1,3),16)/255;
+        const g=parseInt(hex.slice(3,5),16)/255;
+        const b=parseInt(hex.slice(5,7),16)/255;
+        const lin=(v)=>v<=0.04045?v/12.92:Math.pow((v+0.055)/1.055,2.4);
+        return 0.2126*lin(r)+0.7152*lin(g)+0.0722*lin(b);
+      };
+      const kontrast=(a,b)=>{
+        const la=luminance(a),lb=luminance(b);
+        const bright=Math.max(la,lb),dim=Math.min(la,lb);
+        return (bright+0.05)/(dim+0.05);
+      };
+      const hvid="#ffffff";
+
+      log("WCAG:Kontrast","txt på hvid ≥ 7:1 (AAA)",kontrast(C.txt,hvid)>=7);
+      log("WCAG:Kontrast","txtD på hvid ≥ 4.5:1 (AA normal)",kontrast(C.txtD,hvid)>=4.5);
+      log("WCAG:Kontrast","txtM på hvid ≥ 4.5:1 (AA normal)",kontrast(C.txtM,hvid)>=4.5);
+      log("WCAG:Kontrast","acc på hvid ≥ 4.5:1 (AA normal)",kontrast(C.acc,hvid)>=4.5);
+      log("WCAG:Kontrast","txtM på bg ≥ 4.5:1 (AA normal)",kontrast(C.txtM,C.bg)>=4.5);
+      log("WCAG:Kontrast","txt på s2 ≥ 4.5:1 (AA normal)",kontrast(C.txt,C.s2)>=4.5);
+
+      // Render Modal i test-container og verificér aria
+      const host=document.createElement("div");
+      host.style.position="fixed"; host.style.left="-9999px"; document.body.appendChild(host);
+      const root=createRoot(host);
+      await new Promise(resolve=>{
+        root.render(
+          React.createElement(Modal,{title:"Test-dialog",onClose:()=>{},w:400},
+            React.createElement(FRow,{label:"Navn"},React.createElement(Input,{value:"",onChange:()=>{},placeholder:"Test"}))
+          )
+        );
+        setTimeout(resolve,50);
+      });
+
+      const dialog=host.querySelector('[role="dialog"]');
+      log("WCAG:Modal","Modal har role=dialog",!!dialog);
+      log("WCAG:Modal","Modal har aria-modal=true",dialog?.getAttribute("aria-modal")==="true");
+      log("WCAG:Modal","Modal har aria-labelledby",!!dialog?.getAttribute("aria-labelledby"));
+      const labelledbyId=dialog?.getAttribute("aria-labelledby");
+      const titel=labelledbyId?host.querySelector(`#${CSS.escape(labelledbyId)}`):null;
+      log("WCAG:Modal","aria-labelledby peger på eksisterende element",!!titel);
+      log("WCAG:Modal","Titel-element indeholder dialog-titel",titel?.textContent==="Test-dialog");
+      log("WCAG:Modal","Luk-knap har aria-label",!!host.querySelector('button[aria-label="Luk"]'));
+
+      // FRow + Input kobling
+      const label=host.querySelector("label");
+      const input=host.querySelector("input");
+      log("WCAG:Label","label har htmlFor",!!label?.getAttribute("for"));
+      log("WCAG:Label","input har matchende id",input?.id===label?.getAttribute("for"));
+      log("WCAG:Label","input.id er ikke tom",!!input?.id);
+
+      // Cleanup
+      root.unmount(); host.remove();
+
+      // Escape-handler kan ikke let testes uden at simulere keydown,
+      // men vi verificerer i det mindste at window-listener registreres
+      // korrekt ved at mounte/un-mounte og tjekke at ingen errors kastes.
+      log("WCAG:Modal","Unmount uden exceptions",true);
+
+      // axe-core cli kan ikke køres programmatisk her (kræver Chrome).
+      // Se docs/wcag-rapport.md for manuel axe-kørsel i CI.
+    }catch(e){log("WCAG","WCAG suite",false,e.message);}
 
     setRunning(false);setDone(true);
   };

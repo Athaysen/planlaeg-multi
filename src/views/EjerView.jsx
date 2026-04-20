@@ -1,12 +1,27 @@
-import React, { useState } from "react";
+import React, { useState, useMemo } from "react";
+import { useTranslation } from "react-i18next";
 import { today } from "../utils/index.js";
 import { C } from "../data/constants.js";
 import { Btn, Input, FRow, Pill } from "../components/primitives.jsx";
+import { hashKode, tjekKode } from "../utils/krypto.js";
+import { validerEjerKode, beregnStyrke, styrkeGradient } from "../utils/kodeValidering.js";
 import PlanMedTester from "../tests/PlanMedTester.jsx";
 
 export default function EjerView({patienter,medarbejdere,adminData,setAdminData,authData,isUnlocked,setEjerUnlocked,ejerKode,ejerKonto,setEjerKonto,lokaler=[],lokMeta={},showToast=()=>{},certifikater=[],config={}}){
+  const {t}=useTranslation();
   const [kodeInput,setKodeInput]=useState("");
   const [fejl,setFejl]=useState("");
+  const [verificerer,setVerificerer]=useState(false);
+  // ejerKode er nu en bcrypt-hash ("$2a$..." eller "$2b$..."), ikke klartekst.
+  // Verifikation er async fordi bcrypt.compare tager ~100ms.
+  const forsoegLasOp = async () => {
+    if(verificerer) return;
+    setVerificerer(true);
+    const ok = await tjekKode(kodeInput, ejerKode);
+    setVerificerer(false);
+    if(ok){setEjerUnlocked(true);setFejl("");}
+    else{setFejl("Forkert kode");setKodeInput("");}
+  };
   const [aktivTab,setAktivTab]=useState("lejere");
   const [visTesterEjer,setVisTesterEjer]=useState(false);
   const [systembesked,setSystembesked]=useState("");
@@ -49,20 +64,14 @@ export default function EjerView({patienter,medarbejdere,adminData,setAdminData,
           placeholder="Indtast kode"
           value={kodeInput}
           onChange={e=>setKodeInput(e.target.value)}
-          onKeyDown={e=>{
-            if(e.key==="Enter"){
-              if(kodeInput===ejerKode){setEjerUnlocked(true);setFejl("");}
-              else{setFejl("Forkert kode");setKodeInput("");}
-            }
-          }}
+          disabled={verificerer}
+          onKeyDown={e=>{ if(e.key==="Enter") forsoegLasOp(); }}
           style={{width:"100%",padding:"10px 14px",borderRadius:8,border:"1.5px solid "+(fejl?C.red:C.brd),fontSize:14,fontFamily:"inherit",outline:"none",marginBottom:fejl?6:16}}
         />
         {fejl&&<div style={{color:C.red,fontSize:12,marginBottom:12}}>{fejl}</div>}
-        <button onClick={()=>{
-          if(kodeInput===ejerKode){setEjerUnlocked(true);setFejl("");}
-          else{setFejl("Forkert kode");setKodeInput("");}
-        }} style={{width:"100%",padding:"10px 0",background:C.acc,color:"#fff",border:"none",borderRadius:8,fontWeight:700,fontSize:14,cursor:"pointer",fontFamily:"inherit"}}>
-          Lås op
+        <button onClick={forsoegLasOp} disabled={verificerer}
+          style={{width:"100%",padding:"10px 0",background:C.acc,color:"#fff",border:"none",borderRadius:8,fontWeight:700,fontSize:14,cursor:verificerer?"wait":"pointer",fontFamily:"inherit",opacity:verificerer?0.6:1}}>
+          {verificerer?"Verificerer...":"Lås op"}
         </button>
       </div>
     );
@@ -377,18 +386,25 @@ export default function EjerView({patienter,medarbejdere,adminData,setAdminData,
                 }}>Gem</Btn>
               </div>
             </FRow>
-            <FRow label="Skift ejer-kode (mindst 4 tegn)">
+            <FRow label={t("auth.ownerSetup.changeCodeLabel")}>
               <div style={{display:"flex",gap:8}}>
-                <Input value={nyEjerKode} onChange={v=>setNyEjerKode(v)} placeholder="Ny kode"/>
-                <Btn v="outline" small onClick={()=>{
-                  if(!nyEjerKode||nyEjerKode.length<4){setGemtMsg("Kode skal være mindst 4 tegn");return;}
-                  setEjerKonto({...ejerKonto,kode:nyEjerKode});
-                  setGemtMsg("Ejer-kode opdateret");setNyEjerKode("");
+                <Input value={nyEjerKode} onChange={v=>setNyEjerKode(v)} placeholder={t("auth.ownerSetup.ownerCodePlaceholder")}/>
+                <Btn v="outline" small onClick={async ()=>{
+                  const v = validerEjerKode(nyEjerKode);
+                  if(!v.gyldig){setGemtMsg(v.fejl.map(k=>t(k)).join(" · "));return;}
+                  try{
+                    const hash = await hashKode(nyEjerKode);
+                    setEjerKonto({...ejerKonto,kode:hash});
+                    setGemtMsg("Ejer-kode opdateret");setNyEjerKode("");
+                  }catch(e){
+                    setGemtMsg("Kunne ikke kryptere koden: "+e.message);
+                  }
                 }}>Gem</Btn>
               </div>
+              <KodeStyrkeBlok kode={nyEjerKode} t={t}/>
             </FRow>
             <div style={{marginTop:16,padding:"12px 14px",background:C.ambM,border:"1px solid "+C.amb,borderRadius:8,fontSize:12,color:C.amb,fontWeight:500,marginBottom:12}}>
-              Advarsel: Email og kode gemmes ukrypteret i localStorage. I produktion bør dette erstattes af en server-side løsning med hashing (bcrypt/Argon2).
+              Koden gemmes som bcrypt-hash i localStorage (saltRounds=10). Hash'en kan ikke omdannes til klartekst, men vær opmærksom på at browserens localStorage er tilgængelig for XSS-angreb — kræv HTTPS og CSP i produktion.
             </div>
             {gemtMsg&&<div style={{color:C.grn,fontSize:12,marginTop:10,fontWeight:600}}>{gemtMsg}</div>}
           </div>
@@ -406,6 +422,32 @@ export default function EjerView({patienter,medarbejdere,adminData,setAdminData,
         </div>
       )}
       {visTesterEjer&&<PlanMedTester onClose={()=>setVisTesterEjer(false)}/>}
+    </div>
+  );
+}
+
+// Live styrke-bar + fejlliste under "Skift ejer-kode"-inputtet.
+function KodeStyrkeBlok({kode, t}){
+  const validering = useMemo(()=>validerEjerKode(kode),[kode]);
+  const styrke = useMemo(()=>beregnStyrke(kode),[kode]);
+  const pct = kode ? Math.max(8,((styrke.score+1)/4)*100) : 0;
+  if(!kode) return null;
+  return (
+    <div style={{marginTop:6}}>
+      <div style={{position:"relative",height:6,borderRadius:4,background:"#e5e7eb",overflow:"hidden"}}>
+        <div style={{position:"absolute",top:0,left:0,bottom:0,width:pct+"%",background:styrkeGradient(),transition:"width .15s ease-out"}}/>
+      </div>
+      <div style={{display:"flex",justifyContent:"space-between",marginTop:3,fontSize:10,color:C.txtM}}>
+        <span>{t("auth.ownerSetup.strength.label")}</span>
+        <span style={{color:styrke.farve,fontWeight:700}}>{t(styrke.labelKey)}</span>
+      </div>
+      {!validering.gyldig && (
+        <ul style={{margin:"6px 0 0 0",padding:"0 0 0 16px",fontSize:11,lineHeight:1.5}}>
+          {validering.fejl.map(k=>(
+            <li key={k} style={{color:C.red}}>{t(k)}</li>
+          ))}
+        </ul>
+      )}
     </div>
   );
 }

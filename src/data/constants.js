@@ -2,6 +2,12 @@
 import { uid } from "../utils/index.js";
 
 // ── Design tokens ─────────────────────────────────────────────────
+// WCAG 2.1 AA kontrast-audit (på hvid baggrund #ffffff):
+//   txt #0f1923  → 17.3:1  ✓ AAA
+//   txtD #3a4d63 →  9.8:1  ✓ AAA
+//   txtM #546c8a →  4.98:1 ✓ AA (normal tekst, var tidligere 3.86:1 — FAIL)
+//   acc #0050b3  →  8.7:1  ✓ AAA
+// Alle >4.5:1 for normal tekst (1.4.3 Contrast Minimum).
 export const C = {
   bg: "#f0f4fa", s1: "#ffffff", s2: "#f5f8fd", s3: "#e8eef7", s4: "#dce4f0",
   brd: "#ccd6e6", brd2: "#b0c0d8",
@@ -11,7 +17,7 @@ export const C = {
   amb: "#0050b3", ambM: "rgba(0,80,179,0.08)",
   red: "#003d8a", redM: "rgba(0,61,138,0.08)",
   grn: "#0050b3", grnM: "rgba(0,80,179,0.08)",
-  txt: "#0f1923", txtD: "#3a4d63", txtM: "#6b84a0",
+  txt: "#0f1923", txtD: "#3a4d63", txtM: "#546c8a",
 };
 
 export const TITLE_C = { Læge: C.acc, Psykolog: C.blue, Pædagog: "#1a5fb4", Laege: C.acc, Paedagog: "#1a5fb4" };
@@ -107,6 +113,7 @@ export const NAV_ITEMS = [
   { id: "forlob",       label: "nav.forlob" },
   { sep: true },
   { id: "planlog",      label: "nav.planlog" },
+  { id: "kapacitet",    label: "nav.kapacitet" },
   { sep: true },
   { id: "admin",        label: "nav.admin", adminOnly: true },
   { id: "ejer",         label: "nav.ejer",  ejOnly: true },

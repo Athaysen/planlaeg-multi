@@ -1,3 +1,13 @@
+// ══════════════════════════════════════════════════════════════════════════
+//  SIKKERHED: INGEN HARDKODEDE IDENTITETER MÅ COMMITTES
+// ══════════════════════════════════════════════════════════════════════════
+//  - authData, ejer-email, selskabsnavn og lignende skal ALTID starte tomme.
+//  - Demo-data som startpatienter, start-medarbejdere og lign. må kun loades
+//    når import.meta.env.DEV er true (lokal udvikling). I production-builds
+//    skal appen starte helt rent og tvinge brugeren gennem wizard.
+//  - Hvis du har brug for at teste med sample-data, brug "Indlæs demo-data"-
+//    knappen i Indstillinger i stedet for at committe defaults.
+// ══════════════════════════════════════════════════════════════════════════
 import React, { useState, useEffect, useCallback, useMemo, useRef } from "react";
 import { useTranslation } from "react-i18next";
 import i18n, { SPROG } from "./i18n.js";
@@ -22,6 +32,9 @@ import {
   beregnMaxTimer, beregnRullendeGns, beregnKapStatus,
 } from "./components/primitives.jsx";
 import { runPlanner, analyserRessourcer } from "./planner/runPlanner.js";
+import { hashKode, erBcryptHash } from "./utils/krypto.js";
+import { AuditProvider, byggEntry } from "./utils/audit.js";
+import { useInaktivitetsTimer } from "./hooks/useInaktivitetsTimer.js";
 import PlanMedTester from "./tests/PlanMedTester.jsx";
 import AuthFlow from "./auth/AuthFlow.jsx";
 import EjerSetupDialog from "./auth/EjerSetupDialog.jsx";
@@ -30,6 +43,7 @@ import AdminView from "./admin/AdminView.jsx";
 import Dashboard from "./views/Dashboard.jsx";
 import KalenderView from "./views/KalenderView.jsx";
 import PlanLogView from "./views/PlanLogView.jsx";
+import KapacitetsView from "./views/KapacitetsView.jsx";
 import EjerView from "./views/EjerView.jsx";
 import IndstillingerView from "./views/IndstillingerView.jsx";
 import PatientKalenderView from "./views/PatientKalenderView.jsx";
@@ -49,14 +63,35 @@ import {
 // ===============================================
 export default function App(){
   const {t} = useTranslation();
-  const [authStage,setAuthStage]=useState("app");
-  const [authData,setAuthData]=useState({email:"admin@psykiatri.rm.dk",password:"",navn:"Systemadministrator",selskab:"Psykiatri Region Midtjylland",afdeling:"Alle afdelinger",rolle:"admin"});
+  // Engangs-oprydning: fjern tidligere gemt password fra localStorage.
+  // "pm_pw" blev tidligere gemt i klartekst under "Husk mig" — det er
+  // fjernet af sikkerhedshensyn. Denne linje sikrer eksisterende brugere
+  // ikke bærer rundt på et gammelt lagret password efter opdateringen.
+  try{localStorage.removeItem("pm_pw");}catch(e){}
+  // Start altid på welcome — ingen auto-login med gemt data.
+  // authStage skiftes til "app" først når brugeren har gennemført login-flow.
+  const [authStage,setAuthStage]=useState("welcome");
+  // Ingen hardkodede identiteter. Brugerens oplysninger udfyldes gennem
+  // AuthFlow (login/dept-steps).
+  const [authData,setAuthData]=useState({email:"",password:"",navn:"",selskab:"",afdeling:"",rolle:""});
   const isAdmin = authData.rolle==="admin" || authData.rolle==="superadmin" || authData.rolle==="ejer";
   // Ejer-konto fra localStorage (oprettes ved førstegangs-opstart)
   const [ejerKonto,setEjerKontoState]=useState(()=>{
     try{return JSON.parse(localStorage.getItem("planmed_ejerKonto")||"null");}catch{return null;}
   });
   const setEjerKonto=(v)=>{setEjerKontoState(v);try{localStorage.setItem("planmed_ejerKonto",JSON.stringify(v));}catch(e){}};
+  // Migration: ældre installationer har kode gemt i klartekst. Hvis den eksisterer
+  // men ikke ser ud som en bcrypt-hash, hash den automatisk ved app-start — så
+  // eksisterende brugere ikke låses ude af opdateringen.
+  useEffect(()=>{
+    if(!ejerKonto||!ejerKonto.kode) return;
+    if(erBcryptHash(ejerKonto.kode)) return;
+    // Klartekst-kode detekteret — hash og gem igen
+    hashKode(ejerKonto.kode).then(hash=>{
+      setEjerKonto({...ejerKonto,kode:hash});
+    }).catch(()=>{});
+    // Kør kun når ejerKonto faktisk ændres; ESLint-regel er slået fra globalt
+  },[ejerKonto?.kode]);
   const EJER_EMAIL=ejerKonto?.email||"";
   const EJER_KODE=ejerKonto?.kode||"";
   const [ejerUnlocked,setEjerUnlocked]=useState(false);
@@ -83,9 +118,17 @@ export default function App(){
   const [view,setView]=useState("dashboard");
   const [gsOpen,setGsOpen]=useState(false);
   const [gsQuery,setGsQuery]=useState("");
-  const [patienter,setPatienter]=useState(()=>{try{return INIT_PATIENTER_RAW.map(r=>buildPatient(r));}catch(e){
-return [];}});
-  const [medarbejdere,setMedarbejdereRaw]=useState(()=>[...BASE_MED].map(ensureKompetencer));
+  // Demo-data (patienter, medarbejdere) loades KUN i DEV-mode.
+  // I production-builds starter alle lister tomme — brugeren skal tilføje
+  // egne data eller importere via Indstillinger.
+  const [patienter,setPatienter]=useState(()=>{
+    if(!import.meta.env.DEV) return [];
+    try{return INIT_PATIENTER_RAW.map(r=>buildPatient(r));}catch(e){return [];}
+  });
+  const [medarbejdere,setMedarbejdereRaw]=useState(()=>{
+    if(!import.meta.env.DEV) return [];
+    return [...BASE_MED].map(ensureKompetencer);
+  });
   const setMedarbejdere=React.useCallback((valOrFn)=>{
     setMedarbejdereRaw(prev=>{
       const ny=typeof valOrFn==="function"?valOrFn(prev):valOrFn;
@@ -142,6 +185,10 @@ return [];}});
       "Lokale":  {krPrTime:0},
     },
     valuta:"DKK",
+    // Sikkerhedsindstillinger (Admin → Sikkerhed)
+    sikkerhed:{
+      inaktivitetTimeoutMin:30, // min 5, max 120 — styres i Admin → Sikkerhed
+    },
     selskaber:[],
   };
   const [adminData,setAdminDataRaw]=useState(()=>{
@@ -172,6 +219,11 @@ return [];}});
         });
         // Migration: gammel data uden valuta antages at være DKK (Danish kroner)
         if(!parsed.valuta||!VALUTAER[parsed.valuta]) parsed.valuta="DKK";
+        // Migration: gammel data uden sikkerhedsindstillinger får defaults
+        if(!parsed.sikkerhed||typeof parsed.sikkerhed!=="object") parsed.sikkerhed={};
+        if(typeof parsed.sikkerhed.inaktivitetTimeoutMin!=="number"){
+          parsed.sikkerhed.inaktivitetTimeoutMin=30;
+        }
         return {...ADMIN_DEFAULTS,...parsed};
       }
     }catch(e){}
@@ -216,7 +268,31 @@ return [];}});
   const [toast,setToast]=useState(null);
   const showToast=(msg,type="success")=>{setToast({msg,type});setTimeout(()=>setToast(null),3200);};
 
-  //  Rulleplan: marker opgave løst + send notifikation 
+  // ── Auto-logout ved inaktivitet ─────────────────────────────────
+  // Timeout hentes fra adminData.sikkerhed.inaktivitetTimeoutMin (default 30).
+  // Hooken aktiveres KUN når authStage === "app" (dvs. efter login).
+  // Ved timeout: log i aktivLog, nulstil password i memory, vis toast,
+  // send brugeren tilbage til welcome-skærmen.
+  // TEST-OVERRIDE: ?testInaktiv=1 giver 6-sek timeout + 3-sek advarsel (9 sek total):
+  // modal dukker op efter 3 sek inaktivitet, logout efter 6 sek yderligere.
+  // Skal fjernes efter verifikation.
+  const _testInaktiv = typeof window !== "undefined" && new URLSearchParams(window.location.search).get("testInaktiv") === "1";
+  const inaktivitetTimeoutMin = _testInaktiv ? 0.15 : (adminData?.sikkerhed?.inaktivitetTimeoutMin ?? 30);
+  const inaktivitetAdvarselMin = _testInaktiv ? 0.05 : 2; // 3 sek i test, 2 min i prod
+  const handleInaktivTimeout = useCallback(() => {
+    logEntry("sikkerhed","Auto-logout ved inaktivitet");
+    try{localStorage.removeItem("pm_pw");}catch(e){}
+    setAuthData(d=>({...d,password:""}));
+    setAuthStage("welcome");
+    showToast("Du blev logget ud pga. inaktivitet","warn");
+  },[logEntry]);
+  const {nulstil:nulstilInaktivitet, advarselAktiv:visInaktivAdvarsel} = useInaktivitetsTimer(
+    inaktivitetTimeoutMin,
+    handleInaktivTimeout,
+    { advarselMin: inaktivitetAdvarselMin, enabled: authStage === "app" }
+  );
+
+  //  Rulleplan: marker opgave løst + send notifikation
   const handleMarkerLøst=(pat,opg)=>{
     const dato=new Date().toISOString().slice(0,10);
     // 1. Marker opgaven som løst
@@ -416,6 +492,19 @@ return [];}});
     setRunning(false);
     setProgress(null);
     logEntry("planlægning","Auto: "+res.planned+" planlagt, "+res.failed+" ikke fundet");
+    // Audit: strukturer-log af planlægning med berørte patient-ids.
+    // Gør det muligt efterfølgende at finde ud af hvilke patienter der
+    // blev omplanlagt (krav ved journal-forespørgsler).
+    const berørtePatIds = nulstillet.filter(p=>p.opgaver.some(o=>!o.låst)).map(p=>p.id);
+    const planEntry = byggEntry("ændring", "patient", "bulk",
+      { felt: "planlægning", antal: berørtePatIds.length, ids: berørtePatIds.slice(0,50), planlagt: res.planned, fejlet: res.failed },
+      authData
+    );
+    setAktivLog(prev => {
+      const ny = [...prev, planEntry].slice(-5000);
+      gemAktivLog(ny);
+      return ny;
+    });
     const type=res.planned===0&&total>0?"warn":res.failed>0?"warn":"success";
     setToast({msg:"Planlagt: "+res.planned+" | Ikke fundet: "+res.failed+" | Total: "+total,type});
   },[patienter,medarbejdere,running,config,lokTider,planFraDato]);
@@ -462,6 +551,7 @@ return [];}});
   }
 
   return(
+    <AuditProvider authData={authData} setAktivLog={setAktivLog}>
     <div style={{display:"flex",minHeight:"100vh",background:C.bg,fontFamily:"'DM Sans','Segoe UI',sans-serif",color:C.txt}}>
       <style>{`
         *{box-sizing:border-box}
@@ -475,8 +565,51 @@ return [];}});
         .pm-tr-hover:hover{background:rgba(0,80,179,0.05)!important}
         .pm-nav-hover:hover{background:rgba(0,80,179,0.05)!important}
         .auth-input:focus{border-color:#0050b3!important;outline:none}
+
+        /* WCAG 2.4.7 Focus Visible — synlig fokus-indikator på alle
+           tastatur-fokuserbare elementer. :focus-visible matches KUN ved
+           tastatur-fokus (ikke mus-klik), så knapper ikke får blå ring
+           efter klik, men fungerer perfekt ved Tab-navigation. */
+        button:focus-visible,
+        a:focus-visible,
+        [role="button"]:focus-visible,
+        [role="tab"]:focus-visible,
+        [role="menuitem"]:focus-visible,
+        [role="dialog"]:focus-visible,
+        input:focus-visible,
+        select:focus-visible,
+        textarea:focus-visible,
+        [tabindex]:focus-visible {
+          outline: 3px solid ${C.acc};
+          outline-offset: 2px;
+          border-radius: 4px;
+        }
+        /* Fjern outline på klik (mus), behold for tastatur */
+        button:focus:not(:focus-visible),
+        a:focus:not(:focus-visible) {
+          outline: none;
+        }
+        /* WCAG 2.4.1 Skip-link — skjul indtil tastatur-fokus */
+        .pm-skip-link {
+          position: absolute;
+          left: -9999px;
+          top: 8px;
+          background: ${C.acc};
+          color: #fff;
+          padding: 8px 16px;
+          border-radius: 4px;
+          text-decoration: none;
+          z-index: 9999;
+          font-weight: 700;
+        }
+        .pm-skip-link:focus {
+          left: 8px;
+        }
         @import url('https://fonts.googleapis.com/css2?family=DM+Sans:wght@400;500;600;700;800;900&display=swap');
       `}</style>
+
+      {/* WCAG 2.4.1 Bypass Blocks — skip-link til hovedindhold */}
+      <a href="#pm-main" className="pm-skip-link">Gå til hovedindhold</a>
 
       {/* Global Search Overlay */}
       {gsOpen&&<GlobalSearch
@@ -503,7 +636,7 @@ return [];}});
           </button>
         </div>
 
-        <nav style={{flex:1,padding:"8px 8px",overflowY:"auto"}}>
+        <nav aria-label="Hovedmenu" style={{flex:1,padding:"8px 8px",overflowY:"auto"}}>
           {NAV_ITEMS.map((item,i)=>{
             if(item.sep) return <div key={`sep${i}`} style={{height:1,background:C.brd,margin:"6px 8px",opacity:.5}}/>;
             if(item.adminOnly && !isAdmin) return null;
@@ -583,26 +716,61 @@ return [];}});
           </div>
         </div>
 
-        {/* Content */}
-        <div style={{flex:1,overflowY:"auto",padding:20}}>
+        {/* Content — id kobler skip-link til hovedindholdet (WCAG 2.4.1) */}
+        <main id="pm-main" tabIndex={-1} style={{flex:1,overflowY:"auto",padding:20}}>
           <ErrorBoundary key={view}>
-          {view==="dashboard"&&<ErrorBoundary><Dashboard patienter={scopedPatienter} medarbejdere={scopedMed} fejl={fejl} onLogout={()=>setAuthStage("welcome")} alleAfdelinger={alleAfdelinger} afdScope={afdScope}/></ErrorBoundary>}
-          {view==="patienter"&&<ErrorBoundary><PatientKalenderView patienter={scopedPatienter} medarbejdere={scopedMed} setPatienter={setPatienter} forlob={forlob} showToast={showToast} onMarkerLøst={handleMarkerLøst} lokMeta={lokMeta} setAnmodninger={setAnmodninger} adminData={adminData} lokaler={lokaler}/></ErrorBoundary>}
+          {view==="dashboard"&&<ErrorBoundary><Dashboard patienter={scopedPatienter} medarbejdere={scopedMed} fejl={fejl} onLogout={()=>{
+            // Ryd password fra memory + localStorage ved logout (belt-and-braces:
+            // vi skriver ikke længere pm_pw, men sikrer mod gammel data og
+            // in-memory-restancer).
+            try{localStorage.removeItem("pm_pw");}catch(e){}
+            setAuthData(d=>({...d,password:""}));
+            setAuthStage("welcome");
+          }} alleAfdelinger={alleAfdelinger} afdScope={afdScope}/></ErrorBoundary>}
+          {view==="patienter"&&<ErrorBoundary><PatientKalenderView patienter={scopedPatienter} medarbejdere={scopedMed} setPatienter={setPatienter} forlob={forlob} showToast={showToast} onMarkerLøst={handleMarkerLøst} lokMeta={lokMeta} setAnmodninger={setAnmodninger} adminData={adminData} lokaler={lokaler} aktivLog={aktivLog}/></ErrorBoundary>}
           {view==="kalender"&&<ErrorBoundary><KalenderView patienter={scopedPatienter} medarbejdere={scopedMed} lokaler={lokaler}/></ErrorBoundary>}
           {view==="medarbejdere"&&<ErrorBoundary><MedarbejderView medarbejdere={scopedMed} setMedarbejdere={setMedarbejdere} patienter={scopedPatienter} setPatienter={setPatienter} anmodninger={anmodninger} setAnmodninger={setAnmodninger} isAdmin={isAdmin} certifikater={certifikater} showToast={showToast} adminData={adminData}/></ErrorBoundary>}
           {view==="lokaler"&&<ErrorBoundary><LokalerView patienter={patienter} lokTider={lokTider} setLokTider={setLokTider} lokMeta={lokMeta} setLokMeta={setLokMeta} lokaler={lokaler} saveLokaler={saveLokaler} adminData={adminData} udstyrsKat={udstyrsKat} saveUdstyrsKat={saveUdstyrsKat} udstyrsPakker={udstyrsPakker} saveUdstyrsPakker={saveUdstyrsPakker}/></ErrorBoundary>}
           {view==="forlob"&&<ErrorBoundary><ForlobView forlob={forlob} setForlob={setForlob} medarbejdere={scopedMed} setMedarbejdere={setMedarbejdere} indsatser={indsatser} setIndsatser={setIndsatser} certifikater={certifikater} setCertifikater={setCertifikater} lokaler={lokaler} setPatienter={setPatienter} adminData={adminData}/></ErrorBoundary>}
           {view==="planlog"&&<ErrorBoundary><PlanLogView patienter={scopedPatienter} planLog={planLog} medarbejdere={scopedMed} setPatienter={setPatienter} setMedarbejdere={setMedarbejdere} onPlan={handlePlan} running={running} progress={progress} planFraDato={planFraDato} setPlanFraDato={setPlanFraDato} afdScope={afdScope} alleAfdelinger={alleAfdelinger} toggleAktiv={toggleAktiv} toggleRes={toggleRes} lokaler={lokaler} certifikater={certifikater} planDebug={planDebug} config={config} setConfig={setConfig} setForlob={setForlob} forlob={forlob} lokTider={lokTider} setLokTider={setLokTider} lokMeta={lokMeta} setLokMeta={setLokMeta} saveLokaler={saveLokaler} setIndsatser={setIndsatser} indsatser={indsatser} adminData={adminData}/></ErrorBoundary>}
+          {view==="kapacitet"&&<ErrorBoundary><KapacitetsView patienter={scopedPatienter} medarbejdere={scopedMed} lokaler={lokaler} lokTider={lokTider} lokMeta={lokMeta} adminData={adminData} config={config}/></ErrorBoundary>}
           {view==="admin"&&isAdmin&&<ErrorBoundary><AdminView adminData={adminData} setAdminData={setAdminData} authData={authData} anmodninger={anmodninger} setAnmodninger={setAnmodninger} medarbejdere={medarbejdere} setMedarbejdere={setMedarbejdere} rulNotif={rulNotif} setRulNotif={setRulNotif} patienter={patienter} setPatienter={setPatienter} aktivLog={aktivLog} setAktivLog={setAktivLog} gemLog={gemAktivLog} lokMeta={lokMeta} config={config} setConfig={setConfig} setForlob={setForlob} forlob={forlob} forlobMeta={forlobMeta} setForlobMeta={setForlobMeta} setLokTider={setLokTider} setLokMeta={setLokMeta} lokaler={lokaler} saveLokaler={saveLokaler} indsatser={indsatser} setIndsatser={setIndsatser} showToast={showToast}/></ErrorBoundary>}
           {view==="ejer"&&(authData.email===EJER_EMAIL||authData.rolle==="ejer")&&<ErrorBoundary><EjerView patienter={patienter} medarbejdere={medarbejdere} adminData={adminData} setAdminData={setAdminData} authData={authData} isUnlocked={isEjer} setEjerUnlocked={setEjerUnlocked} ejerKode={EJER_KODE} ejerKonto={ejerKonto} setEjerKonto={setEjerKonto} lokaler={lokaler} lokMeta={lokMeta} showToast={showToast} certifikater={certifikater} config={config}/></ErrorBoundary>}
           </ErrorBoundary>
-        </div>
+        </main>
       </div>
 
       {visScope&&<ScopeModal alleAfdelinger={alleAfdelinger} afdScope={afdScope} toggleAktiv={toggleAktiv} toggleRes={toggleRes} onClose={()=>setVisScope(false)}/>}
       {toast&&<Toast msg={toast.msg} type={toast.type} onDone={()=>setToast(null)}/>}
       {visTester&&<PlanMedTester onClose={()=>setVisTester(false)}/>}
+
+      {/* Inaktivitets-advarsel: vises 2 min før auto-logout.
+          Enhver aktivitet (mus, tastatur, klik) nulstiller automatisk
+          timeren og skjuler modalen. */}
+      {visInaktivAdvarsel&&(
+        <div onClick={nulstilInaktivitet}
+          style={{position:"fixed",inset:0,background:"rgba(15,25,35,0.55)",backdropFilter:"blur(6px)",
+            display:"flex",alignItems:"center",justifyContent:"center",zIndex:10000,padding:16}}>
+          <div onClick={e=>e.stopPropagation()}
+            style={{background:C.s1,border:`2px solid ${C.amb}`,borderRadius:14,padding:"28px 32px",
+              maxWidth:440,width:"100%",boxShadow:"0 12px 48px rgba(0,0,0,0.25)"}}>
+            <div style={{color:C.amb,fontWeight:800,fontSize:16,marginBottom:10}}>
+              Du logges ud om 2 minutter
+            </div>
+            <div style={{color:C.txtD,fontSize:13,lineHeight:1.5,marginBottom:20}}>
+              Du har været inaktiv længe. For din sikkerhed logges du automatisk
+              ud om 2 minutter. Klik nedenfor for at forblive logget ind.
+            </div>
+            <button onClick={nulstilInaktivitet}
+              style={{width:"100%",padding:"10px 0",background:C.acc,color:"#fff",border:"none",
+                borderRadius:8,fontWeight:700,fontSize:14,cursor:"pointer",fontFamily:"inherit"}}>
+              Jeg er her — forbliv logget ind
+            </button>
+          </div>
+        </div>
+      )}
     </div>
+    </AuditProvider>
   );
 }
 // ── EKSPORT FUNKTIONER ──────────────────────────────────

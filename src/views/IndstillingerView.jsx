@@ -1,5 +1,7 @@
-import React, { useState, useRef } from "react";
-import { today } from "../utils/index.js";
+import React, { useState, useRef, useMemo } from "react";
+import { useTranslation } from "react-i18next";
+import { today, validerCPR } from "../utils/index.js";
+import { useAudit } from "../utils/audit.js";
 import { C, BASE_MED, LK, PK, PD, NAV_ITEMS, INIT_PATIENTER_RAW, buildPatient } from "../data/constants.js";
 import { Btn, Input, Sel, FRow, Pill, ViewHeader, ErrorBoundary, StrenghedToggle } from "../components/primitives.jsx";
 import { ConfirmDialog } from "../components/dialogs.jsx";
@@ -202,7 +204,7 @@ export function PlanlaegIndstillingerPanel({config,setConfig,setPatienter,setMed
   );
 }
 
-export default function IndstillingerView({config,setConfig,setPatienter,setMedarbejdere,setForlob,forlob,setLokTider,lokMeta={},setLokMeta,patienter=[],lokaler=[],saveLokaler=()=>{},medarbejdere=[],setIndsatser=()=>{},indsatser=[]}){
+export default function IndstillingerView({config,setConfig,setPatienter,setMedarbejdere,setForlob,forlob,setLokTider,lokMeta={},setLokMeta,patienter=[],lokaler=[],saveLokaler=()=>{},medarbejdere=[],setIndsatser=()=>{},indsatser=[],adminData={},setAdminData=()=>{}}){
   const [c,setC]=useState({...config,serverModel:config.serverModel||"planmed",selfhostedUrl:config.selfhostedUrl||""});
   const set=(k,v)=>setC(p=>({...p,[k]:v}));
 
@@ -310,10 +312,6 @@ export default function IndstillingerView({config,setConfig,setPatienter,setMeda
         <OutlookKalenderPanel medarbejdere={medarbejdere} setMedarbejdere={setMedarbejdere}/>
       </div>
 
-      <div style={{display:"flex",gap:8}}>
-        <Btn v="primary" onClick={()=>setConfig(c)}> Gem indstillinger</Btn>
-      </div>
-
       <div style={{display:"grid",gridTemplateColumns:"1fr 1fr",gap:16}}>
         <div style={{background:C.s2,border:`1px solid ${C.brd}`,borderRadius:12,padding:"18px 20px"}}>
           <div style={{color:C.txt,fontWeight:700,fontSize:15,marginBottom:12}}>System</div>
@@ -334,10 +332,36 @@ export default function IndstillingerView({config,setConfig,setPatienter,setMeda
           </div>
         </div>
       </div>
+
+      {/* -- Session-sikkerhed: auto-logout ved inaktivitet -- */}
+      <div style={{background:C.s2,border:`1px solid ${C.brd}`,borderRadius:12,padding:"18px 20px"}}>
+        <div style={{color:C.txt,fontWeight:700,fontSize:15,marginBottom:6}}>Session-sikkerhed</div>
+        <div style={{color:C.txtM,fontSize:12,marginBottom:14}}>
+          Kontrollér hvor længe en bruger kan være inaktiv før appen automatisk logger ud.
+          Brugeren får en advarsel 2 minutter før. Aktivitet omfatter musebevægelse, tastetryk,
+          klik, scroll og touch.
+        </div>
+        <FRow label="Auto-logout ved inaktivitet" hint="Min 5, max 120 minutter. Ændringer træder i kraft ved næste login.">
+          <div style={{display:"flex",alignItems:"center",gap:10}}>
+            <Input type="number" min="5" max="120"
+              value={adminData?.sikkerhed?.inaktivitetTimeoutMin??30}
+              onChange={v=>{
+                const n=Math.max(5,Math.min(120,Number(v)||30));
+                setAdminData(d=>({...d,sikkerhed:{...(d.sikkerhed||{}),inaktivitetTimeoutMin:n}}));
+              }} style={{width:90}}/>
+            <span style={{color:C.txtM,fontSize:12}}>minutter</span>
+          </div>
+        </FRow>
+      </div>
+
+      <div style={{display:"flex",gap:8}}>
+        <Btn v="primary" onClick={()=>setConfig(c)}> Gem indstillinger</Btn>
+      </div>
+
         </div>
       )}
 
-      {/* 
+      {/*
           HJÆLP-TAB
            */}
       {indTab==="hjaelp"&&<HjaelpTab/>}
@@ -663,7 +687,7 @@ function HjaelpTab(){
             borderRadius:10,padding:"10px 12px 10px 36px",fontSize:13,color:C.txt,
             fontFamily:"inherit",outline:"none",transition:"border 0.15s"}}
         />
-        {søg&&<button onClick={()=>setSøg("")}
+        {søg&&<button onClick={()=>setSøg("")} aria-label="Ryd søgning"
           style={{position:"absolute",right:10,top:"50%",transform:"translateY(-50%)",
             background:"none",border:"none",color:C.txtM,cursor:"pointer",fontSize:16,padding:4}}>×</button>}
       </div>
@@ -754,10 +778,28 @@ function HjaelpTab(){
 // EXCEL IMPORT PANEL
 // ===========================================================
 function ExcelImportPanel({setPatienter,setMedarbejdere,setForlob,forlob,setLokTider,setLokMeta,patienter=[],medarbejdere=[],setIndsatser,saveLokaler,lokaler=[]}){
+  const {t}=useTranslation();
+  const {audit}=useAudit();
   const [tab,setTab]=useState("patienter");
   const [preview,setPreview]=useState(null); // {type, rows, cols, fejl}
   const [status,setStatus]=useState(null);   // {ok, msg}
   const fileRef=useRef(null);
+
+  // Kør validerCPR på alle rækker når preview er patienter-fanen.
+  // Bruges til at vise gul warning-box med antal problematiske CPR.
+  const cprAdvarsler=useMemo(()=>{
+    if(!preview?.raw||tab!=="patienter") return [];
+    const cprIdx=preview.rawCols.findIndex(c=>c.toLowerCase().trim()==="cpr");
+    if(cprIdx<0) return [];
+    const adv=[];
+    preview.raw.forEach((row,i)=>{
+      const v=row[cprIdx]||"";
+      if(!v) return; // tom CPR håndteres separat — ikke en modulus-advarsel
+      const r=validerCPR(v);
+      if(r.advarsel && r.advarsel!=="cpr.tom") adv.push({række:i+1,cpr:v,advarsel:r.advarsel});
+    });
+    return adv;
+  },[preview,tab]);
 
   const SKABELONER={
     patienter:{
@@ -945,6 +987,8 @@ function ExcelImportPanel({setPatienter,setMedarbejdere,setForlob,forlob,setLokT
         const nyeUnikke=nyePat.filter(p=>!eksCPR.has((p.cpr||"").replace(/[^0-9]/g,"")));
         const sprungetOver=nyePat.length-nyeUnikke.length;
         setPatienter(ps=>[...ps,...nyeUnikke]);
+        // Audit: bulk-oprettelse via Excel/CSV
+        audit("oprettelse","patient","bulk",{antal:nyeUnikke.length,kilde:"excel-import",sprungetOver});
         setStatus({ok:true,msg:"OK "+nyeUnikke.length+" patienter importeret"+(sprungetOver>0?" ("+sprungetOver+" sprunget over — CPR eksisterer allerede)":"")});
       } else if(tab==="medarbejdere"){
         const dagMap={Mandag:"MandagStart/MandagSlut",Tirsdag:"TirsdagStart/TirsdagSlut",Onsdag:"OnsdagStart/OnsdagSlut",Torsdag:"TorsdagStart/TorsdagSlut",Fredag:"FredagStart/FredagSlut"};
@@ -1188,6 +1232,20 @@ function ExcelImportPanel({setPatienter,setMedarbejdere,setForlob,forlob,setLokT
               <Btn v="primary" small onClick={importerData}>OK Importer {preview.total} rækker</Btn>
             </div>
           </div>
+          {cprAdvarsler.length>0&&(
+            <div style={{margin:"10px 14px",padding:"10px 12px",background:C.ambM,border:`1px solid ${C.amb}`,borderRadius:7,fontSize:12,color:C.amb,lineHeight:1.5}}>
+              <div style={{fontWeight:700,marginBottom:3}}>
+                ⚠ {t("auth.cpr.warningTitle")} — {cprAdvarsler.length} række{cprAdvarsler.length===1?"":"r"}
+              </div>
+              <div style={{opacity:0.9,marginBottom:6}}>{t("auth.cpr.warningHint")}</div>
+              <ul style={{margin:0,padding:"0 0 0 18px",fontFamily:"monospace",fontSize:11}}>
+                {cprAdvarsler.slice(0,8).map(a=>(
+                  <li key={a.række}>Række {a.række}: <strong>{a.cpr}</strong> — {t("auth."+a.advarsel)}</li>
+                ))}
+                {cprAdvarsler.length>8&&<li>…og {cprAdvarsler.length-8} flere</li>}
+              </ul>
+            </div>
+          )}
           <div style={{overflowX:"auto"}}>
             <table style={{width:"100%",borderCollapse:"collapse",fontSize:11}}>
               <thead>

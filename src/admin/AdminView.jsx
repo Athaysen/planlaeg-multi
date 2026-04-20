@@ -148,6 +148,9 @@ function AdminView({adminData,setAdminData,anmodninger=[],setAnmodninger,medarbe
         <ForlobAdminTab forlob={forlob} setForlob={setForlob} forlobMeta={forlobMeta} setForlobMeta={setForlobMeta} lokaler={lokaler} showToast={showToast}/>
       )}
 
+      {/* Session-sikkerhed (auto-logout) er nu flyttet til
+          Indstillinger → IT-indstillinger for at samle IT-config ét sted. */}
+
       {/* -- TAB: KAPACITET STANDARDER -- */}
       {tab==="admindst"&&(
         <div style={{display:"flex",flexDirection:"column",gap:0}}>
@@ -797,6 +800,7 @@ function AdminView({adminData,setAdminData,anmodninger=[],setAnmodninger,medarbe
           setLokTider={setLokTider} lokMeta={lokMeta} setLokMeta={setLokMeta}
           patienter={patienter} lokaler={lokaler} saveLokaler={saveLokaler}
           medarbejdere={medarbejdere} setIndsatser={setIndsatser} indsatser={indsatser}
+          adminData={adminData} setAdminData={setAdminData}
         />
       )}
       {tab==="aktivlog"&&(
