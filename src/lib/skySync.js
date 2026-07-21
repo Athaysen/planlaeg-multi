@@ -42,18 +42,22 @@ export async function gemPatientTilSky(patient) {
     const tenantId = await hentTenantId()
     if (!tenantId) return
 
+    if (!patient?.id) return
     const row = {
       tenant_id: tenantId,
+      app_id: patient.id,
       navn_krypteret: patient?.navn ?? '',
       status: patient?.status ?? 'aktiv',
       forlob_nr: typeof patient?.forlobNr === 'number' ? patient.forlobNr : null,
       afdeling_id: null,
       haste: !!patient?.haste,
       henv_dato: patient?.henvDato || null,
-      ekstra: { ...patient, app_id: patient?.id },
+      ekstra: patient,
     }
-    const { error } = await supabase.from('patienter').insert(row)
-    if (error) console.warn('[skySync] gemPatientTilSky insert failed:', error.message)
+    const { error } = await supabase
+      .from('patienter')
+      .upsert(row, { onConflict: 'tenant_id,app_id' })
+    if (error) console.warn('[skySync] gemPatientTilSky upsert failed:', error.message)
   } catch (e) {
     console.warn('[skySync] gemPatientTilSky exception:', e)
   }
