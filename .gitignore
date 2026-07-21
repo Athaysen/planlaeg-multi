@@ -2,3 +2,6 @@ node_modules/
 dist/
 .vite/
 .claude/
+.env
+.env.local
+.env.*.local
