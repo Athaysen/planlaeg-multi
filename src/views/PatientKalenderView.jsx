@@ -8,6 +8,7 @@ import { useTranslation } from "react-i18next";
 import { C, FORLOB, ALLE_K, PAT_STATUS, STATUS, sC, sB, sL, buildPatient } from "../data/constants.js";
 import { Btn, Input, Sel, Modal, FRow, Pill, StatusBadge, ProgressRing, ViewHeader, CprAdvarselBoks } from "../components/primitives.jsx";
 import { UdstyrPanel } from "./LokalerView.jsx";
+import { gemPatientTilSky } from "../lib/skySync.js";
 import {
   eksporterPatientlisteExcel, eksporterMedarbejdereExcel,
   eksporterOpgaveplanExcel, eksporterUgeplanExcel,
@@ -933,13 +934,13 @@ export default function PatientKalenderView({patienter,medarbejdere,setPatienter
       {editPat&&(
         <Modal title={"Rediger patient · "+editPat.navn} onClose={()=>setEditPat(null)} w={640}>
           <EditPatientForm pat={editPat} medarbejdere={medarbejdere}
-            onSave={updated=>{setPatienter(ps=>ps.map(p=>p.id===updated.id?updated:p));setEditPat(null);}}
+            onSave={updated=>{setPatienter(ps=>ps.map(p=>p.id===updated.id?updated:p));gemPatientTilSky(updated);setEditPat(null);}}
             onClose={()=>setEditPat(null)}/>
         </Modal>
       )}
       {nyPat&&(
         <Modal title="Tilføj ny patient" onClose={()=>setNyPat(false)}>
-          <NyPatientForm forlob={forlob} medarbejdere={medarbejdere} patienter={patienter} adminData={adminData} onSave={p=>{setPatienter(ps=>[...ps,p]);setNyPat(false);showToast("Patient oprettet");}} onClose={()=>setNyPat(false)}/>
+          <NyPatientForm forlob={forlob} medarbejdere={medarbejdere} patienter={patienter} adminData={adminData} onSave={p=>{setPatienter(ps=>[...ps,p]);gemPatientTilSky(p);setNyPat(false);showToast("Patient oprettet");}} onClose={()=>setNyPat(false)}/>
         </Modal>
       )}
       {delPat&&(
