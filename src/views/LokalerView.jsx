@@ -5,6 +5,7 @@ import { today, addDays, toMin, uid, parseLocalDate, daysBetween, getDag, valuta
 import { C, ALLE_K, DEFAULT_LOK_TIDER, STANDARD_AABNINGSTIDER, INIT_CERTIFIKATER } from "../data/constants.js";
 import { Btn, Input, Modal, FRow, Pill, ViewHeader, PeriodeVaelger } from "../components/primitives.jsx";
 import { ConfirmDialog } from "../components/dialogs.jsx";
+import { sletLokaleFraSky } from "../lib/skySync.js";
 
 export default function LokalerView({patienter,lokTider,setLokTider,lokMeta={},setLokMeta,lokaler=[],saveLokaler=()=>{},adminData={},udstyrsKat=[],saveUdstyrsKat=()=>{},udstyrsPakker=[],saveUdstyrsPakker=()=>{}}){
   const [topTab,setTopTab]=useState("lokaler"); // "lokaler" | "udstyr"
@@ -292,6 +293,7 @@ export default function LokalerView({patienter,lokTider,setLokTider,lokMeta={},s
               }}
               onDelete={(lok)=>{
                 saveLokaler(lokaler.filter(l=>l!==lok));
+                sletLokaleFraSky(lok);
                 setLokMeta(p=>{const{[lok]:_,...rest}=p;return rest;});
                 if(valgt===lok) setValgt(lokaler.filter(l=>l!==lok)[0]||null);
                 setEditMetaLok(null);

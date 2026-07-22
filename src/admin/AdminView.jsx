@@ -6,6 +6,7 @@ import { Btn, Input, Sel, Modal, FRow, Pill, ViewHeader, beregnMaxTimer } from "
 import { ConfirmDialog } from "../components/dialogs.jsx";
 import IndstillingerView from "../views/IndstillingerView.jsx";
 import { GodkendelsesView, AktivLogView } from "../views/admin-subviews.jsx";
+import { sletForlobFraSky, sletAfdelingFraSky } from "../lib/skySync.js";
 
 // Eneste export — AdminView. De andre (RulleplanNotifView, AdminAfdelingerTab,
 // AdminBrugereTab, FaggrupperTab, ForlobAdminTab) er intern til admin-siden.
@@ -1083,6 +1084,21 @@ function AdminAfdelingerTab({selskab,updS,medarbejdere=[]}){
 
   const sletAfd=(id)=>{
     const fjern=(afds)=>afds.filter(a=>a.id!==id).map(a=>({...a,children:fjern(a.children||[])}));
+    // Underafdelinger forsvinder sammen med forælderen i state, så de skal også
+    // fjernes i skyen — ellers ville de dukke op igen som løsrevne rødder.
+    // Bemærk: kun det undertræ brugeren netop slettede, aldrig en bredere ryddeop.
+    const findNode=(afds)=>{
+      for(const a of (afds||[])){
+        if(a?.id===id) return a;
+        const traef=a?.children?.length?findNode(a.children):null;
+        if(traef) return traef;
+      }
+      return null;
+    };
+    const undertrae=[];
+    const saml=(a)=>{if(!a?.id) return; undertrae.push(a.id); (a.children||[]).forEach(saml);};
+    saml(findNode(selskab.afdelinger||[]));
+    undertrae.forEach(x=>sletAfdelingFraSky(x));
     updS("afdelinger",fjern(selskab.afdelinger||[]));
     if(valgt===id){setValgt(null);setRedigerer(false);}
   };
@@ -1572,6 +1588,7 @@ function ForlobAdminTab({forlob,setForlob,forlobMeta,setForlobMeta,lokaler=[],sh
     if(!confirm(`Slet skabelonen "${forlobMeta[id]?.navn||id}"? Dette påvirker ikke patienter der allerede har fået tildelt forløbet.`)) return;
     setForlob(p=>{const n={...p}; delete n[id]; return n;});
     setForlobMeta(p=>{const n={...p}; delete n[id]; return n;});
+    sletForlobFraSky(id);
     if(valgt===id) setValgt(null);
   };
   const opdMeta=(id,felt,val)=>setForlobMeta(p=>({...p,[id]:{...(p[id]||{}),[felt]:val}}));

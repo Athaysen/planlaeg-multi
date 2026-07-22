@@ -201,6 +201,42 @@ export async function hentAfdelingerFraSky() {
   return hentFraSky('afdelinger', a => !!a.id, 'hentAfdelingerFraSky')
 }
 
+// ── Sletning ──────────────────────────────────────────────────────
+// Sletter ÉN specifik række, identificeret på (tenant_id, app_id).
+//
+// VIGTIGT: denne må KUN kaldes fra brugerens egen, eksplicitte slette-handling.
+// Sletninger må aldrig udledes af "mangler i state"-diff: state kan kortvarigt
+// være tom under opstart, før read-back er kørt, og en diff ville i det vindue
+// tolke hele datasættet som slettet og tømme skyen.
+//
+// Derfor er der heller ingen bulk-variant her, og kaldet afviser et tomt app_id,
+// så en manglende nøgle ikke kan blive til en bredere sletning end tiltænkt.
+export async function sletFraSky(tabel, appId) {
+  try {
+    const tenantId = await klarTilSky()
+    if (!tenantId) return
+    if (appId === undefined || appId === null || String(appId) === '') {
+      console.warn(`[skySync] sletFraSky(${tabel}) sprunget over: tomt app_id`)
+      return
+    }
+    const { error } = await supabase
+      .from(tabel)
+      .delete()
+      .eq('tenant_id', tenantId)
+      .eq('app_id', String(appId))
+    if (error) console.warn(`[skySync] sletFraSky(${tabel}) failed:`, error.message)
+  } catch (e) {
+    console.warn(`[skySync] sletFraSky(${tabel}) exception:`, e)
+  }
+}
+
+// Navngivne indpakninger, så kaldsteder ikke gentager tabelnavne som strenge.
+export const sletPatientFraSky     = (id)   => sletFraSky('patienter', id)
+export const sletMedarbejderFraSky = (id)   => sletFraSky('medarbejdere', id)
+export const sletLokaleFraSky      = (navn) => sletFraSky('lokaler', navn)
+export const sletForlobFraSky      = (id)   => sletFraSky('forlob_skabeloner', id)
+export const sletAfdelingFraSky    = (id)   => sletFraSky('afdelinger', id)
+
 // ── Diff-hjælper ──────────────────────────────────────────────────
 // Kalder gemFn(nøgle, værdi) for hvert element der er nyt eller ændret siden
 // forrige snapshot. Bruges af dual-write-effekterne i App.jsx, så et enkelt
