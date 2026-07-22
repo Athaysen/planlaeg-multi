@@ -57,6 +57,7 @@ import {
   gemMedarbejderTilSky, hentMedarbejdereFraSky,
   gemLokaleTilSky, hentLokalerFraSky,
   gemForlobTilSky, hentForlobFraSky,
+  gemAfdelingTilSky, hentAfdelingerFraSky,
   synkroniserAendrede,
 } from "./lib/skySync.js";
 import { ConfirmDialog, GlobalSearch } from "./components/dialogs.jsx";
@@ -66,6 +67,30 @@ import {
   eksporterOpgaveplanPDF, eksporterUgeplanPDF,
 } from "./utils/eksport.js";
 
+
+// Afdelinger er et træ (children), men gemmes fladt i skyen — én række per
+// afdeling, med relationen bevaret i parentId. Ellers ville en underafdeling
+// både have sin egen række og ligge duplikeret inde i forælderens "ekstra".
+function fladAfdelinger(afds,parentId=null){
+  const ud=[];
+  (Array.isArray(afds)?afds:[]).forEach(a=>{
+    if(!a?.id) return;
+    const {children,...uden}=a;
+    ud.push({...uden,parentId:a.parentId??parentId??null});
+    if(Array.isArray(children)&&children.length) ud.push(...fladAfdelinger(children,a.id));
+  });
+  return ud;
+}
+function byggAfdelingstrae(flade){
+  const noder=new Map();
+  (Array.isArray(flade)?flade:[]).forEach(a=>{if(a?.id) noder.set(a.id,{...a,children:[]});});
+  const rod=[];
+  noder.forEach(n=>{
+    const p=(n.parentId&&n.parentId!==n.id)?noder.get(n.parentId):null;
+    if(p) p.children.push(n); else rod.push(n);
+  });
+  return rod;
+}
 
 // ===============================================
 export default function App(){
@@ -287,6 +312,11 @@ export default function App(){
   const forrigeMedRef=useRef(null), springMedRef=useRef(false);
   const forrigeLokRef=useRef(null), springLokRef=useRef(false);
   const forrigeForlobRef=useRef(null), springForlobRef=useRef(false);
+  const forrigeAfdRef=useRef(null), springAfdRef=useRef(false);
+  // Holder seneste adminData, så read-back kan tjekke om der findes et selskab
+  // uden at lave sidevirkninger inde i en state-updater.
+  const adminDataRef=useRef(adminData);
+  useEffect(()=>{adminDataRef.current=adminData;},[adminData]);
 
   // ── Medarbejdere (nøgle: id) ──
   useEffect(()=>{
@@ -359,6 +389,39 @@ export default function App(){
         fraSky.map(f=>[f.id,{navn:f.navn||"",beskrivelse:f.beskrivelse||""}])
       )}));
     }).catch(e=>{console.warn("[App] hentForlobFraSky fejlede:",e);});
+    return ()=>{annulleret=true;};
+  },[]);
+
+  // ── Afdelinger (nøgle: afdelingens id) ──
+  // Kilden er adminData.selskaber[0].afdelinger — al oprettelse, redigering og
+  // sletning i AdminView går gennem updS("afdelinger",...) → setAdminData, så
+  // diff på den committede state fanger alle veje.
+  useEffect(()=>{
+    if(!import.meta.env.DEV) return;
+    const flade=fladAfdelinger(adminData?.selskaber?.[0]?.afdelinger);
+    const kort=Object.fromEntries(flade.map(a=>[a.id,a]));
+    const forrige=forrigeAfdRef.current;
+    forrigeAfdRef.current=kort;
+    if(forrige===null) return;
+    if(springAfdRef.current){springAfdRef.current=false;return;}
+    synkroniserAendrede(forrige,kort,(id,a)=>gemAfdelingTilSky(a),"afdeling");
+  },[adminData]);
+  useEffect(()=>{
+    let annulleret=false;
+    hentAfdelingerFraSky().then(fraSky=>{
+      if(annulleret) return;
+      if(!Array.isArray(fraSky)||fraSky.length===0) return;
+      // Uden et selskab er der ingen plads at lægge afdelingerne. Appen tvinger
+      // selskabs-wizarden frem i den situation, så vi lader data ligge i skyen.
+      if(!adminDataRef.current?.selskaber?.length) return;
+      springAfdRef.current=true;
+      setAdminData(prev=>{
+        if(!prev?.selskaber?.length) return prev;
+        const selskaber=[...prev.selskaber];
+        selskaber[0]={...selskaber[0],afdelinger:byggAfdelingstrae(fraSky)};
+        return {...prev,selskaber};
+      });
+    }).catch(e=>{console.warn("[App] hentAfdelingerFraSky fejlede:",e);});
     return ()=>{annulleret=true;};
   },[]);
   // Udstyr: kategorier med items, og pakker

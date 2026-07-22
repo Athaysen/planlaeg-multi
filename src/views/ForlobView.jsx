@@ -6,6 +6,7 @@ import { C, ALLE_K, BASE_MED, LK, PK, PD, TITLE_C, buildPatient } from "../data/
 import { Btn, Input, Sel, Modal, FRow, Pill, ViewHeader } from "../components/primitives.jsx";
 import { IndsatsForm, UdstyrPanel } from "./LokalerView.jsx";
 import { MedForm } from "./MedarbejderView.jsx";
+import { sletMedarbejderFraSky, sletForlobFraSky } from "../lib/skySync.js";
 
 function CertifikaterTab({certifikater=[],setCertifikater}){
   const certs=certifikater;
@@ -409,6 +410,7 @@ const ids=Object.keys(forlob).filter(k=>(forlob[k]||[]).length>0).sort((a,b)=>Nu
     // Fjern forløb-tilknytning fra patienter der bruger dette forløb
     setPatienter(ps=>ps.map(p=>p.forlobNr==id?{...p,forlobNr:null,forlobLabel:null,opgaver:p.opgaver.filter(o=>o.fraForlob!==id)}:p));
     setForlob(prev=>{const n={...prev};delete n[id];return n;});
+    sletForlobFraSky(id);
     setSelId(ids.find(i=>i!==id)||ids[0]||"1");
     setDelForlob(null);
   };
@@ -428,7 +430,7 @@ const ids=Object.keys(forlob).filter(k=>(forlob[k]||[]).length>0).sort((a,b)=>Nu
     else { setMedarbejdere(ms=>[...ms,{...data,id:`m_${uid()}`}]); }
     setEditMed(null);
   };
-  const sletMed=(id)=>{ setMedarbejdere(ms=>ms.filter(m=>m.id!==id)); setDelMed(null); };
+  const sletMed=(id)=>{ setMedarbejdere(ms=>ms.filter(m=>m.id!==id)); sletMedarbejderFraSky(id); setDelMed(null); };
 
   // -- Tab bar --
   const TABS = [

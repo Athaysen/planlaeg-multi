@@ -4,6 +4,7 @@ import { today, addDays, daysBetween, uid, formatBeloeb } from "../utils/index.j
 import { C, LK, PK, PD, TITLE_C } from "../data/constants.js";
 import { Btn, Input, Sel, Modal, FRow, Pill, ViewHeader, PeriodeVaelger, beregnKapStatus } from "../components/primitives.jsx";
 import MinProfilPanel from "../modals/MinProfilPanel.jsx";
+import { sletMedarbejderFraSky } from "../lib/skySync.js";
 
 export default function MedarbejderView({medarbejdere,setMedarbejdere,patienter,setPatienter,anmodninger=[],setAnmodninger,isAdmin,certifikater=[],showToast=()=>{},adminData={}}){
   const iDagMed=today();
@@ -61,6 +62,7 @@ export default function MedarbejderView({medarbejdere,setMedarbejdere,patienter,
       })));
     }
     setMedarbejdere(ms=>ms.filter(m=>m.id!==id));
+    sletMedarbejderFraSky(id);
     setDelMed(null);
   };
 
@@ -253,6 +255,7 @@ export default function MedarbejderView({medarbejdere,setMedarbejdere,patienter,
             }}
             onDelete={(id)=>{
               setMedarbejdere(ms=>ms.filter(m=>m.id!==id));
+              sletMedarbejderFraSky(id);
               showToast&&showToast("Medarbejder slettet");
               setProfilMed(null);
             }}

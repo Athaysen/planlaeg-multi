@@ -8,7 +8,7 @@ import { useTranslation } from "react-i18next";
 import { C, FORLOB, ALLE_K, PAT_STATUS, STATUS, sC, sB, sL, buildPatient } from "../data/constants.js";
 import { Btn, Input, Sel, Modal, FRow, Pill, StatusBadge, ProgressRing, ViewHeader, CprAdvarselBoks } from "../components/primitives.jsx";
 import { UdstyrPanel } from "./LokalerView.jsx";
-import { gemPatientTilSky } from "../lib/skySync.js";
+import { gemPatientTilSky, sletPatientFraSky } from "../lib/skySync.js";
 import {
   eksporterPatientlisteExcel, eksporterMedarbejdereExcel,
   eksporterOpgaveplanExcel, eksporterUgeplanExcel,
@@ -674,6 +674,7 @@ export default function PatientKalenderView({patienter,medarbejdere,setPatienter
     const slettet=patienter.find(p=>p.id===patId);
     audit("sletning","patient",patId,{navn:slettet?.navn||"?",afdeling:slettet?.afdeling||""});
     setPatienter(ps=>ps.filter(p=>p.id!==patId));
+    sletPatientFraSky(patId);
     setValgt(null);
     setDelPat(null);
   };

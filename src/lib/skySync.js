@@ -188,6 +188,55 @@ export async function hentForlobFraSky() {
   return hentFraSky('forlob_skabeloner', f => !!f.id, 'hentForlobFraSky')
 }
 
+// ── Afdelinger ────────────────────────────────────────────────────
+// Afdelinger ligger i appen som et træ under adminData.selskaber[0].afdelinger.
+// Hver afdeling gemmes som sin egen række (nøgle: afdelingens id) UDEN children —
+// relationen bevares i parentId, så en underafdeling ikke også ligger duplikeret
+// inde i sin forælders række. Træet bygges igen ved læsning.
+export async function gemAfdelingTilSky(afd) {
+  if (!afd?.id) return
+  return gemTilSky('afdelinger', afd.id, afd?.navn, afd, 'gemAfdelingTilSky')
+}
+export async function hentAfdelingerFraSky() {
+  return hentFraSky('afdelinger', a => !!a.id, 'hentAfdelingerFraSky')
+}
+
+// ── Sletning ──────────────────────────────────────────────────────
+// Sletter ÉN specifik række, identificeret på (tenant_id, app_id).
+//
+// VIGTIGT: denne må KUN kaldes fra brugerens egen, eksplicitte slette-handling.
+// Sletninger må aldrig udledes af "mangler i state"-diff: state kan kortvarigt
+// være tom under opstart, før read-back er kørt, og en diff ville i det vindue
+// tolke hele datasættet som slettet og tømme skyen.
+//
+// Derfor er der heller ingen bulk-variant her, og kaldet afviser et tomt app_id,
+// så en manglende nøgle ikke kan blive til en bredere sletning end tiltænkt.
+export async function sletFraSky(tabel, appId) {
+  try {
+    const tenantId = await klarTilSky()
+    if (!tenantId) return
+    if (appId === undefined || appId === null || String(appId) === '') {
+      console.warn(`[skySync] sletFraSky(${tabel}) sprunget over: tomt app_id`)
+      return
+    }
+    const { error } = await supabase
+      .from(tabel)
+      .delete()
+      .eq('tenant_id', tenantId)
+      .eq('app_id', String(appId))
+    if (error) console.warn(`[skySync] sletFraSky(${tabel}) failed:`, error.message)
+  } catch (e) {
+    console.warn(`[skySync] sletFraSky(${tabel}) exception:`, e)
+  }
+}
+
+// Navngivne indpakninger, så kaldsteder ikke gentager tabelnavne som strenge.
+export const sletPatientFraSky     = (id)   => sletFraSky('patienter', id)
+export const sletMedarbejderFraSky = (id)   => sletFraSky('medarbejdere', id)
+export const sletLokaleFraSky      = (navn) => sletFraSky('lokaler', navn)
+export const sletForlobFraSky      = (id)   => sletFraSky('forlob_skabeloner', id)
+export const sletAfdelingFraSky    = (id)   => sletFraSky('afdelinger', id)
+
 // ── Diff-hjælper ──────────────────────────────────────────────────
 // Kalder gemFn(nøgle, værdi) for hvert element der er nyt eller ændret siden
 // forrige snapshot. Bruges af dual-write-effekterne i App.jsx, så et enkelt
