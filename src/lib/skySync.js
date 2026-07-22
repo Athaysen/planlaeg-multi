@@ -188,6 +188,19 @@ export async function hentForlobFraSky() {
   return hentFraSky('forlob_skabeloner', f => !!f.id, 'hentForlobFraSky')
 }
 
+// ── Afdelinger ────────────────────────────────────────────────────
+// Afdelinger ligger i appen som et træ under adminData.selskaber[0].afdelinger.
+// Hver afdeling gemmes som sin egen række (nøgle: afdelingens id) UDEN children —
+// relationen bevares i parentId, så en underafdeling ikke også ligger duplikeret
+// inde i sin forælders række. Træet bygges igen ved læsning.
+export async function gemAfdelingTilSky(afd) {
+  if (!afd?.id) return
+  return gemTilSky('afdelinger', afd.id, afd?.navn, afd, 'gemAfdelingTilSky')
+}
+export async function hentAfdelingerFraSky() {
+  return hentFraSky('afdelinger', a => !!a.id, 'hentAfdelingerFraSky')
+}
+
 // ── Diff-hjælper ──────────────────────────────────────────────────
 // Kalder gemFn(nøgle, værdi) for hvert element der er nyt eller ændret siden
 // forrige snapshot. Bruges af dual-write-effekterne i App.jsx, så et enkelt
