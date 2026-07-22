@@ -62,3 +62,31 @@ export async function gemPatientTilSky(patient) {
     console.warn('[skySync] gemPatientTilSky exception:', e)
   }
 }
+
+// Læs tilbage: henter de patienter der er gemt i skyen for denne tenant.
+// Hele patient-objektet blev gemt i kolonnen "ekstra", så vi læser bare den ud.
+// Må aldrig kaste — alt fanges, og der returneres en tom liste ved fejl.
+export async function hentPatienterFraSky() {
+  try {
+    if (!supabase) return []
+    const session = await sikrSession()
+    if (!session) return []
+    const tenantId = await hentTenantId()
+    if (!tenantId) return []
+
+    const { data, error } = await supabase
+      .from('patienter')
+      .select('ekstra')
+      .eq('tenant_id', tenantId)
+    if (error) {
+      console.warn('[skySync] hentPatienterFraSky select failed:', error.message)
+      return []
+    }
+    return (data ?? [])
+      .map(r => r?.ekstra)
+      .filter(p => p && typeof p === 'object' && p.id)
+  } catch (e) {
+    console.warn('[skySync] hentPatienterFraSky exception:', e)
+    return []
+  }
+}
