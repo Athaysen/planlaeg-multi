@@ -90,3 +90,123 @@ export async function hentPatienterFraSky() {
     return []
   }
 }
+
+// ══════════════════════════════════════════════════════════════════
+//  Medarbejdere, lokaler og forløb — samme mønster som patienter
+// ══════════════════════════════════════════════════════════════════
+// localStorage/React-state er fortsat den primære kilde. Skyen er en kopi.
+// Alle skrivninger er upserts på (tenant_id, app_id), så gentagne kald er
+// idempotente. Hele objektet lægges i kolonnen "ekstra"; kun app_id og navn
+// skrives som rigtige kolonner, så vi ikke er afhængige af kolonnetyper.
+
+// Fælles forudsætning for al sky-adgang. Returnerer tenant_id, eller null hvis
+// vi ikke skal (eller kan) tale med skyen. sikrSession() giver kun en session i
+// DEV, så denne returnerer altid null i produktion — dvs. alt bliver no-op.
+async function klarTilSky() {
+  if (!supabase) return null
+  const session = await sikrSession()
+  if (!session) return null
+  const tenantId = await hentTenantId()
+  if (!tenantId) return null
+  return tenantId
+}
+
+// Generisk upsert. Kaster aldrig; fejl ender som console.warn.
+async function gemTilSky(tabel, appId, navn, ekstra, label) {
+  try {
+    const tenantId = await klarTilSky()
+    if (!tenantId) return
+    if (appId === undefined || appId === null || String(appId) === '') return
+    const { error } = await supabase
+      .from(tabel)
+      .upsert({
+        tenant_id: tenantId,
+        app_id: String(appId),
+        navn: navn ?? '',
+        ekstra,
+      }, { onConflict: 'tenant_id,app_id' })
+    if (error) console.warn(`[skySync] ${label} upsert failed:`, error.message)
+  } catch (e) {
+    console.warn(`[skySync] ${label} exception:`, e)
+  }
+}
+
+// Generisk læsning af kolonnen "ekstra". Returnerer altid et array.
+async function hentFraSky(tabel, gyldig, label) {
+  try {
+    const tenantId = await klarTilSky()
+    if (!tenantId) return []
+    const { data, error } = await supabase
+      .from(tabel)
+      .select('ekstra')
+      .eq('tenant_id', tenantId)
+    if (error) {
+      console.warn(`[skySync] ${label} select failed:`, error.message)
+      return []
+    }
+    return (data ?? [])
+      .map(r => r?.ekstra)
+      .filter(x => x && typeof x === 'object')
+      .filter(gyldig)
+  } catch (e) {
+    console.warn(`[skySync] ${label} exception:`, e)
+    return []
+  }
+}
+
+// ── Medarbejdere ──────────────────────────────────────────────────
+// Nøgle: medarbejderens id.
+export async function gemMedarbejderTilSky(med) {
+  if (!med?.id) return
+  return gemTilSky('medarbejdere', med.id, med?.navn, med, 'gemMedarbejderTilSky')
+}
+export async function hentMedarbejdereFraSky() {
+  return hentFraSky('medarbejdere', m => !!m.id, 'hentMedarbejdereFraSky')
+}
+
+// ── Lokaler ───────────────────────────────────────────────────────
+// Lokaler er i appen en liste af navne-strenge med sidecar-metadata i lokMeta.
+// Nøglen er derfor selve navnet. Vi gemmer {navn, meta} samlet i "ekstra".
+export async function gemLokaleTilSky(lokale) {
+  const navn = typeof lokale === 'string' ? lokale : lokale?.navn
+  if (!navn) return
+  const nyttelast = typeof lokale === 'string' ? { navn, meta: {} } : lokale
+  return gemTilSky('lokaler', navn, navn, nyttelast, 'gemLokaleTilSky')
+}
+export async function hentLokalerFraSky() {
+  return hentFraSky('lokaler', l => typeof l.navn === 'string' && l.navn !== '', 'hentLokalerFraSky')
+}
+
+// ── Forløb ────────────────────────────────────────────────────────
+// Forløb er et map { id: [opgaver] } med navn/beskrivelse i forlobMeta.
+// Nøglen er map-nøglen. Vi gemmer {id, navn, beskrivelse, opgaver} i "ekstra".
+export async function gemForlobTilSky(forlobItem) {
+  if (!forlobItem?.id) return
+  return gemTilSky('forlob_skabeloner', forlobItem.id, forlobItem?.navn, forlobItem, 'gemForlobTilSky')
+}
+export async function hentForlobFraSky() {
+  return hentFraSky('forlob_skabeloner', f => !!f.id, 'hentForlobFraSky')
+}
+
+// ── Diff-hjælper ──────────────────────────────────────────────────
+// Kalder gemFn(nøgle, værdi) for hvert element der er nyt eller ændret siden
+// forrige snapshot. Bruges af dual-write-effekterne i App.jsx, så et enkelt
+// felt-redigering ikke udløser en skrivning af hele listen.
+// Ikke-blokerende og kaster aldrig.
+export function synkroniserAendrede(forrige, ny, gemFn, label = 'dual-write') {
+  try {
+    const stabil = (v) => { try { return JSON.stringify(v) } catch { return null } }
+    Object.keys(ny || {}).forEach(noegle => {
+      const gammel = forrige ? forrige[noegle] : undefined
+      if (gammel !== undefined && stabil(gammel) === stabil(ny[noegle])) return
+      try {
+        Promise.resolve(gemFn(noegle, ny[noegle]))
+          .catch(e => console.warn(`[skySync] ${label} fejlede:`, e))
+      } catch (e) {
+        console.warn(`[skySync] ${label} fejlede:`, e)
+      }
+    })
+  } catch (e) {
+    console.warn(`[skySync] ${label} exception:`, e)
+  }
+}

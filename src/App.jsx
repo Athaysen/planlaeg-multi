@@ -52,7 +52,13 @@ import ForlobView from "./views/ForlobView.jsx";
 import MinProfilPanel from "./modals/MinProfilPanel.jsx";
 import MedarbejderView from "./views/MedarbejderView.jsx";
 import { GodkendelsesView, OmfordelingView, AktivLogView } from "./views/admin-subviews.jsx";
-import { hentPatienterFraSky } from "./lib/skySync.js";
+import {
+  hentPatienterFraSky,
+  gemMedarbejderTilSky, hentMedarbejdereFraSky,
+  gemLokaleTilSky, hentLokalerFraSky,
+  gemForlobTilSky, hentForlobFraSky,
+  synkroniserAendrede,
+} from "./lib/skySync.js";
 import { ConfirmDialog, GlobalSearch } from "./components/dialogs.jsx";
 import {
   eksporterPatientlisteExcel, eksporterMedarbejdereExcel,
@@ -265,6 +271,95 @@ export default function App(){
       try{localStorage.setItem("planmed_lokMeta",JSON.stringify(ny));}catch(e){}
       return ny;
     });
+  },[]);
+
+  // ══════════════════════════════════════════════════════════════════
+  //  Dual-write + læs-tilbage: medarbejdere, lokaler og forløb
+  // ══════════════════════════════════════════════════════════════════
+  // Samme sikre mønster som patienter: localStorage/state er primær kilde,
+  // skyen er en kopi, alt er ikke-blokerende, og alle fejl fanges i skySync.
+  // Al UI (formularer, sletning, Excel-import, iCal) skriver gennem
+  // setMedarbejdere / saveLokaler / setForlob. I stedet for at hooke hvert
+  // enkelt kaldsted — mange er onChange-handlers, som ville give én skrivning
+  // per tastetryk — differ vi den commitede state mod forrige snapshot. Det
+  // fanger alle ændringer ét sted og holder state-updaters rene.
+  // spring*-flagene undgår at data, vi lige har hentet, skrives retur igen.
+  const forrigeMedRef=useRef(null), springMedRef=useRef(false);
+  const forrigeLokRef=useRef(null), springLokRef=useRef(false);
+  const forrigeForlobRef=useRef(null), springForlobRef=useRef(false);
+
+  // ── Medarbejdere (nøgle: id) ──
+  useEffect(()=>{
+    if(!import.meta.env.DEV) return;
+    const kort=Object.fromEntries((medarbejdere||[]).filter(m=>m?.id).map(m=>[m.id,m]));
+    const forrige=forrigeMedRef.current;
+    forrigeMedRef.current=kort;
+    if(forrige===null) return; // første commit er opstart, ikke en ændring
+    if(springMedRef.current){springMedRef.current=false;return;}
+    synkroniserAendrede(forrige,kort,(id,m)=>gemMedarbejderTilSky(m),"medarbejder");
+  },[medarbejdere]);
+  useEffect(()=>{
+    let annulleret=false;
+    hentMedarbejdereFraSky().then(fraSky=>{
+      if(annulleret) return;
+      if(!Array.isArray(fraSky)||fraSky.length===0) return;
+      springMedRef.current=true;
+      setMedarbejdere(fraSky);
+    }).catch(e=>{console.warn("[App] hentMedarbejdereFraSky fejlede:",e);});
+    return ()=>{annulleret=true;};
+  },[]);
+
+  // ── Lokaler (nøgle: navnet — lokaler er en liste af strenge med lokMeta som sidecar) ──
+  useEffect(()=>{
+    if(!import.meta.env.DEV) return;
+    const kort=Object.fromEntries((lokaler||[])
+      .filter(n=>typeof n==="string"&&n!=="")
+      .map(n=>[n,{navn:n,meta:lokMeta?.[n]||{}}]));
+    const forrige=forrigeLokRef.current;
+    forrigeLokRef.current=kort;
+    if(forrige===null) return;
+    if(springLokRef.current){springLokRef.current=false;return;}
+    synkroniserAendrede(forrige,kort,(navn,l)=>gemLokaleTilSky(l),"lokale");
+  },[lokaler,lokMeta]);
+  useEffect(()=>{
+    let annulleret=false;
+    hentLokalerFraSky().then(fraSky=>{
+      if(annulleret) return;
+      if(!Array.isArray(fraSky)||fraSky.length===0) return;
+      springLokRef.current=true;
+      saveLokaler(fraSky.map(l=>l.navn));
+      setLokMeta(prev=>({...prev,...Object.fromEntries(fraSky.map(l=>[l.navn,l.meta||{}]))}));
+    }).catch(e=>{console.warn("[App] hentLokalerFraSky fejlede:",e);});
+    return ()=>{annulleret=true;};
+  },[]);
+
+  // ── Forløb (nøgle: map-nøglen i forlob; navn/beskrivelse ligger i forlobMeta) ──
+  useEffect(()=>{
+    if(!import.meta.env.DEV) return;
+    const kort=Object.fromEntries(Object.keys(forlob||{}).map(id=>[id,{
+      id,
+      navn:forlobMeta?.[id]?.navn||"",
+      beskrivelse:forlobMeta?.[id]?.beskrivelse||"",
+      opgaver:Array.isArray(forlob[id])?forlob[id]:[],
+    }]));
+    const forrige=forrigeForlobRef.current;
+    forrigeForlobRef.current=kort;
+    if(forrige===null) return;
+    if(springForlobRef.current){springForlobRef.current=false;return;}
+    synkroniserAendrede(forrige,kort,(id,f)=>gemForlobTilSky(f),"forløb");
+  },[forlob,forlobMeta]);
+  useEffect(()=>{
+    let annulleret=false;
+    hentForlobFraSky().then(fraSky=>{
+      if(annulleret) return;
+      if(!Array.isArray(fraSky)||fraSky.length===0) return;
+      springForlobRef.current=true;
+      setForlob(Object.fromEntries(fraSky.map(f=>[f.id,Array.isArray(f.opgaver)?f.opgaver:[]])));
+      setForlobMeta(prev=>({...prev,...Object.fromEntries(
+        fraSky.map(f=>[f.id,{navn:f.navn||"",beskrivelse:f.beskrivelse||""}])
+      )}));
+    }).catch(e=>{console.warn("[App] hentForlobFraSky fejlede:",e);});
+    return ()=>{annulleret=true;};
   },[]);
   // Udstyr: kategorier med items, og pakker
   const [udstyrsKat,setUdstyrsKat]=useState(()=>{try{const s=localStorage.getItem("planmed_udstyrsKat");return s?JSON.parse(s):[];}catch(e){return[];}});
