@@ -52,6 +52,7 @@ import ForlobView from "./views/ForlobView.jsx";
 import MinProfilPanel from "./modals/MinProfilPanel.jsx";
 import MedarbejderView from "./views/MedarbejderView.jsx";
 import { GodkendelsesView, OmfordelingView, AktivLogView } from "./views/admin-subviews.jsx";
+import { hentPatienterFraSky } from "./lib/skySync.js";
 import { ConfirmDialog, GlobalSearch } from "./components/dialogs.jsx";
 import {
   eksporterPatientlisteExcel, eksporterMedarbejdereExcel,
@@ -125,6 +126,19 @@ export default function App(){
     if(!import.meta.env.DEV) return [];
     try{return INIT_PATIENTER_RAW.map(r=>buildPatient(r));}catch(e){return [];}
   });
+  // Læs tilbage fra skyen ved opstart, så patienter overlever log ud/ind.
+  // hentPatienterFraSky() venter selv på dev-broens session og returnerer tom
+  // liste hvis der ingen session er — dvs. i produktion sker der intet her.
+  // Tom liste => vi rører ikke eksisterende patienter.
+  useEffect(()=>{
+    let annulleret=false;
+    hentPatienterFraSky().then(fraSky=>{
+      if(annulleret) return;
+      if(!Array.isArray(fraSky)||fraSky.length===0) return;
+      setPatienter(fraSky);
+    }).catch(e=>{console.warn("[App] hentPatienterFraSky fejlede:",e);});
+    return ()=>{annulleret=true;};
+  },[]);
   const [medarbejdere,setMedarbejdereRaw]=useState(()=>{
     if(!import.meta.env.DEV) return [];
     return [...BASE_MED].map(ensureKompetencer);
