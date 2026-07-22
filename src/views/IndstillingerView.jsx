@@ -5,6 +5,7 @@ import { useAudit } from "../utils/audit.js";
 import { C, BASE_MED, LK, PK, PD, NAV_ITEMS, INIT_PATIENTER_RAW, buildPatient } from "../data/constants.js";
 import { Btn, Input, Sel, FRow, Pill, ViewHeader, ErrorBoundary, StrenghedToggle } from "../components/primitives.jsx";
 import { ConfirmDialog } from "../components/dialogs.jsx";
+import { gemPatientTilSky } from "../lib/skySync.js";
 
 export function PlanlaegIndstillingerPanel({config,setConfig,setPatienter,setMedarbejdere,setForlob,forlob,setLokTider,lokMeta={},setLokMeta,patienter=[],lokaler=[],saveLokaler=()=>{},medarbejdere=[],setIndsatser=()=>{},indsatser=[]}){
   const [c,setC]=useState({...config,serverModel:config.serverModel||"planmed",selfhostedUrl:config.selfhostedUrl||""});
@@ -987,6 +988,15 @@ function ExcelImportPanel({setPatienter,setMedarbejdere,setForlob,forlob,setLokT
         const nyeUnikke=nyePat.filter(p=>!eksCPR.has((p.cpr||"").replace(/[^0-9]/g,"")));
         const sprungetOver=nyePat.length-nyeUnikke.length;
         setPatienter(ps=>[...ps,...nyeUnikke]);
+        // Dual-write til skyen — samme mønster som ved manuel oprettelse.
+        // Ikke-blokerende: importen er allerede gennemført i state ovenfor, og
+        // gemPatientTilSky fanger selv sine fejl. .catch() er sikkerhedsnet, så
+        // et afvist promise aldrig kan vælte importen.
+        nyeUnikke.forEach(p=>{
+          try{
+            Promise.resolve(gemPatientTilSky(p)).catch(e=>console.warn("[import] gemPatientTilSky fejlede:",e));
+          }catch(e){console.warn("[import] gemPatientTilSky fejlede:",e);}
+        });
         // Audit: bulk-oprettelse via Excel/CSV
         audit("oprettelse","patient","bulk",{antal:nyeUnikke.length,kilde:"excel-import",sprungetOver});
         setStatus({ok:true,msg:"OK "+nyeUnikke.length+" patienter importeret"+(sprungetOver>0?" ("+sprungetOver+" sprunget over — CPR eksisterer allerede)":"")});
