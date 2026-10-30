@@ -643,8 +643,11 @@ export default function App(){
   const handlePlan=useCallback(async ()=>{
     if(running)return;
     setRunning(true);
+    // Afsluttede/udmeldte patienter planlægges ikke og beholdes uændret
+    const erInaktivPat=p=>p.status==="afsluttet"||p.status==="udmeldt";
+    const tilPlan=patienter.filter(p=>!erInaktivPat(p));
     // Nulstil alle ikke-låste opgaver før planlægning
-    const nulstillet=patienter.map(p=>({
+    const nulstillet=tilPlan.map(p=>({
       ...p,
       opgaver:p.opgaver.map(o=>o.låst?o:{...o,status:"afventer",dato:null,startKl:null,slutKl:null,lokale:null,medarbejder:null})
     }));
@@ -670,7 +673,9 @@ export default function App(){
     }
     setProgress({done:res.planned+res.failed,total});
     await new Promise(r=>setTimeout(r,50));
-    setPatienter(res.patienter);
+    // Flet planlagte patienter sammen med de uberørte, så ingen forsvinder
+    const planlagtById=new Map((res.patienter||[]).map(p=>[p.id,p]));
+    setPatienter(patienter.map(p=>erInaktivPat(p)?p:(planlagtById.get(p.id)||p)));
     setPlanLog(res.planLog||[]);
     setRunning(false);
     setProgress(null);
