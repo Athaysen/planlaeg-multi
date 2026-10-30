@@ -2466,6 +2466,45 @@ export default function PlanMedTester({onClose}){
       log("Spacing","Intet cooldown-krav: begge kan planlægges samme dag",planlagteF.length===2);
     }catch(e){log("Spacing","Spacing-suite",false,e.message);}
 
+    // ── SUITE 65: certifikatkrav (A3) og cooldown i minutter (B3) ────
+    try{
+      const alleDage=Object.fromEntries(["Søndag","Mandag","Tirsdag","Onsdag","Torsdag","Fredag","Lørdag"].map(d=>([d,{aktiv:true,start:"08:00",slut:"17:00"}])));
+      const lt={};["Mandag","Tirsdag","Onsdag","Torsdag","Fredag","Lørdag","Søndag"].forEach(d=>{lt[d]={"R":{å:"08:00",l:"17:00"}};});
+      const certs=[{id:"c_ados",navn:"ADOS-2"}];
+      const medU={navn:"U",titel:"Psykolog",kompetencer:["X"],arbejdsdage:alleDage,certifikater:[]};
+      const medC={navn:"Cert",titel:"Psykolog",kompetencer:["X"],arbejdsdage:alleDage,certifikater:["c_ados"]};
+      const mkPat=(id,extra)=>({id,navn:id,cpr:"050505-0500",henvDato:"2026-04-20",status:"aktiv",statusHistorik:[],haste:false,...extra});
+      const mkOpg=(id,extra={})=>({id,sekvens:1,opgave:"X",minutter:30,status:"afventer",låst:false,muligeMed:["U","Cert"],muligeLok:["R"],patInv:false,tidligst:"08:00",senest:"17:00",dato:null,startKl:null,slutKl:null,lokale:null,medarbejder:null,...extra});
+      const cfg={lokTider:lt,pause:5,minGapDays:0,step:5,maxDage:7,certifikater:certs};
+
+      // A3: patienten kræver ADOS-2 → kun medarbejder med certifikatet må vælges
+      const rA=runPlanner([mkPat("pA",{kraevedeCertifikater:["c_ados"],opgaver:[mkOpg("a1")]})],{...cfg,medarbejdere:[medU,medC]});
+      const oA=rA.patienter[0].opgaver[0];
+      log("Certifikat","Patientkrav: opgaven går til medarbejder med certifikatet",oA.status==="planlagt"&&oA.medarbejder==="Cert",`med=${oA.medarbejder}`);
+      // A3: kun en medarbejder uden certifikat → opgaven fejler med tydelig årsag, ingen fallback
+      const rB=runPlanner([mkPat("pB",{opgaver:[mkOpg("b1",{kraevedeCertifikater:["c_ados"],muligeMed:["U"]})]})],{...cfg,medarbejdere:[medU]});
+      const oB=rB.patienter[0].opgaver[0];
+      const fejlB=rB.planLog.find(l=>l.type==="error"&&l.patId==="pB");
+      log("Certifikat","Opgavekrav uden kvalificeret medarbejder: fejler uden fallback",oB.status!=="planlagt"&&!oB.medarbejder,`status=${oB.status}`);
+      log("Certifikat","Fejlårsag i planLog nævner certifikatnavnet",!!fejlB&&/ingen medarbejder med certifikat: ADOS-2/.test(fejlB.msg||""),fejlB?.msg||"ingen fejl-log");
+
+      // B3: cooldownMin=90 → samme dag tilladt, men mindst 90 min mellem slut og start
+      const medS={navn:"S",titel:"Psykolog",kompetencer:["X","Y"],arbejdsdage:alleDage};
+      const sortTid=(a,b)=>(a.dato+a.startKl).localeCompare(b.dato+b.startKl);
+      const rM=runPlanner([mkPat("pM",{opgaver:[mkOpg("m1",{muligeMed:["S"],cooldownMin:90}),mkOpg("m2",{sekvens:2,opgave:"Y",muligeMed:["S"]})]})],{...cfg,medarbejdere:[medS]});
+      const plM=rM.patienter[0].opgaver.filter(o=>o.status==="planlagt").sort(sortTid);
+      log("Cooldown-min","cooldownMin: begge opgaver planlagt",plM.length===2);
+      if(plM.length===2){
+        const gapMin=daysBetween(plM[0].dato,plM[1].dato)*1440+toMin(plM[1].startKl)-toMin(plM[0].slutKl);
+        log("Cooldown-min","cooldownMin=90: samme dag og ≥90 min mellem opgaverne",plM[0].dato===plM[1].dato&&gapMin>=90,`gap=${gapMin} min`);
+      }
+      // B4: uden minut-felter → uændret adfærd (kan ligge lige efter hinanden)
+      const rN=runPlanner([mkPat("pN",{opgaver:[mkOpg("n1",{muligeMed:["S"]}),mkOpg("n2",{sekvens:2,opgave:"Y",muligeMed:["S"]})]})],{...cfg,medarbejdere:[medS]});
+      const plN=rN.patienter[0].opgaver.filter(o=>o.status==="planlagt").sort(sortTid);
+      const gapN=plN.length===2?daysBetween(plN[0].dato,plN[1].dato)*1440+toMin(plN[1].startKl)-toMin(plN[0].slutKl):-1;
+      log("Cooldown-min","Bagudkompatibel: uden cooldownMin planlægges tæt efter hinanden",plN.length===2&&gapN>=0&&gapN<90,`gap=${gapN} min`);
+    }catch(e){log("Certifikat","Certifikat/cooldown-suite",false,e.message);}
+
     // ── SUITE 58: i18n sprogskift + fallback ─────────────────────────
     try{
       const oprindelig=i18n.language;

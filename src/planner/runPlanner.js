@@ -95,6 +95,7 @@ export function runPlanner(patienter, config={}) {
     maxDageForlob=0,
     titler:titlerCfg=null,
     lokMeta={},
+    certifikater:certListe=[],
   } = config;
   // Hjælper: tjek om et lokale har alle krævede udstyr
   const lokHarUdstyr=(lokNavn,kraevet)=>{
@@ -127,6 +128,34 @@ export function runPlanner(patienter, config={}) {
       }
     }
     return true;
+  };
+  // Minut-baseret spacing: cooldownMin og patInvMinMin (begge i minutter).
+  // Afstanden måles mellem slut på den ene opgave og start på den anden
+  // (dato + startKl/slutKl), så opgaver med minut-cooldown gerne må ligge samme dag.
+  // Returnerer null hvis tidspunktet er OK — ellers det tidligste tilladte
+  // start-minut (på `dato`) efter den blokerende opgave, så søgningen kan skubbes frem.
+  // Gamle opgaver uden minut-felter påvirkes ikke (krav = 0).
+  const configCooldownMin = Number(config.cooldownMin)||0;
+  const configPatInvMinMin = Number(config.patInvMinMin)||0;
+  const spacingMinBlok = (opg, dato, startMin, slutMin, patId) => {
+    if(!patId) return null;
+    const pat = klonPat.find(p => p.id === patId);
+    if(!pat) return null;
+    const andre = pat.opgaver.filter(o => o.id !== opg.id && o.status === "planlagt" && o.dato && o.startKl && o.slutKl);
+    let blok = null;
+    for(const a of andre) {
+      let krav = Math.max(Number(opg.cooldownMin)||0, Number(a.cooldownMin)||0, configCooldownMin);
+      if(opg.patInv && a.patInv) krav = Math.max(krav, Number(opg.patInvMinMin)||0, Number(a.patInvMinMin)||0, configPatInvMinMin);
+      if(krav <= 0) continue;
+      const d = daysBetween(a.dato, dato); // hele dage fra a til det nye tidspunkt
+      const nyStart = d*1440 + startMin, nySlut = d*1440 + slutMin;
+      const aStart = toMin2(a.startKl), aSlut = toMin2(a.slutKl);
+      const gap = nyStart >= aSlut ? nyStart - aSlut : (aStart >= nySlut ? aStart - nySlut : -1);
+      if(gap >= krav) continue;
+      const naeste = aSlut + krav - d*1440;
+      blok = blok===null ? naeste : Math.max(blok, naeste);
+    }
+    return blok;
   };
   const titlerBase=Array.isArray(titlerCfg)&&titlerCfg.length>0?titlerCfg:DEFAULT_TITLER;
   // Bagudkompat: udvid med titler der faktisk findes på medarbejdere — så gamle
@@ -499,7 +528,9 @@ export function runPlanner(patienter, config={}) {
   const sorterede = [...klonPat].sort((a,b)=>beregnPrioritet(a)-beregnPrioritet(b));
 
   // ── Hjælper: byg kandidatliste for en opgave ──
-  const bygKandidater = (opg) => {
+  // certFejl[opg.id] sættes når certifikatkravet fjerner alle kandidater (bruges i planLog).
+  const certFejl = {};
+  const bygKandidater = (opg, pat=null) => {
     const muligeMed = opg.muligeMed||[];
     const dynNavne = titlerListe.map(t=>t.navn);
     const TITLER = [...dynNavne,"Laege","Paedagog"];
@@ -536,6 +567,22 @@ export function runPlanner(patienter, config={}) {
       return m && (m.kompetencer||[]).length>0;
     });
     if(nogenHarKompetencer) effKandidater = effKandidater.filter(harKompetence);
+    // Certifikatkrav: patientens kraevedeCertifikater ∪ opgavens kraevedeCertifikater.
+    // Behold kun medarbejdere der har ALLE krævede certifikater (oven i titel/kompetence).
+    // Er der ingen tilbage, fejler opgaven — der falder ALDRIG tilbage på en uden certifikat.
+    const kraevede = [...new Set([...(pat?.kraevedeCertifikater||[]), ...(opg.kraevedeCertifikater||[])])];
+    delete certFejl[opg.id];
+    if(kraevede.length>0) {
+      effKandidater = effKandidater.filter(navn=>{
+        const m = medarbejdere.find(mm=>mm.navn===navn);
+        const har = Array.isArray(m?.certifikater) ? m.certifikater : [];
+        return kraevede.every(c=>har.includes(c));
+      });
+      if(effKandidater.length===0) {
+        const navne = kraevede.map(c=>(certListe||[]).find(x=>x.id===c)?.navn||c).join(", ");
+        certFejl[opg.id] = `ingen medarbejder med certifikat: ${navne}`;
+      }
+    }
     return effKandidater;
   };
 
@@ -578,6 +625,7 @@ export function runPlanner(patienter, config={}) {
 
   // ── Hjælper: book en enkelt opgave med tidligste start-minut ──
   const bookOpgave = (opg, effKandidater, tidligstDato, tidligstMin=0, patId=null, deadline=null) => {
+    if(!Array.isArray(effKandidater) || effKandidater.length===0) return false;
     const varMin = (opg.minutter||60) + pause;
     // Filtrér lokaler så kun dem med krævet udstyr kan vælges (samme regel som bookGruppe).
     // Skelnen mellem "ingen constraint" (raw tom) og "alle rum filtreret bort" (raw ikke-tom
@@ -615,7 +663,13 @@ export function runPlanner(patienter, config={}) {
         const sortLok = (muligeLok.length>0?[...muligeLok]:[""])
           .sort((a,b)=>((lokBooket[a]?.[dato]||[]).length)-((lokBooket[b]?.[dato]||[]).length));
         for(const lokNavn of sortLok) {
-          const slot = findLedigTidEfter(medNavn, lokNavn||null, dato, varMin, dagMin, opgSenest);
+          let slot = findLedigTidEfter(medNavn, lokNavn||null, dato, varMin, dagMin, opgSenest);
+          // Minut-cooldown/ventetid: skub starten frem til efter den blokerende opgave
+          for(let it=0; slot && it<50; it++) {
+            const blok = spacingMinBlok(opg, dato, slot.start, slot.slut-pause, patId);
+            if(blok===null) break;
+            slot = findLedigTidEfter(medNavn, lokNavn||null, dato, varMin, Math.max(blok, slot.start+step), opgSenest);
+          }
           if(slot) {
             opg.status="planlagt";
             opg.dato=dato;
@@ -764,7 +818,7 @@ export function runPlanner(patienter, config={}) {
 
     for(const opg of ventende) {
       if(planlagteIds.has(opg.id)) continue;
-      let kandidater = bygKandidater(opg);
+      let kandidater = bygKandidater(opg, pat);
       if(opg.indsatsGruppe && gruppeMed[opg.indsatsGruppe]) {
         const låstMed = gruppeMed[opg.indsatsGruppe];
         kandidater = [låstMed, ...kandidater.filter(k=>k!==låstMed)];
@@ -817,9 +871,14 @@ export function runPlanner(patienter, config={}) {
       const {fejlOpg, effTidligstDato, effTidligstMin, kandidater} = res;
       failed++;
       const deadlineMsg = deadline ? ` (deadline: ${deadline})` : "";
+      const certGrund = certFejl[fejlOpg.id] || null;
       planLog.push({type:"error",patId:pat.id,patNavn:pat.navn,opgave:fejlOpg.opgave,
-        msg:`[${pat.navn}] #${fejlOpg.sekvens} ${fejlOpg.opgave} — FEJL: ingen ledig tid${deadlineMsg} [søgte fra: ${effTidligstDato} ${fromMin2(effTidligstMin)}]`,
-        fejl:`Sekvens #${fejlOpg.sekvens}: Ingen ledig tid fundet${deadlineMsg} (${(kandidater||[]).length} kandidater)`});
+        msg:certGrund
+          ? `[${pat.navn}] #${fejlOpg.sekvens} ${fejlOpg.opgave} — FEJL: ${certGrund}`
+          : `[${pat.navn}] #${fejlOpg.sekvens} ${fejlOpg.opgave} — FEJL: ingen ledig tid${deadlineMsg} [søgte fra: ${effTidligstDato} ${fromMin2(effTidligstMin)}]`,
+        fejl:certGrund
+          ? `Sekvens #${fejlOpg.sekvens}: ${certGrund}`
+          : `Sekvens #${fejlOpg.sekvens}: Ingen ledig tid fundet${deadlineMsg} (${(kandidater||[]).length} kandidater)`});
       // Registrer resterende som fejlede (men potentielt løsbare via bump)
       const rest = ventende.slice(ventende.indexOf(fejlOpg)+1);
       rest.forEach(r=>{
@@ -849,7 +908,7 @@ export function runPlanner(patienter, config={}) {
     const fejlPrioritet = patPrioritetMap[fejlPat.id];
     const deadline = beregnDeadline(fejlPat);
     const blokeretOpg = fejlVentende[0];
-    const blokeretKandidater = bygKandidater(blokeretOpg);
+    const blokeretKandidater = bygKandidater(blokeretOpg, fejlPat);
     const blokeretLokaler = ekspanderLokaler(blokeretOpg.muligeLok||[]);
 
     // Find bumpable bookinger fra lavere-prioritets patienter

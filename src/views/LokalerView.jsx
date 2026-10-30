@@ -1,7 +1,7 @@
 // Lokaler & udstyr-klynge: view, forms og underkomponenter.
 // IndsatsForm eksporteres fordi ForlobView også bruger den.
 import React, { useState, useMemo } from "react";
-import { today, addDays, toMin, uid, parseLocalDate, daysBetween, getDag, valutaSymbol, formatBeloeb, medVisning } from "../utils/index.js";
+import { today, addDays, toMin, uid, parseLocalDate, daysBetween, getDag, valutaSymbol, formatBeloeb, medVisning, enhedTilDageMin } from "../utils/index.js";
 import { C, ALLE_K, DEFAULT_LOK_TIDER, STANDARD_AABNINGSTIDER, INIT_CERTIFIKATER } from "../data/constants.js";
 import { Btn, Input, Modal, FRow, Pill, ViewHeader, PeriodeVaelger } from "../components/primitives.jsx";
 import { ConfirmDialog } from "../components/dialogs.jsx";
@@ -881,7 +881,7 @@ function LokMetaForm({lok,meta,onSave,onClose,onDelete=null,onRename=null,lokale
   );
 }
 
-function NumEnhedInput({value, enhed, onValChange, onEnhedChange}){
+export function NumEnhedInput({value, enhed, onValChange, onEnhedChange}){
   return(
     <div style={{display:"flex",alignItems:"center",gap:4}}>
       <input type="number" value={value||0} min="0" max="999"
@@ -891,6 +891,8 @@ function NumEnhedInput({value, enhed, onValChange, onEnhedChange}){
       <select value={enhed||"dage"} onChange={e=>onEnhedChange(e.target.value)}
         style={{padding:"3px 8px",borderRadius:6,border:`1px solid ${C.brd}`,
           background:C.s1,color:C.txt,fontSize:12,fontFamily:"inherit",outline:"none"}}>
+        <option value="minutter">minutter</option>
+        <option value="timer">timer</option>
         <option value="dage">dage</option>
         <option value="uger">uger</option>
         <option value="måneder">måneder</option>
@@ -905,15 +907,15 @@ export function IndsatsForm({indsats, onSave, onClose, lokaler=[]}) {
     samMed: i > 0,
     tidligst:"08:00", senest:"17:00", lokaler:[], certifikat:"",
     udstyr:[],
-    // patInv interval
-    patInvMinDage:0, patInvMinDageEnhed:"dage",
+    // patInv interval (patInvMinMin = afledt minut-felt, 0 for dage/uger/måneder)
+    patInvMinDage:0, patInvMinDageEnhed:"dage", patInvMinMin:0,
     // rulleplan
     ruller:false, rullerOpgave:"",
     rullerTidligstAntal:4, rullerTidligstEnhed:"uger",
     rullerSenestAntal:6, rullerSenestEnhed:"uger",
     rullerLåsAntal:2, rullerLåsEnhed:"uger",
     // cooldown
-    cooldownAktiv:false, cooldownAntal:3, cooldownEnhed:"dage",
+    cooldownAktiv:false, cooldownAntal:3, cooldownEnhed:"dage", cooldownDage:3, cooldownMin:0,
     // e-Boks
     eBoksAktiv:false, eBoksDokNavn:null, eBoksTid:"lås",
   });
@@ -944,7 +946,14 @@ export function IndsatsForm({indsats, onSave, onClose, lokaler=[]}) {
 
   // Elementer CRUD
   const addEl    = ()      => setF(p=>({...p, elementer:[...p.elementer, blankEl(p.elementer.length)]}));
-  const updEl    = (i,k,v) => setF(p=>({...p, elementer:p.elementer.map((e,j)=>j===i?{...e,[k]:v}:e)}));
+  const updEl    = (i,k,v) => setF(p=>({...p, elementer:p.elementer.map((e,j)=>{
+    if(j!==i) return e;
+    const ny={...e,[k]:v};
+    // Afledte felter: dage/uger/måneder → minut-felt 0; timer/minutter → dag-felt 0 og minut-felt udfyldt
+    if(k==="cooldownAntal"||k==="cooldownEnhed"){ const r=enhedTilDageMin(ny.cooldownAntal,ny.cooldownEnhed||"dage"); ny.cooldownDage=r.dage; ny.cooldownMin=r.min; }
+    if(k==="patInvMinDage"||k==="patInvMinDageEnhed"){ const r=enhedTilDageMin(ny.patInvMinDage,ny.patInvMinDageEnhed||"dage"); ny.patInvMinMin=r.min; }
+    return ny;
+  })}));
   const togElLok = (i,l)   => setF(p=>({...p, elementer:p.elementer.map((e,j)=>j!==i?e:
     {...e, lokaler:e.lokaler.includes(l)?e.lokaler.filter(x=>x!==l):[...e.lokaler,l]})}));
   const delEl    = i        => setF(p=>({...p, elementer:p.elementer.filter((_,j)=>j!==i)}));
