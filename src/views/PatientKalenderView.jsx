@@ -2,12 +2,12 @@
 // Holdes samlet i én fil fordi komponenterne er tæt koblede
 // (PatientKalenderView mounter PatientDetaljeModal, som mounter form-modals).
 import React, { useState, useEffect, useMemo } from "react";
-import { today, addDays, toMin, fromMin, uid, validerCPR, medVisning } from "../utils/index.js";
+import { today, addDays, toMin, fromMin, uid, validerCPR, medVisning, enhedTilDageMin, dageMinTilEnhed } from "../utils/index.js";
 import { useAudit, filterAudit } from "../utils/audit.js";
 import { useTranslation } from "react-i18next";
 import { C, FORLOB, ALLE_K, PAT_STATUS, STATUS, sC, sB, sL, buildPatient } from "../data/constants.js";
 import { Btn, Input, Sel, Modal, FRow, Pill, StatusBadge, ProgressRing, ViewHeader, CprAdvarselBoks } from "../components/primitives.jsx";
-import { UdstyrPanel } from "./LokalerView.jsx";
+import { UdstyrPanel, NumEnhedInput } from "./LokalerView.jsx";
 import { gemPatientTilSky, sletPatientFraSky } from "../lib/skySync.js";
 import {
   eksporterPatientlisteExcel, eksporterMedarbejdereExcel,
@@ -591,7 +591,7 @@ function PatientDetaljeModal({pat,medarbejdere=[],patienter,forlob=FORLOB,onClos
   );
 }
 
-export default function PatientKalenderView({patienter,medarbejdere,setPatienter,forlob=FORLOB,showToast=()=>{},onMarkerLøst=null,lokMeta={},setAnmodninger=()=>{},adminData={},lokaler=[],aktivLog=[]}){
+export default function PatientKalenderView({patienter,medarbejdere,setPatienter,forlob=FORLOB,certifikater=[],showToast=()=>{},onMarkerLøst=null,lokMeta={},setAnmodninger=()=>{},adminData={},lokaler=[],aktivLog=[]}){
   const {audit}=useAudit();
   const [søg,setSøg]=useState("");
   const [fil,setFil]=useState("alle");
@@ -920,21 +920,21 @@ export default function PatientKalenderView({patienter,medarbejdere,setPatienter
       )}
       {editOpg&&(
         <Modal title={`Rediger opgave · ${editOpg.opg.opgave}`} onClose={()=>setEditOpg(null)}>
-          <EditOpgForm pat={editOpg.pat} opg={editOpg.opg} medarbejdere={medarbejdere}
+          <EditOpgForm pat={editOpg.pat} opg={editOpg.opg} medarbejdere={medarbejdere} certifikater={certifikater}
             onSave={ch=>{updateOpg(editOpg.pat.id,editOpg.opg.id,ch);setEditOpg(null);}}
             onClose={()=>setEditOpg(null)} lokaler={lokaler}/>
         </Modal>
       )}
       {addOpg&&valgt&&(
         <Modal title={`Tilføj opgave · ${valgt.navn}`} onClose={()=>setAddOpg(false)}>
-          <AddOpgForm medarbejdere={medarbejdere}
+          <AddOpgForm medarbejdere={medarbejdere} certifikater={certifikater}
             onSave={opg=>{setPatienter(ps=>ps.map(p=>p.id!==valgt.id?p:{...p,opgaver:[...p.opgaver,opg]}));setAddOpg(false);}}
             onClose={()=>setAddOpg(false)} lokaler={lokaler}/>
         </Modal>
       )}
       {editPat&&(
         <Modal title={"Rediger patient · "+editPat.navn} onClose={()=>setEditPat(null)} w={640}>
-          <EditPatientForm pat={editPat} medarbejdere={medarbejdere}
+          <EditPatientForm pat={editPat} medarbejdere={medarbejdere} certifikater={certifikater}
             onSave={updated=>{setPatienter(ps=>ps.map(p=>p.id===updated.id?updated:p));gemPatientTilSky(updated);setEditPat(null);}}
             onClose={()=>setEditPat(null)}/>
         </Modal>
@@ -957,14 +957,39 @@ export default function PatientKalenderView({patienter,medarbejdere,setPatienter
   );
 }
 
-function EditOpgForm({pat,opg,medarbejdere,onSave,onClose,lokaler=[]}){
+// Klikbare certifikat-chips — samme stil som certifikat-valget i MedForm
+function CertChips({valgte=[],certifikater=[],onChange}){
+  return(
+    <div style={{display:"flex",flexWrap:"wrap",gap:5,padding:"8px",background:C.s1,borderRadius:8,border:`1px solid ${C.brd}`,minHeight:40}}>
+      {certifikater.map(cc=>{
+        const har=valgte.includes(cc.id);
+        return(
+          <button key={cc.id} type="button"
+            onClick={()=>onChange(har?valgte.filter(x=>x!==cc.id):[...valgte,cc.id])}
+            title={cc.beskrivelse}
+            style={{background:har?C.ambM:"transparent",color:har?C.amb:C.txtD,
+              border:`1px solid ${har?C.amb:C.brd}`,borderRadius:6,padding:"3px 10px",
+              fontSize:11,cursor:"pointer",fontFamily:"inherit",fontWeight:har?700:400}}>
+            {har?"[v] ":""}{cc.navn}
+          </button>
+        );
+      })}
+      {certifikater.length===0&&<span style={{color:C.txtM,fontSize:12,padding:"2px 4px"}}>Ingen certifikater — opret dem under Opgaver › Certifikater</span>}
+    </div>
+  );
+}
+
+function EditOpgForm({pat,opg,medarbejdere,onSave,onClose,lokaler=[],certifikater=[]}){
+  const _pi=dageMinTilEnhed(opg.patInvMinDage,opg.patInvMinMin);
+  const _cd=dageMinTilEnhed(opg.cooldownDage,opg.cooldownMin);
   const [f,setF]=useState({
     dato:opg.dato||"",startKl:opg.startKl||"",slutKl:opg.slutKl||"",
     lokale:opg.lokale||"",medarbejder:opg.medarbejder||"",
     minutter:opg.minutter||30,status:opg.status,ønsketDato:opg.ønsketDato||"",
     patInv:opg.patInv||false,
-    patInvMinDage:opg.patInvMinDage||0,
-    cooldownDage:opg.cooldownDage||0,
+    patInvMinAntal:_pi.antal, patInvMinEnhed:_pi.enhed,
+    cooldownAntal:_cd.antal, cooldownEnhed:_cd.enhed,
+    kraevedeCertifikater:Array.isArray(opg.kraevedeCertifikater)?[...opg.kraevedeCertifikater]:[],
     udstyr:Array.isArray(opg.udstyr)?[...opg.udstyr]:[],
     ruller:opg.ruller||false,
     rullerOpgave:opg.rullerOpgave||"",
@@ -1013,8 +1038,8 @@ function EditOpgForm({pat,opg,medarbejdere,onSave,onClose,lokaler=[]}){
               options={[{v:"nej",l:"Nej — intern"},{v:"ja",l:"Ja — patient til stede"}]}/>
           </FRow>
           {f.patInv&&(
-            <FRow label="Min. dage ml. patientopgaver">
-              <Input type="number" value={f.patInvMinDage} onChange={v=>set("patInvMinDage",v)} min="0" max="365"/>
+            <FRow label="Min. ventetid ml. patientopgaver">
+              <NumEnhedInput value={f.patInvMinAntal} enhed={f.patInvMinEnhed} onValChange={v=>set("patInvMinAntal",v)} onEnhedChange={v=>set("patInvMinEnhed",v)}/>
             </FRow>
           )}
         </div>
@@ -1023,9 +1048,16 @@ function EditOpgForm({pat,opg,medarbejdere,onSave,onClose,lokaler=[]}){
       {/* Cooldown */}
       <div style={secStyle}>
         <div style={secHead}>Cooldown</div>
-        <FRow label="Min. dage til næste opgave" hint="0 = ingen begrænsning">
-          <Input type="number" value={f.cooldownDage} onChange={v=>set("cooldownDage",v)} min="0" max="365"/>
+        <FRow label="Min. ventetid til næste opgave" hint="0 = ingen begrænsning. Timer/minutter tillader samme dag.">
+          <NumEnhedInput value={f.cooldownAntal} enhed={f.cooldownEnhed} onValChange={v=>set("cooldownAntal",v)} onEnhedChange={v=>set("cooldownEnhed",v)}/>
         </FRow>
+      </div>
+
+      {/* Krævede certifikater — kun denne opgave */}
+      <div style={secStyle}>
+        <div style={secHead}>Krævede certifikater</div>
+        <div style={{color:C.txtM,fontSize:11,marginBottom:8}}>Gælder kun denne opgave. Lægges oven i patientens krav. Kun medarbejdere med alle krævede certifikater kan tildeles.</div>
+        <CertChips valgte={f.kraevedeCertifikater} certifikater={certifikater} onChange={v=>set("kraevedeCertifikater",v)}/>
       </div>
 
       {/* Udstyr */}
@@ -1067,21 +1099,32 @@ function EditOpgForm({pat,opg,medarbejdere,onSave,onClose,lokaler=[]}){
 
       <div style={{display:"flex",gap:8,justifyContent:"flex-end",marginTop:4}}>
         <Btn v="ghost" onClick={onClose}>Annuller</Btn>
-        <Btn v="primary" onClick={()=>onSave(f)}>Gem ændringer</Btn>
+        <Btn v="primary" onClick={()=>{
+          // Oversæt antal+enhed til dag- og minut-felter (dage/uger/måneder → min 0; timer/minutter → dage 0)
+          const {patInvMinAntal,patInvMinEnhed,cooldownAntal,cooldownEnhed,...rest}=f;
+          const pi=enhedTilDageMin(patInvMinAntal,patInvMinEnhed);
+          const cd=enhedTilDageMin(cooldownAntal,cooldownEnhed);
+          onSave({...rest,
+            patInvMinDage:f.patInv?pi.dage:0, patInvMinMin:f.patInv?pi.min:0,
+            cooldownDage:cd.dage, cooldownMin:cd.min,
+            kraevedeCertifikater:[...(f.kraevedeCertifikater||[])]});
+        }}>Gem ændringer</Btn>
       </div>
     </div>
   );
 }
 
-function AddOpgForm({medarbejdere,onSave,onClose,lokaler=[]}){
+function AddOpgForm({medarbejdere,onSave,onClose,lokaler=[],certifikater=[]}){
   const [f,setF]=useState({
     opgave:ALLE_K[0],minutter:45,patInv:false,
     tidligst:"08:00",senest:"17:00",muligeLok:[],
     udstyr:[],
-    // Patientdeltagelse-interval
-    patInvMinDage:0,
-    // Cooldown efter opgaven
-    cooldownDage:0,
+    // Patientdeltagelse-interval (antal+enhed → patInvMinDage/patInvMinMin ved gem)
+    patInvMinAntal:0, patInvMinEnhed:"dage",
+    // Cooldown efter opgaven (antal+enhed → cooldownDage/cooldownMin ved gem)
+    cooldownAntal:0, cooldownEnhed:"dage",
+    // Krævede certifikater — kun denne opgave
+    kraevedeCertifikater:[],
     // Rulleplan
     ruller:false,
     rullerOpgave:"",        // tom = samme opgavetype
@@ -1097,8 +1140,11 @@ function AddOpgForm({medarbejdere,onSave,onClose,lokaler=[]}){
       id:`custom_${uid()}`,sekvens:999,
       opgave:f.opgave,minutter:Number(f.minutter),
       patInv:f.patInv,
-      patInvMinDage:f.patInv?Number(f.patInvMinDage):0,
-      cooldownDage:Number(f.cooldownDage),
+      patInvMinDage:f.patInv?enhedTilDageMin(f.patInvMinAntal,f.patInvMinEnhed).dage:0,
+      patInvMinMin:f.patInv?enhedTilDageMin(f.patInvMinAntal,f.patInvMinEnhed).min:0,
+      cooldownDage:enhedTilDageMin(f.cooldownAntal,f.cooldownEnhed).dage,
+      cooldownMin:enhedTilDageMin(f.cooldownAntal,f.cooldownEnhed).min,
+      kraevedeCertifikater:[...f.kraevedeCertifikater],
       ruller:f.ruller,
       rullerOpgave:f.ruller?(f.rullerOpgave||f.opgave):null,
       rullerTidligstUger:f.ruller?Number(f.rullerTidligstUger):null,
@@ -1150,8 +1196,8 @@ function AddOpgForm({medarbejdere,onSave,onClose,lokaler=[]}){
             <Sel value={f.patInv?"ja":"nej"} onChange={v=>set("patInv",v==="ja")} style={{width:"100%"}} options={[{v:"nej",l:"Nej — intern opgave"},{v:"ja",l:"Ja — patient til stede"}]}/>
           </FRow>
           {f.patInv&&(
-            <FRow label="Min. dage ml. patientopgaver" hint="Dage der skal gå før næste opgave med patientdeltagelse">
-              <Input type="number" value={f.patInvMinDage} onChange={v=>set("patInvMinDage",v)} min="0" max="365"/>
+            <FRow label="Min. ventetid ml. patientopgaver" hint="Tid der skal gå før næste opgave med patientdeltagelse">
+              <NumEnhedInput value={f.patInvMinAntal} enhed={f.patInvMinEnhed} onValChange={v=>set("patInvMinAntal",v)} onEnhedChange={v=>set("patInvMinEnhed",v)}/>
             </FRow>
           )}
         </div>
@@ -1160,9 +1206,16 @@ function AddOpgForm({medarbejdere,onSave,onClose,lokaler=[]}){
       {/*  Cooldown  */}
       <div style={secStyle}>
         <div style={secHead}>Cooldown efter opgaven</div>
-        <FRow label="Min. dage til næste opgave (uanset type)" hint="0 = ingen begrænsning — opgaven kan følges af en anden samme dag">
-          <Input type="number" value={f.cooldownDage} onChange={v=>set("cooldownDage",v)} min="0" max="365"/>
+        <FRow label="Min. ventetid til næste opgave (uanset type)" hint="0 = ingen begrænsning. Timer/minutter tillader samme dag.">
+          <NumEnhedInput value={f.cooldownAntal} enhed={f.cooldownEnhed} onValChange={v=>set("cooldownAntal",v)} onEnhedChange={v=>set("cooldownEnhed",v)}/>
         </FRow>
+      </div>
+
+      {/*  Krævede certifikater — kun denne opgave  */}
+      <div style={secStyle}>
+        <div style={secHead}>Krævede certifikater</div>
+        <div style={{color:C.txtM,fontSize:11,marginBottom:8}}>Gælder kun denne opgave. Lægges oven i patientens krav.</div>
+        <CertChips valgte={f.kraevedeCertifikater} certifikater={certifikater} onChange={v=>set("kraevedeCertifikater",v)}/>
       </div>
 
       {/*  Udstyr  */}
@@ -1254,7 +1307,7 @@ function TildelForlobForm({forlob,onSave,onClose}){
 // ===============================================
 // REDIGER PATIENT FORM
 // ===============================================
-function EditPatientForm({pat, medarbejdere=[], onSave, onClose, lokaler=[]}){
+function EditPatientForm({pat, medarbejdere=[], onSave, onClose, lokaler=[], certifikater=[]}){
   const [tab,setTab]=useState("basis");
 
   // Forældre initialiseres som array (maks 2)
@@ -1274,6 +1327,8 @@ function EditPatientForm({pat, medarbejdere=[], onSave, onClose, lokaler=[]}){
     særligeHensyn: pat.særligeHensyn||"",
     tidStart: pat.tidStart||"08:00",
     tidSlut: pat.tidSlut||"17:00",
+    // Krævede certifikater (certifikat-id'er) — gælder alle patientens opgaver. Ansvarlig medarbejder er ikke omfattet.
+    kraevedeCertifikater: Array.isArray(pat.kraevedeCertifikater)?[...pat.kraevedeCertifikater]:[],
   });
   const [adresser,setAdresser]=useState(pat.adresser||[]);
   const [foraeldre,setForaeldre]=useState(initForaeldre);
@@ -1356,6 +1411,9 @@ function EditPatientForm({pat, medarbejdere=[], onSave, onClose, lokaler=[]}){
             </FRow>
             <FRow label="Særlige hensyn"><Input value={basis.særligeHensyn} onChange={v=>setBas("særligeHensyn",v)} placeholder="tolk, kørestol..."/></FRow>
           </div>
+          <FRow label={`Krævede certifikater (${(basis.kraevedeCertifikater||[]).length} valgt)`} hint="Kun medarbejdere med alle valgte certifikater kan tildeles patientens opgaver. Den ansvarlige medarbejder er ikke omfattet.">
+            <CertChips valgte={basis.kraevedeCertifikater||[]} certifikater={certifikater} onChange={v=>setBas("kraevedeCertifikater",v)}/>
+          </FRow>
         </div>
       )}
 

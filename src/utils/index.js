@@ -198,3 +198,24 @@ export const katalogTilForlobOpg = (k) => ({
   l: [...(k.muligeLok || [])], mm: [...(k.muligeMed || [])],
   tl: k.tidligst, ss: k.senest,
 });
+
+// ── Enheder for ventetid/cooldown ──
+// Oversætter antal+enhed til {dage, min}. Dage/uger/måneder → min=0.
+// Timer/minutter → dage=0 og min udfyldt. Bruges af cooldown og patInv-ventetid.
+export const ENHEDER = ["minutter", "timer", "dage", "uger", "måneder"];
+export const enhedTilDageMin = (antal, enhed) => {
+  const n = Number(antal) || 0;
+  switch (enhed) {
+    case "minutter": return { dage: 0, min: n };
+    case "timer":    return { dage: 0, min: n * 60 };
+    case "uger":     return { dage: n * 7, min: 0 };
+    case "måneder":  return { dage: n * 30, min: 0 };
+    default:         return { dage: n, min: 0 };
+  }
+};
+// Omvendt: {dage, min} → {antal, enhed} til visning i en formular.
+export const dageMinTilEnhed = (dage, min) => {
+  const m = Number(min) || 0;
+  if (m > 0) return m % 60 === 0 ? { antal: m / 60, enhed: "timer" } : { antal: m, enhed: "minutter" };
+  return { antal: Number(dage) || 0, enhed: "dage" };
+};
