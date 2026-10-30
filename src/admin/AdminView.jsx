@@ -1,6 +1,6 @@
 import React, { useState, useEffect, useRef } from "react";
 import { useTranslation } from "react-i18next";
-import { today, addDays, VALUTAER, valutaSymbol, formatBeloeb } from "../utils/index.js";
+import { today, addDays, VALUTAER, valutaSymbol, formatBeloeb, katalogOpgaver, katalogTilForlobOpg } from "../utils/index.js";
 import { C, KAP_TYPER, FORLOB_GALLERI, TITLE_C } from "../data/constants.js";
 import { Btn, Input, Sel, Modal, FRow, Pill, ViewHeader, beregnMaxTimer } from "../components/primitives.jsx";
 import { ConfirmDialog } from "../components/dialogs.jsx";
@@ -146,7 +146,7 @@ function AdminView({adminData,setAdminData,anmodninger=[],setAnmodninger,medarbe
 
       {/* -- TAB: FORLØB -- */}
       {tab==="forlob"&&(
-        <ForlobAdminTab forlob={forlob} setForlob={setForlob} forlobMeta={forlobMeta} setForlobMeta={setForlobMeta} lokaler={lokaler} showToast={showToast}/>
+        <ForlobAdminTab forlob={forlob} setForlob={setForlob} forlobMeta={forlobMeta} setForlobMeta={setForlobMeta} lokaler={lokaler} indsatser={indsatser} showToast={showToast}/>
       )}
 
       {/* Session-sikkerhed (auto-logout) er nu flyttet til
@@ -1563,7 +1563,7 @@ function FaggrupperTab({adminData,setAdminData}){
 
 
 // ── Forløbs-skabelon admin-tab ──
-function ForlobAdminTab({forlob,setForlob,forlobMeta,setForlobMeta,lokaler=[],showToast=()=>{}}){
+function ForlobAdminTab({forlob,setForlob,forlobMeta,setForlobMeta,lokaler=[],indsatser=[],showToast=()=>{}}){
   const [valgt,setValgt]=useState(null);
   const [galleriOpen,setGalleriOpen]=useState(false);
   const [importFejl,setImportFejl]=useState("");
@@ -1595,6 +1595,12 @@ function ForlobAdminTab({forlob,setForlob,forlobMeta,setForlobMeta,lokaler=[],sh
 
   // Opgave-CRUD inden for valgt skabelon
   const opdOpg=(idx,felt,val)=>setForlob(p=>({...p,[aktiv]:p[aktiv].map((o,i)=>i===idx?{...o,[felt]:val}:o)}));
+  // Opgave-katalog: vælges en katalog-opgave, udfyldes minutter, patient, lokaler, medarbejdere og tidsvindue automatisk
+  const katalog=katalogOpgaver(indsatser);
+  const vaelgKatalogOpg=(idx,navn)=>{
+    const k=katalog.find(x=>x.navn===navn);
+    setForlob(p=>({...p,[aktiv]:p[aktiv].map((o,i)=>i!==idx?o:(k?{...o,...katalogTilForlobOpg(k)}:{...o,o:navn}))}));
+  };
   const togLokOpg=(idx,lok)=>setForlob(p=>({...p,[aktiv]:p[aktiv].map((o,i)=>{
     if(i!==idx) return o;
     const nu=Array.isArray(o.l)?o.l:[];
@@ -1768,8 +1774,16 @@ function ForlobAdminTab({forlob,setForlob,forlobMeta,setForlobMeta,lokaler=[],sh
                         style={{background:"none",border:"none",color:i===opgaver.length-1?C.brd:C.txtD,cursor:i===opgaver.length-1?"default":"pointer",fontSize:10,padding:0,lineHeight:1}}>▼</button>
                     </div>
                     <span style={{width:22,height:22,borderRadius:"50%",background:C.accM,color:C.acc,display:"flex",alignItems:"center",justifyContent:"center",fontSize:11,fontWeight:700,flexShrink:0}}>{i+1}</span>
-                    <input value={o.o||""} onChange={e=>opdOpg(i,"o",e.target.value)} placeholder="Opgavenavn"
-                      style={{flex:1,padding:"5px 10px",borderRadius:7,border:"1px solid "+C.brd,background:C.s1,color:C.txt,fontSize:13,fontFamily:"inherit",outline:"none"}}/>
+                    {katalog.length>0?(
+                      <select value={o.o||""} onChange={e=>vaelgKatalogOpg(i,e.target.value)}
+                        style={{flex:1,padding:"5px 10px",borderRadius:7,border:"1px solid "+C.brd,background:C.s1,color:C.txt,fontSize:13,fontFamily:"inherit",outline:"none"}}>
+                        {!katalog.some(k=>k.navn===o.o)&&<option value={o.o||""}>{o.o||"(vælg opgave)"}</option>}
+                        {katalog.map(k=><option key={k.navn} value={k.navn}>{k.navn}</option>)}
+                      </select>
+                    ):(
+                      <input value={o.o||""} onChange={e=>opdOpg(i,"o",e.target.value)} placeholder="Opgavenavn"
+                        style={{flex:1,padding:"5px 10px",borderRadius:7,border:"1px solid "+C.brd,background:C.s1,color:C.txt,fontSize:13,fontFamily:"inherit",outline:"none"}}/>
+                    )}
                     <input type="number" value={o.m||30} min="5" max="480" onChange={e=>opdOpg(i,"m",Number(e.target.value)||30)}
                       style={{width:64,padding:"5px 8px",borderRadius:7,border:"1px solid "+C.brd,background:C.s1,color:C.txt,fontSize:13,fontFamily:"inherit",textAlign:"center"}}/>
                     <span style={{color:C.txtM,fontSize:11}}>min</span>

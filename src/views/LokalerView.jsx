@@ -1,13 +1,13 @@
 // Lokaler & udstyr-klynge: view, forms og underkomponenter.
 // IndsatsForm eksporteres fordi ForlobView også bruger den.
 import React, { useState, useMemo } from "react";
-import { today, addDays, toMin, uid, parseLocalDate, daysBetween, getDag, valutaSymbol, formatBeloeb } from "../utils/index.js";
+import { today, addDays, toMin, uid, parseLocalDate, daysBetween, getDag, valutaSymbol, formatBeloeb, medVisning } from "../utils/index.js";
 import { C, ALLE_K, DEFAULT_LOK_TIDER, STANDARD_AABNINGSTIDER, INIT_CERTIFIKATER } from "../data/constants.js";
 import { Btn, Input, Modal, FRow, Pill, ViewHeader, PeriodeVaelger } from "../components/primitives.jsx";
 import { ConfirmDialog } from "../components/dialogs.jsx";
 import { sletLokaleFraSky } from "../lib/skySync.js";
 
-export default function LokalerView({patienter,lokTider,setLokTider,lokMeta={},setLokMeta,lokaler=[],saveLokaler=()=>{},adminData={},udstyrsKat=[],saveUdstyrsKat=()=>{},udstyrsPakker=[],saveUdstyrsPakker=()=>{}}){
+export default function LokalerView({patienter,medarbejdere=[],lokTider,setLokTider,lokMeta={},setLokMeta,lokaler=[],saveLokaler=()=>{},adminData={},udstyrsKat=[],saveUdstyrsKat=()=>{},udstyrsPakker=[],saveUdstyrsPakker=()=>{}}){
   const [topTab,setTopTab]=useState("lokaler"); // "lokaler" | "udstyr"
   const iDagLok=today();
   const [fraDato,setFraDato]=useState(addDays(iDagLok,-28));
@@ -257,7 +257,7 @@ export default function LokalerView({patienter,lokTider,setLokTider,lokMeta={},s
                         <Pill color={erFremtidig?C.blue:C.acc} bg={erFremtidig?C.blueM:C.accM} sm>{o.dato}</Pill>
                         <Pill color={C.pur} bg={C.purM} sm>{o.startKl}-{o.slutKl}</Pill>
                         <span style={{color:C.txtD,fontSize:12,flex:1,overflow:"hidden",textOverflow:"ellipsis",whiteSpace:"nowrap"}}>{pat?.navn||"?"} . {o.opgave}</span>
-                        <Pill color={C.acc} bg={C.accM} sm>{o.medarbejder}</Pill>
+                        <Pill color={C.acc} bg={C.accM} sm>{medVisning(o.medarbejder,medarbejdere)}</Pill>
                       </div>
                     );
                   })

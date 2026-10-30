@@ -203,7 +203,17 @@ export default function App(){
       return ny;
     });
   },[]);
-  const [indsatser,setIndsatser]=useState([]);
+  const [indsatser,setIndsatserRaw]=useState(()=>{
+    try{const s=localStorage.getItem("planmed_indsatser"); if(s) return JSON.parse(s);}catch(e){}
+    return [];
+  });
+  const setIndsatser=React.useCallback((valOrFn)=>{
+    setIndsatserRaw(prev=>{
+      const ny=typeof valOrFn==="function"?valOrFn(prev):valOrFn;
+      try{localStorage.setItem("planmed_indsatser",JSON.stringify(ny));}catch(e){}
+      return ny;
+    });
+  },[]);
   const [lokTider,setLokTiderRaw]=useState(()=>{
     try{const s=localStorage.getItem("planmed_lokTider"); if(s) return JSON.parse(s);}catch(e){}
     return structuredClone(DEFAULT_LOK_TIDER);
@@ -902,7 +912,7 @@ export default function App(){
           {view==="patienter"&&<ErrorBoundary><PatientKalenderView patienter={scopedPatienter} medarbejdere={scopedMed} setPatienter={setPatienter} forlob={forlob} showToast={showToast} onMarkerLøst={handleMarkerLøst} lokMeta={lokMeta} setAnmodninger={setAnmodninger} adminData={adminData} lokaler={lokaler} aktivLog={aktivLog}/></ErrorBoundary>}
           {view==="kalender"&&<ErrorBoundary><KalenderView patienter={scopedPatienter} medarbejdere={scopedMed} lokaler={lokaler}/></ErrorBoundary>}
           {view==="medarbejdere"&&<ErrorBoundary><MedarbejderView medarbejdere={scopedMed} setMedarbejdere={setMedarbejdere} patienter={scopedPatienter} setPatienter={setPatienter} anmodninger={anmodninger} setAnmodninger={setAnmodninger} isAdmin={isAdmin} certifikater={certifikater} showToast={showToast} adminData={adminData}/></ErrorBoundary>}
-          {view==="lokaler"&&<ErrorBoundary><LokalerView patienter={patienter} lokTider={lokTider} setLokTider={setLokTider} lokMeta={lokMeta} setLokMeta={setLokMeta} lokaler={lokaler} saveLokaler={saveLokaler} adminData={adminData} udstyrsKat={udstyrsKat} saveUdstyrsKat={saveUdstyrsKat} udstyrsPakker={udstyrsPakker} saveUdstyrsPakker={saveUdstyrsPakker}/></ErrorBoundary>}
+          {view==="lokaler"&&<ErrorBoundary><LokalerView patienter={patienter} medarbejdere={medarbejdere} lokTider={lokTider} setLokTider={setLokTider} lokMeta={lokMeta} setLokMeta={setLokMeta} lokaler={lokaler} saveLokaler={saveLokaler} adminData={adminData} udstyrsKat={udstyrsKat} saveUdstyrsKat={saveUdstyrsKat} udstyrsPakker={udstyrsPakker} saveUdstyrsPakker={saveUdstyrsPakker}/></ErrorBoundary>}
           {view==="forlob"&&<ErrorBoundary><ForlobView forlob={forlob} setForlob={setForlob} medarbejdere={scopedMed} setMedarbejdere={setMedarbejdere} indsatser={indsatser} setIndsatser={setIndsatser} certifikater={certifikater} setCertifikater={setCertifikater} lokaler={lokaler} setPatienter={setPatienter} adminData={adminData}/></ErrorBoundary>}
           {view==="planlog"&&<ErrorBoundary><PlanLogView patienter={scopedPatienter} planLog={planLog} medarbejdere={scopedMed} setPatienter={setPatienter} setMedarbejdere={setMedarbejdere} onPlan={handlePlan} running={running} progress={progress} planFraDato={planFraDato} setPlanFraDato={setPlanFraDato} afdScope={afdScope} alleAfdelinger={alleAfdelinger} toggleAktiv={toggleAktiv} toggleRes={toggleRes} lokaler={lokaler} certifikater={certifikater} planDebug={planDebug} config={config} setConfig={setConfig} setForlob={setForlob} forlob={forlob} lokTider={lokTider} setLokTider={setLokTider} lokMeta={lokMeta} setLokMeta={setLokMeta} saveLokaler={saveLokaler} setIndsatser={setIndsatser} indsatser={indsatser} adminData={adminData}/></ErrorBoundary>}
           {view==="kapacitet"&&<ErrorBoundary><KapacitetsView patienter={scopedPatienter} medarbejdere={scopedMed} lokaler={lokaler} lokTider={lokTider} lokMeta={lokMeta} adminData={adminData} config={config}/></ErrorBoundary>}

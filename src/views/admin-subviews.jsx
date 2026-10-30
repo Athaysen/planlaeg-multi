@@ -1,7 +1,7 @@
 // Admin-sub-views: Godkendelser, Omfordeling, AktivitetsLog.
 // Disse er top-level views men hører tæt sammen med admin-fanen.
 import React, { useState, useMemo } from "react";
-import { today, addDays } from "../utils/index.js";
+import { today, addDays, medVisning } from "../utils/index.js";
 import { C, PAT_STATUS } from "../data/constants.js";
 import { Btn, FRow, Pill, ViewHeader } from "../components/primitives.jsx";
 import { RulleplanNotifView } from "../admin/AdminView.jsx";
@@ -367,7 +367,7 @@ export function OmfordelingView({patienter=[],setPatienter=()=>{},medarbejdere=[
                         <span style={{background:pst.bg,color:pst.col,borderRadius:4,padding:"1px 6px",fontSize:10,fontWeight:700}}>{pst.label}</span>
                       </div>
                       <div style={{display:"flex",gap:12,fontSize:11,color:C.txtM,flexWrap:"wrap"}}>
-                        {o.medarbejder&&<span>Nuværende: <b style={{color:C.txt}}>{o.medarbejder}</b></span>}
+                        {o.medarbejder&&<span>Nuværende: <b style={{color:C.txt}}>{medVisning(o.medarbejder,medarbejdere)}</b></span>}
                         {o.dato&&<span>Dato: <b style={{color:C.txt}}>{o.dato}</b>{o.startKl?` kl. ${o.startKl}`:""}</span>}
                         {o.lokale&&<span>Lokale: <b style={{color:C.txt}}>{o.lokale}</b></span>}
                       </div>
@@ -395,7 +395,7 @@ export function OmfordelingView({patienter=[],setPatienter=()=>{},medarbejdere=[
               </div>
               <div style={{padding:"12px 16px",borderBottom:`1px solid ${C.brd}`}}>
                 <div style={{fontSize:12,color:C.txtM,marginBottom:8}}>Opgave: <b style={{color:C.txt}}>{valgtOp.titel||valgtOp.navn||valgtOp.opgave}</b></div>
-                {valgtOp.medarbejder&&<div style={{fontSize:12,color:C.txtM,marginBottom:4}}>Nuværende: <b style={{color:C.red}}>{valgtOp.medarbejder}</b></div>}
+                {valgtOp.medarbejder&&<div style={{fontSize:12,color:C.txtM,marginBottom:4}}>Nuværende: <b style={{color:C.red}}>{medVisning(valgtOp.medarbejder,medarbejdere)}</b></div>}
               </div>
               <div style={{padding:"10px 12px",borderBottom:`1px solid ${C.brd}`}}>
                 <input value={standinSøg} onChange={e=>setStandinSøg(e.target.value)}
@@ -436,7 +436,7 @@ export function OmfordelingView({patienter=[],setPatienter=()=>{},medarbejdere=[
             <div style={{fontWeight:800,fontSize:17,color:C.txt,marginBottom:8}}>Bekræft omfordeling</div>
             <div style={{color:C.txtM,fontSize:13,marginBottom:20,lineHeight:1.6}}>
               Opgaven <b style={{color:C.txt}}>{valgtOp?.titel||valgtOp?.navn||valgtOp?.opgave}</b> flyttes til <b style={{color:C.acc}}>{bekræft.nyMed}</b>.
-              {valgtOp?.medarbejder&&<span> Den nuværende medarbejder <b style={{color:C.red}}>{valgtOp.medarbejder}</b> fjernes.</span>}
+              {valgtOp?.medarbejder&&<span> Den nuværende medarbejder <b style={{color:C.red}}>{medVisning(valgtOp.medarbejder,medarbejdere)}</b> fjernes.</span>}
             </div>
             <div style={{display:"flex",gap:10,justifyContent:"flex-end"}}>
               <Btn v="ghost" onClick={()=>setBekræft(null)}>Annuller</Btn>

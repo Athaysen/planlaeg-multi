@@ -2,7 +2,7 @@
 // Holdes samlet i én fil fordi komponenterne er tæt koblede
 // (PatientKalenderView mounter PatientDetaljeModal, som mounter form-modals).
 import React, { useState, useEffect, useMemo } from "react";
-import { today, addDays, toMin, fromMin, uid, validerCPR } from "../utils/index.js";
+import { today, addDays, toMin, fromMin, uid, validerCPR, medVisning } from "../utils/index.js";
 import { useAudit, filterAudit } from "../utils/audit.js";
 import { useTranslation } from "react-i18next";
 import { C, FORLOB, ALLE_K, PAT_STATUS, STATUS, sC, sB, sL, buildPatient } from "../data/constants.js";
@@ -263,7 +263,7 @@ function PatientDetaljeModal({pat,medarbejdere=[],patienter,forlob=FORLOB,onClos
                           <div style={{flex:1}}>
                             <div style={{fontSize:12,fontWeight:600,color:C.txt}}>{o.titel||o.navn||o.opgave||"—"}</div>
                             {o.dato&&<div style={{fontSize:11,color:C.txtM,marginTop:1}}>{o.dato}{o.startKl?` kl. ${o.startKl}`:""}</div>}
-                            {o.medarbejder&&<div style={{fontSize:11,color:C.pur,marginTop:1}}>{o.medarbejder}</div>}
+                            {o.medarbejder&&<div style={{fontSize:11,color:C.pur,marginTop:1}}>{medVisning(o.medarbejder,medarbejdere)}</div>}
                             {o.lokale&&<div style={{fontSize:11,color:C.txtM,marginTop:1}}>{o.lokale}</div>}
                           </div>
                           <span style={{background:o.status==="planlagt"?C.grnM:o.status==="afventer"?C.ambM:C.redM,
@@ -297,7 +297,7 @@ function PatientDetaljeModal({pat,medarbejdere=[],patienter,forlob=FORLOB,onClos
                 </div>
                 {!editStam?(
                   <div style={{display:"grid",gridTemplateColumns:"1fr 1fr",gap:8}}>
-                    {[[p.ansvarligMed,"Ansvarlig medarbejder"],[p.afdeling,"Afdeling"],[`${p.tidStart||"08:00"} – ${p.tidSlut||"17:00"}`,"Tilgængelig"],[p.særligeHensyn,"Særlige hensyn"]]
+                    {[[medVisning(p.ansvarligMed,medarbejdere),"Ansvarlig medarbejder"],[p.afdeling,"Afdeling"],[`${p.tidStart||"08:00"} – ${p.tidSlut||"17:00"}`,"Tilgængelig"],[p.særligeHensyn,"Særlige hensyn"]]
                       .map(([v,l])=>v?(
                         <div key={l} style={{background:C.s2,borderRadius:8,padding:"10px 14px",border:"1px solid "+C.brd}}>
                           <div style={{color:C.txtM,fontSize:10,fontWeight:600,letterSpacing:"0.05em",marginBottom:2}}>{l.toUpperCase()}</div>
@@ -388,9 +388,9 @@ function PatientDetaljeModal({pat,medarbejdere=[],patienter,forlob=FORLOB,onClos
                             </span>
                           );
                         })()}
-                        {o.medarbejder&&<span style={{background:C.purM,color:C.pur,borderRadius:5,padding:"2px 8px",fontSize:11,fontWeight:600}}>{o.medarbejder}</span>}
-                        {o.med1&&<span style={{background:C.purM,color:C.pur,borderRadius:5,padding:"2px 8px",fontSize:11}}>{o.med1}</span>}
-                        {o.med2&&<span style={{background:C.purM,color:C.pur,borderRadius:5,padding:"2px 8px",fontSize:11}}>{o.med2}</span>}
+                        {o.medarbejder&&<span style={{background:C.purM,color:C.pur,borderRadius:5,padding:"2px 8px",fontSize:11,fontWeight:600}}>{medVisning(o.medarbejder,medarbejdere)}</span>}
+                        {o.med1&&<span style={{background:C.purM,color:C.pur,borderRadius:5,padding:"2px 8px",fontSize:11}}>{medVisning(o.med1,medarbejdere)}</span>}
+                        {o.med2&&<span style={{background:C.purM,color:C.pur,borderRadius:5,padding:"2px 8px",fontSize:11}}>{medVisning(o.med2,medarbejdere)}</span>}
                         {o.adresseId&&p.adresser&&(()=>{const a=p.adresser.find(x=>x.id===o.adresseId);return a?<span style={{background:C.grnM,color:C.grn,borderRadius:5,padding:"2px 8px",fontSize:11}}>{a.navn}</span>:null;})()}
                       </div>
                     )}
@@ -838,7 +838,7 @@ export default function PatientKalenderView({patienter,medarbejdere,setPatienter
                       </td>
                       <td style={{padding:"9px 12px"}}>
                         <div style={{display:"flex",gap:3,flexWrap:"wrap"}}>
-                          {meds.slice(0,3).map(m=><Pill key={m} color={C.pur} bg={C.purM} sm>{m}</Pill>)}
+                          {meds.slice(0,3).map(m=><Pill key={m} color={C.pur} bg={C.purM} sm>{medVisning(m,medarbejdere)}</Pill>)}
                           {meds.length>3&&<Pill color={C.txtM} bg={C.s3} sm>+{meds.length-3}</Pill>}
                           {meds.length===0&&<span style={{color:C.txtM,fontSize:11}}>-</span>}
                         </div>
@@ -1351,7 +1351,7 @@ function EditPatientForm({pat, medarbejdere=[], onSave, onClose, lokaler=[]}){
               <select value={basis.ansvarligMed} onChange={e=>setBas("ansvarligMed",e.target.value)}
                 style={{width:"100%",padding:"7px 10px",border:"1px solid "+C.brd,borderRadius:7,background:C.s1,color:C.txt,fontSize:13,fontFamily:"inherit"}}>
                 <option value="">— Ingen —</option>
-                {medarbejdere.map(m=><option key={m.id||m.navn} value={m.navn}>{m.navn}</option>)}
+                {medarbejdere.map(m=><option key={m.id||m.navn} value={m.navn}>{medVisning(m.navn,medarbejdere)}</option>)}
               </select>
             </FRow>
             <FRow label="Særlige hensyn"><Input value={basis.særligeHensyn} onChange={v=>setBas("særligeHensyn",v)} placeholder="tolk, kørestol..."/></FRow>
@@ -1548,7 +1548,7 @@ function NyPatientForm({onSave,onClose,forlob=FORLOB,medarbejdere=[],patienter=[
               <select value={basis.ansvarligMed} onChange={e=>setBas("ansvarligMed",e.target.value)}
                 style={{width:"100%",padding:"7px 10px",border:"1px solid "+C.brd,borderRadius:7,background:C.s1,color:C.txt,fontSize:13,fontFamily:"inherit"}}>
                 <option value="">— Ingen —</option>
-                {medarbejdere.map(m=><option key={m.id||m.navn} value={m.navn}>{m.navn}</option>)}
+                {medarbejdere.map(m=><option key={m.id||m.navn} value={m.navn}>{medVisning(m.navn,medarbejdere)}</option>)}
               </select>
             </FRow>
             <FRow label="Særlige hensyn"><Input value={basis.særligeHensyn} onChange={v=>setBas("særligeHensyn",v)} placeholder="tolk, kørestol..."/></FRow>

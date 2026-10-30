@@ -1,5 +1,5 @@
 import React, { useState, useMemo } from "react";
-import { today, toMin, fmtDate } from "../utils/index.js";
+import { today, toMin, fmtDate, medVisning } from "../utils/index.js";
 import { C, TITLE_C } from "../data/constants.js";
 import { Btn, Sel, ViewHeader } from "../components/primitives.jsx";
 
@@ -98,7 +98,7 @@ export default function KalenderView({patienter,medarbejdere,lokaler=[]}){
                             <div style={{color:C.txtD,fontSize:11,marginBottom:2}}> {o.pNavn}</div>
                             <div style={{color:C.txtD,fontSize:11,marginBottom:2}}> {o.startKl}-{o.slutKl} ({o.minutter} min)</div>
                             <div style={{color:C.txtD,fontSize:11,marginBottom:2}}> {o.lokale}</div>
-                            <div style={{color:col,fontSize:11}}>+ {o.medarbejder}</div>
+                            <div style={{color:col,fontSize:11}}>+ {medVisning(o.medarbejder,medarbejdere)}</div>
                           </div>
                         )}
                       </div>

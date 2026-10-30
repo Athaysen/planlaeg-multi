@@ -1,7 +1,7 @@
 // Forløb/Opgaver-klynge: ForlobView + tilknyttede sub-komponenter.
 // IndsatsForm deles med Lokaler-siden og importeres derfra.
 import React, { useState, useMemo } from "react";
-import { uid } from "../utils/index.js";
+import { uid, katalogOpgaver, katalogTilForlobOpg } from "../utils/index.js";
 import { C, ALLE_K, BASE_MED, LK, PK, PD, TITLE_C, buildPatient } from "../data/constants.js";
 import { Btn, Input, Sel, Modal, FRow, Pill, ViewHeader } from "../components/primitives.jsx";
 import { IndsatsForm, UdstyrPanel } from "./LokalerView.jsx";
@@ -556,7 +556,7 @@ const ids=Object.keys(forlob).filter(k=>(forlob[k]||[]).length>0).sort((a,b)=>Nu
                 <div style={{color:C.txt,fontWeight:800,fontSize:16}}>Forløb nr. {selId}</div>
                 <div style={{color:C.txtM,fontSize:12}}>{fl.length} opgaver . {fl.filter(x=>x.p).length} med patient . {fl.reduce((a,x)=>a+x.m,0)} min total</div>
               </div>
-              <Btn v="primary" onClick={()=>setEditOpg({idx:"ny",data:{o:ALLE_K[0],m:45,p:false,tl:"08:00",ss:"17:00",l:["Kontor"]}})} small>+ Ny opgave</Btn>
+              <Btn v="primary" onClick={()=>{const k=katalogOpgaver(indsatser)[0];setEditOpg({idx:"ny",data:k?katalogTilForlobOpg(k):{o:ALLE_K[0],m:45,p:false,tl:"08:00",ss:"17:00",l:["Kontor"]}});}} small>+ Ny opgave</Btn>
             </div>
             <div style={{flex:1,overflowY:"auto",padding:10}}>
               {fl.length===0&&<div style={{color:C.txtM,padding:24,textAlign:"center"}}>Ingen opgaver endnu. Tilføj en opgave ovenfor.</div>}
@@ -620,7 +620,7 @@ const ids=Object.keys(forlob).filter(k=>(forlob[k]||[]).length>0).sort((a,b)=>Nu
       {/* -- Modals: Forløb -- */}
       {editOpg&&(
         <Modal title={editOpg.idx==="ny"?"Ny opgave":"Rediger opgave"} onClose={()=>setEditOpg(null)} w={600}>
-          <OpgaveForm data={editOpg.data} onSave={d=>saveOpg(editOpg.idx,d)} onClose={()=>setEditOpg(null)} lokaler={lokaler}/>
+          <OpgaveForm data={editOpg.data} onSave={d=>saveOpg(editOpg.idx,d)} onClose={()=>setEditOpg(null)} lokaler={lokaler} indsatser={indsatser}/>
         </Modal>
       )}
       {nytForlob&&(
@@ -662,17 +662,28 @@ const ids=Object.keys(forlob).filter(k=>(forlob[k]||[]).length>0).sort((a,b)=>Nu
 }
 
 // -- OpgaveForm (bruges i Forløb-tab) ----------------------------
-function OpgaveForm({data,onSave,onClose,lokaler=[]}){
+function OpgaveForm({data,onSave,onClose,lokaler=[],indsatser=[]}){
   const [grpFejl,setGrpFejl]=useState("");
-  const [f,setF]=useState({o:data?.o||ALLE_K[0],m:data?.m||45,p:data?.p||false,tl:data?.tl||"08:00",ss:data?.ss||"17:00",l:data?.l||[],udstyr:Array.isArray(data?.udstyr)?[...data.udstyr]:[]});
+  const [f,setF]=useState({o:data?.o||ALLE_K[0],m:data?.m||45,p:data?.p||false,tl:data?.tl||"08:00",ss:data?.ss||"17:00",l:data?.l||[],mm:Array.isArray(data?.mm)?[...data.mm]:[],udstyr:Array.isArray(data?.udstyr)?[...data.udstyr]:[]});
   const s=(k,v)=>setF(p=>({...p,[k]:v}));
+  // Opgave-katalog: vælges en katalog-opgave, udfyldes felterne automatisk (kan rettes bagefter)
+  const katalog=useMemo(()=>katalogOpgaver(indsatser),[indsatser]);
+  const vaelgKatalog=(navn)=>{
+    const k=katalog.find(x=>x.navn===navn);
+    if(!k){s("o",navn);return;}
+    setF(p=>({...p,...katalogTilForlobOpg(k)}));
+  };
   const togLok=(l)=>setF(p=>({...p,l:p.l.includes(l)?p.l.filter(x=>x!==l):[...p.l,l]}));
   const kompMed=BASE_MED.filter(m=>m.kompetencer.includes(f.o));
   const grps=[{label:"Psykolog",c:C.blue,ks:PK},{label:"Pædagog",c:C.pur,ks:PD},{label:"Læge",c:C.acc,ks:LK}];
   return(
     <div>
       <FRow label="Opgavetype">
-        <Sel value={f.o} onChange={v=>s("o",v)} style={{width:"100%"}} options={grps.flatMap(g=>[{v:`__${g.label}__`,l:`-- ${g.label} --`,disabled:true},...g.ks.map(k=>({v:k,l:k}))])}/>
+        {katalog.length>0?(
+          <Sel value={f.o} onChange={vaelgKatalog} style={{width:"100%"}} options={[...(katalog.some(k=>k.navn===f.o)?[]:[{v:f.o,l:f.o}]),...katalog.map(k=>({v:k.navn,l:k.navn}))]}/>
+        ):(
+          <Sel value={f.o} onChange={v=>s("o",v)} style={{width:"100%"}} options={grps.flatMap(g=>[{v:`__${g.label}__`,l:`-- ${g.label} --`,disabled:true},...g.ks.map(k=>({v:k,l:k}))])}/>
+        )}
         <div style={{color:C.txtM,fontSize:11,marginTop:4}}>{kompMed.length} medarbejdere har denne kompetence</div>
       </FRow>
       <div style={{display:"grid",gridTemplateColumns:"1fr 1fr 1fr",gap:10}}>
