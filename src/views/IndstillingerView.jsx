@@ -971,7 +971,7 @@ function ExcelImportPanel({setPatienter,setMedarbejdere,setForlob,forlob,setLokT
           const cpr=get(r,"CPR")||"";
           const henvDato=get(r,"HenvistDato")||today();
           if(fnr&&fnr.toString().trim()!==""){
-            const bp=buildPatient({navn,cpr,henvDato,forlobNr:Number(fnr),særligeHensyn:shensyn,ansvarligMed:ansv,haste,afdeling:afd},null,medarbejdere);
+            const bp=buildPatient({navn,cpr,henvDato,forlobNr:Number(fnr),særligeHensyn:shensyn,ansvarligMed:ansv,haste,afdeling:afd},forlob,medarbejdere);
             return {...bp,
               status:(get(r,"Status")||bp.status||"aktiv").toLowerCase(),
               transportMinutter:get(r,"TransportMinutter")?Number(get(r,"TransportMinutter")):null,
