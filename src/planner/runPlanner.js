@@ -74,7 +74,18 @@ export function analyserRessourcer(patienter=[], config={}) {
 
   return{medarbejdere:medRes,lokaler:lokRes,primærFlaskehals:primær,anbefaling};
 }
+const INAKTIVE_STATUSSER = ["afsluttet", "udmeldt"];
+const erInaktivPatient = (p) => !!p && INAKTIVE_STATUSSER.includes(p.status);
+
 export function runPlanner(patienter, config={}) {
+  // Sikkerhedsnet: afsluttede/udmeldte patienter planlægges aldrig.
+  // De returneres uændret i resultatet (samme rækkefølge), uden planLog-fejl.
+  if(Array.isArray(patienter) && patienter.some(erInaktivPatient)) {
+    const aktive = patienter.filter(p=>!erInaktivPatient(p));
+    const res = runPlanner(aktive, config);
+    const planlagtById = new Map(res.patienter.map(p=>[p.id,p]));
+    return {...res, patienter: patienter.map(p=>erInaktivPatient(p)?p:(planlagtById.get(p.id)||p))};
+  }
   const {
     medarbejdere=[],
     lokTider={},
