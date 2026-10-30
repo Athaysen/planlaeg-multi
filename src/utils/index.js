@@ -149,3 +149,52 @@ export const validerCPR = (cpr) => {
   }
   return result;
 };
+
+// ── Medarbejder-visning ──
+// "Navn, titel" (titel med lille begyndelsesbogstav), fx "Anders Andersen, læge".
+// Kun til visning — ændrer ikke datafelter.
+export const medVisning = (navn, medarbejdere = []) => {
+  if (!navn) return "";
+  const m = (medarbejdere || []).find((x) => x && x.navn === navn);
+  const titel = m && m.titel ? String(m.titel) : "";
+  if (!titel) return navn;
+  return `${navn}, ${titel.charAt(0).toLowerCase()}${titel.slice(1)}`;
+};
+
+// ── Opgave-katalog ──
+// Flad liste af vælgbare opgaver ud fra `indsatser`. Understøtter både
+// elementer-format (IndsatsForm) og fladt format (Excel-import).
+export const katalogOpgaver = (indsatser = []) => {
+  const ud = [];
+  const set = new Set();
+  const push = (navn, src, lok) => {
+    const n = (navn || "").trim();
+    if (!n || set.has(n)) return;
+    set.add(n);
+    ud.push({
+      navn: n,
+      minutter: Number(src.minutter) || 60,
+      patInv: !!src.patInv,
+      muligeMed: Array.isArray(src.muligeMed) ? [...src.muligeMed] : [],
+      muligeLok: Array.isArray(lok) ? [...lok] : [],
+      tidligst: src.tidligst || "08:00",
+      senest: src.senest || "17:00",
+    });
+  };
+  for (const ins of indsatser || []) {
+    if (!ins) continue;
+    if (Array.isArray(ins.elementer) && ins.elementer.length > 0) {
+      for (const el of ins.elementer) push(el.navn || el.opgave, el, el.lokaler || el.muligeLok);
+    } else {
+      push(ins.opgave || ins.navn, ins, ins.muligeLok || ins.lokaler);
+    }
+  }
+  return ud;
+};
+
+// Katalog-opgave → felter i forløbs-opgave-formatet (o, m, p, l, mm, tl, ss).
+export const katalogTilForlobOpg = (k) => ({
+  o: k.navn, m: k.minutter, p: k.patInv,
+  l: [...(k.muligeLok || [])], mm: [...(k.muligeMed || [])],
+  tl: k.tidligst, ss: k.senest,
+});

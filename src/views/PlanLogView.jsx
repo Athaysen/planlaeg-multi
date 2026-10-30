@@ -1,5 +1,5 @@
 import React, { useState, useMemo } from "react";
-import { today } from "../utils/index.js";
+import { today, medVisning } from "../utils/index.js";
 import { C } from "../data/constants.js";
 import { ErrorBoundary } from "../components/primitives.jsx";
 import { analyserRessourcer } from "../planner/runPlanner.js";
@@ -163,7 +163,7 @@ export default function PlanLogView({patienter,planLog=[],medarbejdere=[],setPat
                   <td style={tdStyle}>{o.titel||o.opgave||"—"}</td>
                   <td style={tdStyle}>{o.dato||<span style={{color:C.txtM,fontStyle:"italic"}}>—</span>}</td>
                   <td style={tdStyle}>{o.startKl?`${o.startKl}–${o.slutKl||""}`:""}</td>
-                  <td style={tdStyle}>{o.medarbejder||<span style={{color:C.txtM}}>—</span>}</td>
+                  <td style={tdStyle}>{o.medarbejder?medVisning(o.medarbejder,medarbejdere):<span style={{color:C.txtM}}>—</span>}</td>
                   <td style={tdStyle}>{o.lokale||"—"}</td>
                   <td style={tdStyle}>
                     <span style={{fontSize:11,fontWeight:700,padding:"2px 8px",borderRadius:6,
