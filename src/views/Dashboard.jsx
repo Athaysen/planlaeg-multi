@@ -1,5 +1,5 @@
 import React, { useState, useMemo } from "react";
-import { today, addDays, daysBetween, fmtDate, isWeekend, parseLocalDate } from "../utils/index.js";
+import { today, addDays, daysBetween, fmtDate, isWeekend, parseLocalDate, erAktivPatient } from "../utils/index.js";
 import { C, TITLE_C } from "../data/constants.js";
 import { Modal, Pill, PatientDrillModal } from "../components/primitives.jsx";
 
@@ -12,12 +12,14 @@ export default function Dashboard({patienter,medarbejdere,fejl,onLogout}){
   // -- Filtrer opgaver til perioden --
   const inPeriod=(o)=>o.dato?o.dato>=fraDato&&o.dato<=tilDato:true;
   const inPeriodStrict=(o)=>o.dato&&o.dato>=fraDato&&o.dato<=tilDato;
+  // Afsluttede/udmeldte patienters opgaver tæller ikke som afventende
+  const aktivePat=patienter.filter(erAktivPatient);
 
   // -- Basis tal (filtreret til periode) --
   const totalOpg   = patienter.reduce((a,p)=>a+p.opgaver.filter(o=>inPeriod(o)).length,0);
   const planlagt   = patienter.reduce((a,p)=>a+p.opgaver.filter(o=>o.status==="planlagt"&&inPeriodStrict(o)).length,0);
   const failed     = patienter.reduce((a,p)=>a+p.opgaver.filter(o=>o.status==="ikke-planlagt"&&inPeriod(o)).length,0);
-  const afventer   = patienter.reduce((a,p)=>a+p.opgaver.filter(o=>o.status==="afventer").length,0);
+  const afventer   = aktivePat.reduce((a,p)=>a+p.opgaver.filter(o=>o.status==="afventer").length,0);
   const komplet    = patienter.filter(p=>p.opgaver.filter(o=>inPeriod(o)).every(o=>o.status==="planlagt")).length;
   const errors     = fejl.filter(f=>f.type==="Fejl").length;
   const warnings   = fejl.filter(f=>f.type==="Advarsel").length;
@@ -60,7 +62,7 @@ export default function Dashboard({patienter,medarbejdere,fejl,onLogout}){
     return tider.length>0?Math.round(tider.reduce((a,b)=>a+b,0)/tider.length):0;
   },[patienter,fraDato,tilDato]);
 
-  const hasteManglerPlan = patienter.filter(p=>p.haste&&p.opgaver.some(o=>o.status==="afventer")).length;
+  const hasteManglerPlan = aktivePat.filter(p=>p.haste&&p.opgaver.some(o=>o.status==="afventer")).length;
   const forlobFremgangPct = totalOpg>0?Math.round(planlagt/totalOpg*100):0;
 
   // -- Afdeling KPI'er --
@@ -136,7 +138,7 @@ export default function Dashboard({patienter,medarbejdere,fejl,onLogout}){
   const kpiDrills={
     patienter_ialt:{title:`Alle patienter (${patienter.length})`,isPat:true,filterPat:()=>true},
     planlagte_opgaver:{title:`Planlagte opgaver (${planlagt})`,filter:p=>({opgaver:p.opgaver.filter(o=>o.status==="planlagt")})},
-    afventer:{title:`Afventende opgaver (${afventer})`,filter:p=>({opgaver:p.opgaver.filter(o=>o.status==="afventer")})},
+    afventer:{title:`Afventende opgaver (${afventer})`,filter:p=>({opgaver:erAktivPatient(p)?p.opgaver.filter(o=>o.status==="afventer"):[]})},
     ikke_fundet:{title:`Ikke fundet (${failed})`,filter:p=>({opgaver:p.opgaver.filter(o=>o.status==="ikke-planlagt")})},
     regelkontrol:{title:`Regelkontrol - ${errors} fejl, ${warnings} advarsler`,isRegel:true},
   };

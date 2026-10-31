@@ -106,7 +106,7 @@ export default function LokalerView({patienter,medarbejdere=[],lokTider,setLokTi
             while(lokaler.includes(nyt)){nyt="Nyt lokale "+n;n++;}
             const nyListe=[...lokaler,nyt];
             saveLokaler(nyListe);
-            setLokMeta(p=>({...p,[nyt]:{lokaleId:"",kapacitet:"",udstyr:"",adresse:{}}}));
+            setLokMeta(p=>({...p,[nyt]:{lokaleId:"",kapacitet:"",samtidigeOpgaver:1,udstyr:"",adresse:{}}}));
             // Tilføj standard-åbningstider for det nye lokale (08-16 hverdage, weekend lukket)
             setLokTider(prev=>{
               const next={...prev};
@@ -163,7 +163,7 @@ export default function LokalerView({patienter,medarbejdere=[],lokTider,setLokTi
                     <Pill color={C.blue} bg={C.blueM}>{stat.cnt} bookinger</Pill>
                     <Pill color={C.acc} bg={C.accM}>{stat.h.toFixed(1)} timer booket</Pill>
                     {lokMeta[valgt]?.lokaleId&&<Pill color={C.txtM} bg={C.s3}>ID: {lokMeta[valgt].lokaleId}</Pill>}
-                    {lokMeta[valgt]?.kapacitet&&<Pill color={C.txtM} bg={C.s3}> {lokMeta[valgt].kapacitet} pers.</Pill>}
+                    {!!(lokMeta[valgt]?.kapacitet||lokMeta[valgt]?.samtidigeOpgaver)&&<Pill color={C.txtM} bg={C.s3}>{[lokMeta[valgt]?.kapacitet&&`${lokMeta[valgt].kapacitet} pers.`,`${Number(lokMeta[valgt]?.samtidigeOpgaver)>=1?Math.floor(Number(lokMeta[valgt].samtidigeOpgaver)):1} opg.`].filter(Boolean).join(" · ")}</Pill>}
                     {lokUdstyr.length>0&&<Pill color={C.pur} bg={C.purM}>{lokUdstyr.length} udstyr</Pill>}
                     {lokPakker.length>0&&<Pill color={C.blue} bg={C.blueM}>{lokPakker.length} pakker</Pill>}
                     {(()=>{const kr=lokMeta[valgt]?.krPrTime;const adminKr=(adminData?.taktDefaults?.Lokale?.krPrTime);const vis=kr??adminKr;return vis?<Pill color={C.acc} bg={C.accM}>{formatBeloeb(vis,adminData?.valuta,"/t")}</Pill>:null;})()}
@@ -707,6 +707,7 @@ function LokMetaForm({lok,meta,onSave,onClose,onDelete=null,onRename=null,lokale
   const [f,setF]=useState({
     lokaleId:meta.lokaleId||"",
     kapacitet:meta.kapacitet||"",
+    samtidigeOpgaver:Number(meta.samtidigeOpgaver)>=1?Math.floor(Number(meta.samtidigeOpgaver)):1,
     udstyr:(typeof meta.udstyr==="string"&&meta.udstyr?meta.udstyr.split(/[,،]+/).map(s=>s.trim()).filter(Boolean):Array.isArray(meta.udstyr)?meta.udstyr:[]),
     udstyrIds:meta.udstyrIds||[],
     udstyrsPakkeIds:meta.udstyrsPakkeIds||[],
@@ -784,7 +785,10 @@ function LokMetaForm({lok,meta,onSave,onClose,onDelete=null,onRename=null,lokale
           </div>
           <div style={{background:C.s3,borderRadius:9,padding:"12px 14px",border:`1px solid ${C.brd}`}}>
             <FRow label="Lokale ID"><Input value={f.lokaleId} onChange={v=>set("lokaleId",v)} placeholder="f.eks. LOK-101"/></FRow>
-            <FRow label="Kapacitet (antal personer)"><Input type="number" value={f.kapacitet} onChange={v=>set("kapacitet",v)} placeholder="f.eks. 6"/></FRow>
+            <div style={{display:"grid",gridTemplateColumns:"1fr 1fr",gap:8}}>
+              <FRow label="Kapacitet (antal personer)"><Input type="number" value={f.kapacitet} onChange={v=>set("kapacitet",v)} placeholder="f.eks. 6"/></FRow>
+              <FRow label="Samtidige opgaver"><Input type="number" value={f.samtidigeOpgaver} onChange={v=>set("samtidigeOpgaver",v)} placeholder="1"/></FRow>
+            </div>
             <FRow label={`Timepris (${valutaSymbol(adminData?.valuta)}/t)`}><Input type="number" value={f.krPrTime||""} onChange={v=>set("krPrTime",v?Number(v):null)} placeholder="Fra admin-standard"/></FRow>
           </div>
           <div style={{background:C.s3,borderRadius:9,padding:"12px 14px",border:`1px solid ${C.brd}`}}>
@@ -867,6 +871,7 @@ function LokMetaForm({lok,meta,onSave,onClose,onDelete=null,onRename=null,lokale
           <Btn v="ghost" onClick={onClose}>Annuller</Btn>
           <Btn v="primary" onClick={()=>onSave(lok,{
             lokaleId:f.lokaleId,kapacitet:f.kapacitet,
+            samtidigeOpgaver:Number(f.samtidigeOpgaver)>=1?Math.floor(Number(f.samtidigeOpgaver)):1,
             udstyr:f.udstyr,udstyrIds:f.udstyrIds,udstyrsPakkeIds:f.udstyrsPakkeIds,
             adresse:{vej:f.vej,husnr:f.husnr,postnr:f.postnr,by:f.by},
             navn:f.navn,krPrTime:f.krPrTime!==null?Number(f.krPrTime):null,

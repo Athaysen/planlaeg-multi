@@ -15,7 +15,7 @@ import i18n, { SPROG } from "./i18n.js";
 // Data og utilities flyttet til /src/data + /src/utils i april 2026-refaktoreringen.
 import {
   sx, uid, toMin, fromMin, fmtDate, parseLocalDate, addDays, isWeekend, nextWD,
-  DAG_NAV, getDag, daysBetween, today,
+  DAG_NAV, getDag, daysBetween, today, erAktivPatient,
   VALUTAER, valutaInfo, valutaSymbol, formatBeloeb,
 } from "./utils/index.js";
 import {
@@ -697,7 +697,8 @@ export default function App(){
     setToast({msg:"Planlagt: "+res.planned+" | Ikke fundet: "+res.failed+" | Total: "+total,type});
   },[patienter,medarbejdere,running,config,lokTider,planFraDato]);
 
-  const afventer=patienter.reduce((a,p)=>a+p.opgaver.filter(o=>o.status==="afventer").length,0);
+  // Afsluttede/udmeldte patienters opgaver tæller ikke som afventende
+  const afventer=patienter.filter(erAktivPatient).reduce((a,p)=>a+p.opgaver.filter(o=>o.status==="afventer").length,0);
   const errors=fejl.filter(f=>f.type==="Fejl").length;
 
   useEffect(()=>{
