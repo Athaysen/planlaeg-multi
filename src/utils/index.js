@@ -59,6 +59,12 @@ export const daysBetween = (a, b) =>
 
 export const today = () => fmtDate(new Date());
 
+// ── Patient-status ──
+// En patient er aktiv medmindre status er "afsluttet" eller "udmeldt".
+// Inaktive patienters opgaver planlægges ikke og tælles ikke som afventende.
+export const erAktivPatient = (p) =>
+  !!p && p.status !== "afsluttet" && p.status !== "udmeldt";
+
 // Valuta-helpers + tabel over understøttede valutaer.
 export const VALUTAER = {
   DKK: { symbol: "kr", locale: "da-DK", navn: "Dansk krone" },

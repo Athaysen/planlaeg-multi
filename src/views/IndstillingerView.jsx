@@ -866,7 +866,7 @@ function ExcelImportPanel({setPatienter,setMedarbejdere,setForlob,forlob,setLokT
     lokaler:{
       navn:"PlanMed_Lokaler_Skabelon",
       cols:[
-        "Lokale","Kapacitet","Beskrivelse","LokaleId",
+        "Lokale","Kapacitet","SamtidigeOpgaver","Beskrivelse","LokaleId",
         "Vej","Husnr","Postnr","By",
         "Udstyr","TimeprisKrPrTime",
         "MandagÅben","MandagLukket","TirsdagÅben","TirsdagLukket",
@@ -874,10 +874,10 @@ function ExcelImportPanel({setPatienter,setMedarbejdere,setForlob,forlob,setLokT
         "FredagÅben","FredagLukket","LordagÅben","LordagLukket","SondagÅben","SondagLukket",
       ],
       eksempel:[
-        ["<Lokale-navn>","1","Behandlingslokale","LOK-001","<Vejnavn nr>","","<Postnr>","<By>","Whiteboard,Håndvask","200",
+        ["<Lokale-navn>","1","1","Behandlingslokale","LOK-001","<Vejnavn nr>","","<Postnr>","<By>","Whiteboard,Håndvask","200",
          "08:00","16:00","08:00","16:00","08:00","16:00","08:00","16:00","08:00","16:00","","","",""],
       ],
-      info:"Kapacitet = antal samtidige brugere · Tider = HH:MM format (tomt = lukket) · Udstyr adskilles med komma · TimeprisKrPrTime = individuel pris (tomt = brug standard)",
+      info:"Kapacitet = antal personer · SamtidigeOpgaver = hvor mange opgaver lokalet kan rumme på samme tid (tomt = 1) · Tider = HH:MM format (tomt = lukket) · Udstyr adskilles med komma · TimeprisKrPrTime = individuel pris (tomt = brug standard)",
     },
   };
 
@@ -1142,7 +1142,7 @@ function ExcelImportPanel({setPatienter,setMedarbejdere,setForlob,forlob,setLokT
         const nyMeta={};
         raw.forEach(r=>{
           const lok=get(r,"Lokale"); if(!lok) return;
-          nyMeta[lok]={lokaleId:get(r,"LokaleId")||"",kapacitet:get(r,"Kapacitet")||"1",udstyr:(get(r,"Udstyr")||"").split(/[,،]+/).map(s=>s.trim()).filter(Boolean),beskrivelse:get(r,"Beskrivelse")||"",krPrTime:get(r,"TimeprisKrPrTime")?Number(get(r,"TimeprisKrPrTime")):null,adresse:{vej:get(r,"Vej")||"",husnr:get(r,"Husnr")||"",postnr:get(r,"Postnr")||"",by:get(r,"By")||""}};
+          nyMeta[lok]={lokaleId:get(r,"LokaleId")||"",kapacitet:get(r,"Kapacitet")||"1",samtidigeOpgaver:Number(get(r,"SamtidigeOpgaver"))>=1?Math.floor(Number(get(r,"SamtidigeOpgaver"))):1,udstyr:(get(r,"Udstyr")||"").split(/[,،]+/).map(s=>s.trim()).filter(Boolean),beskrivelse:get(r,"Beskrivelse")||"",krPrTime:get(r,"TimeprisKrPrTime")?Number(get(r,"TimeprisKrPrTime")):null,adresse:{vej:get(r,"Vej")||"",husnr:get(r,"Husnr")||"",postnr:get(r,"Postnr")||"",by:get(r,"By")||""}};
           Object.entries(dagMap).forEach(([dagEn,[aK,lK]])=>{
             const dag=dagDk[dagEn]||dagEn;
             if(!nyeTider[dag]) nyeTider[dag]={};

@@ -1,5 +1,5 @@
 // Planlægger + ressource-analyse. Pure JS — ingen React-afhængigheder.
-import { today, daysBetween } from "../utils/index.js";
+import { today, daysBetween, erAktivPatient } from "../utils/index.js";
 import { DEFAULT_TITLER } from "../data/constants.js";
 
 // ── Ressource-analyse (separat fra planlægning) ──
@@ -74,8 +74,18 @@ export function analyserRessourcer(patienter=[], config={}) {
 
   return{medarbejdere:medRes,lokaler:lokRes,primærFlaskehals:primær,anbefaling};
 }
-const INAKTIVE_STATUSSER = ["afsluttet", "udmeldt"];
-const erInaktivPatient = (p) => !!p && INAKTIVE_STATUSSER.includes(p.status);
+const erInaktivPatient = (p) => !!p && !erAktivPatient(p);
+
+// Antal samtidige opgaver et lokale kan rumme (lokMeta[navn].samtidigeOpgaver).
+// Varianter ("Kontor (2)") arver fra basisnavnet. Default 1 = én booking ad gangen.
+export const lokSamtidigeOpgaver = (lokMeta, lokNavn) => {
+  if(!lokNavn) return 1;
+  const egen = Number(lokMeta?.[lokNavn]?.samtidigeOpgaver);
+  if(egen >= 1) return Math.floor(egen);
+  const basis = lokNavn.replace(/\s*\(\d+\)$/,"");
+  const arvet = basis!==lokNavn ? Number(lokMeta?.[basis]?.samtidigeOpgaver) : NaN;
+  return arvet >= 1 ? Math.floor(arvet) : 1;
+};
 
 export function runPlanner(patienter, config={}) {
   // Sikkerhedsnet: afsluttede/udmeldte patienter planlægges aldrig.
@@ -226,6 +236,13 @@ export function runPlanner(patienter, config={}) {
 
   const harOverlap = (bookings, startMin, slutMin) =>
     (bookings||[]).some(b => startMin < b.slut && slutMin > b.start);
+  // Lokale er ledigt når antal overlappende bookinger < samtidigeOpgaver (default 1).
+  const lokLedig = (lokNavn, bookings, startMin, slutMin) => {
+    if(!lokNavn) return true;
+    const maks = lokSamtidigeOpgaver(lokMeta, lokNavn);
+    const antal = (bookings||[]).reduce((n,b) => n + (startMin < b.slut && slutMin > b.start ? 1 : 0), 0);
+    return antal < maks;
+  };
 
   // ── Tracking: besøg per medarbejder per uge (ISO-uge) ──
   const medVisitsPerUge = {}; // {medNavn: {ugeNr: antal}}
@@ -376,7 +393,7 @@ export function runPlanner(patienter, config={}) {
 
     for(let t=lokStart; t+varMin<=lokSlut; t+=step) {
       const slutT = t+varMin;
-      if(!harOverlap(medDagBooket,t,slutT) && !harOverlap(lokDagBooket,t,slutT)) {
+      if(!harOverlap(medDagBooket,t,slutT) && lokLedig(lokNavn,lokDagBooket,t,slutT)) {
         return {start:t, slut:slutT};
       }
     }
@@ -734,7 +751,7 @@ export function runPlanner(patienter, config={}) {
     const lokDagBooket = lokBooket[lokNavn]?.[dato]||[];
     for(let t=searchStart; t+varMin<=lokSlut; t+=step) {
       const slutT = t+varMin;
-      if(!harOverlap(medDagBooket,t,slutT) && !harOverlap(lokDagBooket,t,slutT)) {
+      if(!harOverlap(medDagBooket,t,slutT) && lokLedig(lokNavn,lokDagBooket,t,slutT)) {
         return {start:t, slut:slutT};
       }
     }

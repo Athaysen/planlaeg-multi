@@ -28,8 +28,8 @@
 //     udnyttelse: [{ navn, type, kapacitet, bookede, procent, farve }],
 //   }
 
-import { runPlanner } from "./runPlanner.js";
-import { today, daysBetween, addDays } from "../utils/index.js";
+import { runPlanner, lokSamtidigeOpgaver } from "./runPlanner.js";
+import { today, daysBetween, addDays, erAktivPatient } from "../utils/index.js";
 import { DEFAULT_TITLER } from "../data/constants.js";
 
 const DAGE_UGE = ["Mandag", "Tirsdag", "Onsdag", "Torsdag", "Fredag"];
@@ -110,9 +110,12 @@ const byggConfig = (base, override = {}) => ({
 });
 
 // Tæl afventende opgaver (status !== "planlagt" og ikke låst).
+// Afsluttede/udmeldte patienter springes over — runPlanner planlægger dem
+// aldrig, så de må heller ikke tælle med i "totalOpgaver".
 const afventendeOpgaver = (patienter) => {
   let n = 0;
   for (const p of patienter) {
+    if (!erAktivPatient(p)) continue;
     for (const o of (p.opgaver || [])) {
       if (o.status !== "planlagt" && !o.låst) n++;
     }
@@ -208,8 +211,16 @@ const findAlleUdstyr = (patienter, lokMeta) => {
 // Byg udnyttelses-tabel fra baseline-plan.
 // Kapacitet normaliseres til hele perioden: kap/uge × antal_uger.
 // Det giver en meningsfuld procent selv for flerugers perioder.
-const byggUdnyttelse = (baselinePatienter, medarbejdere, lokTider, maxDage = 7) => {
+// "bookede" tæller kun planlagte opgaver med dato i perioden [fraDato, tilDato]
+// (begge inkl.). Lokale-kapacitet ganges med samtidigeOpgaver fra lokMeta.
+const byggUdnyttelse = (baselinePatienter, medarbejdere, lokTider, maxDage = 7, lokMeta = {}, fraDato = null, tilDato = null) => {
   const antalUger = Math.max(1, maxDage / 7);
+  const iPeriode = (o) => {
+    if (!o.dato) return false;
+    if (fraDato && o.dato < fraDato) return false;
+    if (tilDato && o.dato > tilDato) return false;
+    return true;
+  };
   // Medarbejder-udnyttelse
   const medMin = {}; // navn → bookede minutter (hele perioden)
   const medKap = {}; // navn → kapacitet i minutter (hele perioden)
@@ -223,7 +234,7 @@ const byggUdnyttelse = (baselinePatienter, medarbejdere, lokTider, maxDage = 7) 
     medMin[m.navn] = 0;
   });
   baselinePatienter.forEach(p => (p.opgaver || []).forEach(o => {
-    if (o.status === "planlagt" && o.medarbejder && medMin[o.medarbejder] != null) {
+    if (o.status === "planlagt" && iPeriode(o) && o.medarbejder && medMin[o.medarbejder] != null) {
       medMin[o.medarbejder] += o.minutter || 60;
     }
   }));
@@ -246,10 +257,10 @@ const byggUdnyttelse = (baselinePatienter, medarbejdere, lokTider, maxDage = 7) 
       const lt = lokTider?.[dag]?.[basis];
       if (lt) prUge += Math.max(0, toMin(lt.l) - toMin(lt.å));
     }
-    lokKap[basis] = prUge * antalUger;
+    lokKap[basis] = prUge * antalUger * lokSamtidigeOpgaver(lokMeta, basis);
   }
   baselinePatienter.forEach(p => (p.opgaver || []).forEach(o => {
-    if (o.status === "planlagt" && o.lokale) {
+    if (o.status === "planlagt" && iPeriode(o) && o.lokale) {
       const basis = o.lokale.replace(/\s*\(\d+\)$/, "");
       if (lokMin[basis] != null) lokMin[basis] += o.minutter || 60;
     }
@@ -382,7 +393,7 @@ export function analyserKapacitet(patienter = [], medarbejdere = [], lokaler = [
       resume: { slutDato, totalOpgaver: 0, planlagte: 0, fejlet: 0, udnyttelse: 0, kanLadesigGøre: true, maxDage },
       flaskehalse: [],
       scenarier: [],
-      udnyttelse: byggUdnyttelse(patF, medEff, lokTider, maxDage),
+      udnyttelse: byggUdnyttelse(patF, medEff, lokTider, maxDage, lokMeta, planFraDato, slutDato),
     };
   }
 
@@ -407,7 +418,7 @@ export function analyserKapacitet(patienter = [], medarbejdere = [], lokaler = [
     kanLadesigGøre: baseFailed === 0,
   };
 
-  const udnyttelse = byggUdnyttelse(baseline.patienter, medEff, lokTider, maxDage);
+  const udnyttelse = byggUdnyttelse(baseline.patienter, medEff, lokTider, maxDage, lokMeta, planFraDato, slutDato);
 
   // 2. Hvis alt kan planlægges, ingen flaskehalse/scenarier at foreslå
   if (baseFailed === 0) {

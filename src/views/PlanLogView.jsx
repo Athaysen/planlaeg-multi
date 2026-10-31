@@ -1,5 +1,5 @@
 import React, { useState, useMemo } from "react";
-import { today, medVisning } from "../utils/index.js";
+import { today, medVisning, erAktivPatient } from "../utils/index.js";
 import { C } from "../data/constants.js";
 import { ErrorBoundary } from "../components/primitives.jsx";
 import { analyserRessourcer } from "../planner/runPlanner.js";
@@ -15,14 +15,16 @@ export default function PlanLogView({patienter,planLog=[],medarbejdere=[],setPat
 
   const alleOpgaver=useMemo(()=>{
     return patienter.flatMap(p=>
-      p.opgaver.map(o=>({...o,patientNavn:p.navn,patientCpr:p.cpr,patientId:p.id}))
+      p.opgaver.map(o=>({...o,patientNavn:p.navn,patientCpr:p.cpr,patientId:p.id,patientAktiv:erAktivPatient(p)}))
     );
   },[patienter]);
+  // Afventende = ikke planlagt OG patienten er aktiv (afsluttet/udmeldt tæller ikke)
+  const erAfventende=(o)=>(o.status!=="planlagt"||!o.dato)&&o.patientAktiv;
 
   const filtered=useMemo(()=>{
     let list=alleOpgaver;
     if(filter==="planlagt") list=list.filter(o=>o.status==="planlagt"&&o.dato);
-    else if(filter==="ikke-planlagt") list=list.filter(o=>o.status!=="planlagt"||!o.dato);
+    else if(filter==="ikke-planlagt") list=list.filter(erAfventende);
     list=[...list].sort((a,b)=>{
       let va,vb;
       if(sortCol==="dato"){va=a.dato||"";vb=b.dato||"";}
@@ -38,7 +40,7 @@ export default function PlanLogView({patienter,planLog=[],medarbejdere=[],setPat
   },[alleOpgaver,filter,sortCol,sortDir]);
 
   const planlagte=alleOpgaver.filter(o=>o.status==="planlagt"&&o.dato).length;
-  const ikkePlanlagte=alleOpgaver.filter(o=>o.status!=="planlagt"||!o.dato).length;
+  const ikkePlanlagte=alleOpgaver.filter(erAfventende).length;
 
   const handleSort=(col)=>{
     if(sortCol===col) setSortDir(d=>d==="asc"?"desc":"asc");
